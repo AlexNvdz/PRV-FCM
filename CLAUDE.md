@@ -9,7 +9,7 @@ PRV-FCM (Hoyos, Aguilar y Toro, 2023: mapas cognitivos difusos prescriptivos + a
 - `prvfcm/` + `main.py`: motor Python. Dataset por defecto `data/xAPI-Edu-Data-expanded-4800.csv` (`data/xAPI-Edu-Data.csv` es el original de 480 filas; `resultados_480/` guarda sus salidas antiguas).
 - `app/`: aplicación web local "Pizarra" (Node.js + React) que usa el motor y un asistente con Ollama `qwen2.5:7b`. Sigue un flujo de cinco pasos: 1 ingesta y exploración, 2 clasificación de nodos (C_T objetivo, C_P acción, C_S sistema), 3 entrenamiento del FCM, 4 motor prescriptivo, 5 visualización y recomendaciones.
 
-Todo en español: identificadores, comentarios, docstrings, interfaz y documentación. Windows (Git Bash o PowerShell). No es un repositorio git.
+Todo en español: identificadores, comentarios, docstrings, interfaz y documentación. Windows (Git Bash o PowerShell). Repositorio git (rama `main`, remoto `origin` = https://github.com/AlexNvdz/PRV-FCM.git, respaldo del usuario); hacer commit o push solo si el usuario lo pide.
 
 ## Comandos
 
