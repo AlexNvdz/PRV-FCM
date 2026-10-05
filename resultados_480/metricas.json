@@ -1,0 +1,76 @@
+{
+  "configuracion": {
+    "fcm": {
+      "lambda_": 1.0,
+      "coef_memoria": 1.0,
+      "coef_influencia": 1.0,
+      "tolerancia": 1e-05,
+      "max_iter": 100,
+      "peso_min": -1.0,
+      "peso_max": 1.0,
+      "alpha_l2": 0.001,
+      "pasos_entrenamiento": 30,
+      "max_iter_optimizador": 500
+    },
+    "ag": {
+      "tam_poblacion": 50,
+      "generaciones": 100,
+      "tam_torneo": 3,
+      "tasa_cruce": 0.9,
+      "tipo_cruce": "uniforme",
+      "tasa_mutacion": 0.25,
+      "sigma_mutacion": 0.15,
+      "elitismo": 2,
+      "paciencia": 25
+    },
+    "prescripcion": {
+      "estado_deseado": {
+        "Class": 1.0
+      },
+      "pesos_objetivo": {},
+      "beta_esfuerzo": 0.05,
+      "solo_incrementos": true,
+      "delta_max": null,
+      "tolerancia_exito": 0.25,
+      "clases_a_prescribir": [
+        "L",
+        "M"
+      ]
+    },
+    "mutables_dinamicos": [
+      "Class"
+    ],
+    "semilla": 42,
+    "proporcion_prueba": 0.2
+  },
+  "prediccion_fcm": {
+    "por_concepto": {
+      "C16": {
+        "MAE": 0.21016706966280488,
+        "RMSE": 0.243185036816474
+      }
+    },
+    "exactitud_rendimiento": 0.6770833333333334,
+    "exactitud_clase_mayoritaria": 0.4375,
+    "iteraciones_inferencia": 8,
+    "convergio": true
+  },
+  "prescripcion": {
+    "n_estudiantes": 67,
+    "MAE": 0.3100682887019213,
+    "RMSE": 0.3548955265817689,
+    "PSR": 44.776119402985074,
+    "MAE_base": 0.5707300807511336,
+    "RMSE_base": 0.6262828755273065,
+    "PSR_base": 16.417910447761194,
+    "cambio_medio_por_accion": 0.4699673940132362,
+    "generaciones_medias_ag": 33.17910447761194
+  },
+  "validacion_externa": {
+    "exactitud_prueba": 0.8125,
+    "PSR_externo_base": 7.462686567164178,
+    "PSR_externo": 40.298507462686565,
+    "prob_H_base": 0.1576119402985075,
+    "prob_H_prescrita": 0.45507462686567157
+  }
+}

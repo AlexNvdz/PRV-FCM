@@ -1,0 +1,248 @@
+@import 'tailwindcss';
+
+/* El tema se elige con data-tema en <html> (claro u oscuro). */
+@custom-variant dark (&:where([data-tema='oscuro'], [data-tema='oscuro'] *));
+
+/* ------------------------------------------------------------------ */
+/* Tokens                                                              */
+/* ------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+  --papel: #f5f6f3;          /* fondo de página: papel neutro */
+  --hoja: #ffffff;           /* paneles */
+  --hoja-2: #eef0ec;         /* zonas hundidas, filas alternas */
+  --tinta: #16211d;          /* texto principal */
+  --tinta-2: #47534d;        /* texto secundario */
+  --tinta-3: #6f7a74;        /* ayudas y ejes */
+  --linea: #d9ddd7;          /* bordes finos */
+  --pizarra: #203b34;        /* barra lateral: pizarra verde */
+  --pizarra-2: #2c4d44;
+  --pizarra-3: #3a5f55;
+  --tiza: #eaf0eb;           /* texto sobre la pizarra */
+  --tiza-2: #a8bab1;
+  --resaltador: #f3d34a;     /* marcatextos, solo para hallazgos clave */
+  --boton: #203b34;
+  --boton-texto: #f4f7f4;
+  --foco: #2a78d6;
+
+  /* Datos (paleta validada) */
+  --superficie-grafica: #fcfcfb;
+  --cuadricula: #e1e0d9;
+  --eje: #c3c2b7;
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --positivo: #2a78d6;
+  --negativo: #e34948;
+  --neutro: #f0efec;
+  --nivel-1: #86b6ef;
+  --nivel-2: #5598e7;
+  --nivel-3: #2a78d6;
+  --nivel-4: #1c5cab;
+  --nivel-5: #104281;
+  --bien: #0a7f0a;
+  --critico: #c0392f;
+  --aviso: #9a6a00;
+}
+
+[data-tema='oscuro'] {
+  color-scheme: dark;
+  --papel: #0f1613;
+  --hoja: #172019;
+  --hoja-2: #1d2823;
+  --tinta: #e7eee9;
+  --tinta-2: #b6c3bb;
+  --tinta-3: #8b978f;
+  --linea: #2b3731;
+  --pizarra: #0b120f;
+  --pizarra-2: #16211c;
+  --pizarra-3: #22322b;
+  --tiza: #e3ebe5;
+  --tiza-2: #93a39a;
+  --resaltador: #d9bb35;
+  --boton: #cfe2d7;
+  --boton-texto: #10201a;
+  --foco: #6da7ec;
+
+  --superficie-grafica: #18211d;
+  --cuadricula: #2c3530;
+  --eje: #3b4640;
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --positivo: #3987e5;
+  --negativo: #e66767;
+  --neutro: #383835;
+  --nivel-1: #184f95;
+  --nivel-2: #256abf;
+  --nivel-3: #3987e5;
+  --nivel-4: #6da7ec;
+  --nivel-5: #9ec5f4;
+  --bien: #3dbd5c;
+  --critico: #ee7b72;
+  --aviso: #e0b341;
+}
+
+@theme inline {
+  --font-sans: 'Atkinson Hyperlegible Next Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: 'Literata Variable', Georgia, 'Times New Roman', serif;
+
+  --color-papel: var(--papel);
+  --color-hoja: var(--hoja);
+  --color-hoja-2: var(--hoja-2);
+  --color-tinta: var(--tinta);
+  --color-tinta-2: var(--tinta-2);
+  --color-tinta-3: var(--tinta-3);
+  --color-linea: var(--linea);
+  --color-pizarra: var(--pizarra);
+  --color-pizarra-2: var(--pizarra-2);
+  --color-pizarra-3: var(--pizarra-3);
+  --color-tiza: var(--tiza);
+  --color-tiza-2: var(--tiza-2);
+  --color-resaltador: var(--resaltador);
+  --color-boton: var(--boton);
+  --color-boton-texto: var(--boton-texto);
+  --color-foco: var(--foco);
+  --color-serie-1: var(--serie-1);
+  --color-serie-2: var(--serie-2);
+  --color-serie-3: var(--serie-3);
+  --color-positivo: var(--positivo);
+  --color-negativo: var(--negativo);
+  --color-bien: var(--bien);
+  --color-critico: var(--critico);
+  --color-aviso: var(--aviso);
+  --color-superficie-grafica: var(--superficie-grafica);
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  background: var(--papel);
+  color: var(--tinta);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--resaltador) 60%, transparent);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Marcatextos: el único adorno, para la cifra que importa. */
+.resaltado {
+  background: linear-gradient(
+    to bottom,
+    transparent 58%,
+    color-mix(in oklab, var(--resaltador) 75%, transparent) 58%,
+    color-mix(in oklab, var(--resaltador) 75%, transparent) 92%,
+    transparent 92%
+  );
+  padding-inline: 0.08em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+[data-tema='oscuro'] .resaltado {
+  color: var(--resaltador);
+  background: none;
+  text-decoration: underline 0.14em color-mix(in oklab, var(--resaltador) 55%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+/* Papel cuadriculado: solo en el mapa cognitivo. */
+.cuadriculado {
+  background-color: var(--superficie-grafica);
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--cuadricula) 70%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--cuadricula) 70%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+}
+
+/* Trazo del mapa: se dibuja una sola vez al abrir. */
+@keyframes trazar {
+  from {
+    stroke-dashoffset: var(--largo);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.arista-animada {
+  stroke-dasharray: var(--largo);
+  animation: trazar 900ms cubic-bezier(0.3, 0.7, 0.2, 1) both;
+  animation-delay: var(--retraso, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .arista-animada {
+    animation: none;
+    stroke-dasharray: none;
+  }
+}
+
+/* Texto markdown del asistente */
+.prosa {
+  line-height: 1.6;
+}
+.prosa p {
+  margin: 0.45em 0;
+}
+.prosa ul,
+.prosa ol {
+  margin: 0.45em 0;
+  padding-left: 1.35em;
+}
+.prosa ul {
+  list-style: disc;
+}
+.prosa ol {
+  list-style: decimal;
+}
+.prosa li {
+  margin: 0.2em 0;
+}
+.prosa strong {
+  font-weight: 650;
+}
+.prosa h1,
+.prosa h2,
+.prosa h3 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  margin: 0.8em 0 0.3em;
+  font-size: 1.05em;
+}
+.prosa table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 0.92em;
+}
+.prosa th,
+.prosa td {
+  border: 1px solid var(--linea);
+  padding: 0.25em 0.6em;
+  text-align: left;
+}
+.prosa code {
+  font-size: 0.92em;
+  background: var(--hoja-2);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
