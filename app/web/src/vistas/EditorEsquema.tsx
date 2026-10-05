@@ -2,14 +2,14 @@
 // (C_T objetivo, C_P acción, C_S sistema) y cómo se codifica.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, RotateCcw, WandSparkles } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { api } from '../api';
 import { Aviso, Boton, Clase, estiloControl } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import type { Codificacion, ColumnaEsquema, Dataset, Esquema, PerfilColumna, Rol, Validacion } from '../tipos';
-import { clase, colorNivel, DESCRIPCION_ROL, NOMBRE_CODIFICACION, rolConNotacion } from '../utilidades';
+import { clase, colorNivel, DESCRIPCION_ROL, NOMBRE_CODIFICACION, NOMBRE_ROL, rolConNotacion } from '../utilidades';
 
 const ROLES: Rol[] = ['objetivo', 'accion', 'mutable', 'inmutable', 'excluir'];
 const CODIFICACIONES: Codificacion[] = ['numerica', 'ordinal', 'nominal', 'one_hot', 'numero_en_texto'];
@@ -74,6 +74,123 @@ function ResumenClasificacion({ esquema }: { esquema: Esquema }) {
           );
         })}
       </dl>
+    </div>
+  );
+}
+
+const CARRILES: { rol: Rol; nombre: string; titulo: ReactNode }[] = [
+  { rol: 'objetivo', nombre: 'objetivo', titulo: <>Objetivo <Clase letra="T" /></> },
+  { rol: 'accion', nombre: 'acciones', titulo: <>Acciones <Clase letra="P" /></> },
+  { rol: 'mutable', nombre: 'mutables', titulo: <>Mutables <Clase letra="S" /></> },
+  { rol: 'inmutable', nombre: 'inmutables', titulo: <>Inmutables <Clase letra="S" /></> },
+  { rol: 'excluir', nombre: 'excluidas', titulo: 'Excluidas' },
+];
+
+function resumenTipo(perfil?: PerfilColumna) {
+  if (!perfil) return '';
+  return perfil.tipo_dato === 'numerico' ? `Número de ${perfil.min?.toLocaleString('es-CO')} a ${perfil.max?.toLocaleString('es-CO')}` : `${perfil.unicos} categorías`;
+}
+
+/**
+ * Tablero de clasificación: cada columna es una tarjeta que se arrastra al carril de su rol.
+ * Con el teclado, las flechas izquierda y derecha mueven la tarjeta enfocada al carril vecino.
+ * Cambia lo mismo que el selector de rol de la tabla (cambiarRol), con sus mismas reglas.
+ */
+function TableroRoles({ columnas, perfiles, alCambiar }: { columnas: ColumnaEsquema[]; perfiles: Map<string, PerfilColumna>; alCambiar: (columna: string, rol: Rol) => void }) {
+  const [arrastrada, setArrastrada] = useState<string | null>(null);
+  const [encima, setEncima] = useState<Rol | null>(null);
+  const [enfocar, setEnfocar] = useState<string | null>(null);
+  const tablero = useRef<HTMLDivElement>(null);
+
+  // Tras mover una tarjeta con el teclado, el foco la sigue a su nuevo carril.
+  useEffect(() => {
+    if (!enfocar) return;
+    tablero.current?.querySelector<HTMLElement>(`[data-columna="${CSS.escape(enfocar)}"]`)?.focus();
+    setEnfocar(null);
+  }, [enfocar, columnas]);
+
+  function mover(columna: string, rol: Rol) {
+    const actual = columnas.find((c) => c.columna === columna);
+    if (actual && actual.rol !== rol) alCambiar(columna, rol);
+  }
+
+  return (
+    <div ref={tablero} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {CARRILES.map((carril, indice) => {
+        const del = columnas.filter((c) => c.rol === carril.rol);
+        return (
+          <section
+            key={carril.rol}
+            aria-label={`Carril de ${carril.nombre}`}
+            className={clase(
+              'flex min-h-32 flex-col rounded-xl border p-3 transition-colors',
+              encima === carril.rol ? 'border-tinta bg-hoja-2' : 'border-linea bg-hoja',
+            )}
+            onDragOver={(e) => {
+              if (!arrastrada) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              setEncima(carril.rol);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setEncima(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const columna = e.dataTransfer.getData('text/plain');
+              if (columna) mover(columna, carril.rol);
+              setEncima(null);
+              setArrastrada(null);
+            }}
+          >
+            <h4 className="text-sm font-semibold text-tinta">
+              {carril.titulo} <span className="font-normal text-tinta-3">{del.length}</span>
+            </h4>
+            <p className="mt-0.5 text-xs text-tinta-3">{DESCRIPCION_ROL[carril.rol].split(':')[0]}.</p>
+            <ul className="mt-2 flex flex-1 flex-col gap-1.5">
+              {del.map((c) => (
+                <li key={c.columna}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    draggable
+                    data-columna={c.columna}
+                    aria-label={`${c.nombre || c.columna}, ${NOMBRE_ROL[c.rol].toLowerCase()}. Flechas izquierda y derecha para cambiar de carril.`}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', c.columna);
+                      e.dataTransfer.effectAllowed = 'move';
+                      setArrastrada(c.columna);
+                    }}
+                    onDragEnd={() => {
+                      setArrastrada(null);
+                      setEncima(null);
+                    }}
+                    onKeyDown={(e) => {
+                      const paso = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+                      const destino = CARRILES[indice + paso];
+                      if (!paso || !destino) return;
+                      e.preventDefault();
+                      mover(c.columna, destino.rol);
+                      setEnfocar(c.columna);
+                    }}
+                    className={clase(
+                      'cursor-grab rounded-lg border border-linea bg-papel px-2.5 py-1.5 text-sm active:cursor-grabbing focus-visible:outline-2',
+                      arrastrada === c.columna && 'opacity-50',
+                    )}
+                  >
+                    <span className="block truncate font-medium text-tinta">{c.nombre || c.columna}</span>
+                    <span className="block truncate text-xs text-tinta-3">
+                      {c.nombre && c.nombre !== c.columna ? `${c.columna}, ` : ''}
+                      {resumenTipo(perfiles.get(c.columna))}
+                    </span>
+                  </div>
+                </li>
+              ))}
+              {!del.length && <li className="text-xs text-tinta-3">{carril.rol === 'objetivo' ? 'Arrastre aquí la columna objetivo.' : 'Ninguna columna.'}</li>}
+            </ul>
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -340,6 +457,15 @@ export function EditorEsquema({ dataset }: { dataset: Dataset }) {
           </div>
         </div>
         <ResumenClasificacion esquema={borrador} />
+      </section>
+
+      <section className="mt-10">
+        <h3 className="font-serif text-lg font-semibold">Tablero de clasificación</h3>
+        <p className="mt-1 max-w-[72ch] text-sm text-tinta-2">
+          Arrastre cada columna al carril de su clase. Con el teclado, enfoque una tarjeta y use las flechas izquierda y derecha. La tabla de abajo cambia lo mismo y,
+          además, la codificación de cada columna.
+        </p>
+        <TableroRoles columnas={borrador.columnas} perfiles={perfiles} alCambiar={cambiarRol} />
       </section>
 
       <section className="mt-10">

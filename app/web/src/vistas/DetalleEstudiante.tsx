@@ -5,23 +5,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { api } from '../api';
+import { TrayectoriaInferencia } from '../componentes/inferencia';
 import { Medidor, ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, estiloControl, NivelChip } from '../componentes/ui';
-import type { AccionInfo, Graficas } from '../tipos';
-import { num } from '../utilidades';
+import type { Graficas } from '../tipos';
+import { etiquetaAccion, num, pasoAccion } from '../utilidades';
 
 export { Medidor };
-
-function pasoDe(accion: AccionInfo) {
-  if (accion.categorias) return 1;
-  const rango = accion.max - accion.min;
-  return rango > 20 ? 1 : rango > 2 ? 0.1 : 0.01;
-}
-
-function etiquetaValor(accion: AccionInfo, valor: number) {
-  if (accion.categorias) return accion.categorias[Math.round(valor)] ?? num(valor);
-  return num(valor, pasoDe(accion) < 1 ? 2 : 0);
-}
 
 export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modeloId: string; id: number; graficas: Graficas; alCerrar: () => void }) {
   const navegar = useNavigate();
@@ -91,7 +81,7 @@ export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modelo
                   Restablecer
                 </Boton>
               </div>
-              <p className="mt-1 text-sm text-tinta-2">Mueva cada acción: el FCM recalcula el nivel al instante.</p>
+              <p className="mt-1 text-sm text-tinta-2">Mueva cada acción: el FCM recalcula el nivel al instante y la gráfica muestra cada iteración de la inferencia.</p>
               <div className="mt-4 space-y-4">
                 {acciones.map((a) => {
                   const valor = valores[a.columna] ?? a.actual.valor;
@@ -104,8 +94,8 @@ export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modelo
                           {a.nombre}
                         </label>
                         <span className="tabular text-tinta-2">
-                          {etiquetaValor(a, valor)}
-                          {Math.abs(valor - a.actual.valor) > 1e-9 && <span className="text-tinta-3"> (antes {etiquetaValor(a, a.actual.valor)})</span>}
+                          {etiquetaAccion(a, valor)}
+                          {Math.abs(valor - a.actual.valor) > 1e-9 && <span className="text-tinta-3"> (antes {etiquetaAccion(a, a.actual.valor)})</span>}
                         </span>
                       </div>
                       <input
@@ -113,7 +103,7 @@ export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modelo
                         type="range"
                         min={minimo}
                         max={maximo}
-                        step={pasoDe(a)}
+                        step={pasoAccion(a)}
                         value={valor}
                         onChange={(e) => setValores((v) => ({ ...v, [a.columna]: Number(e.target.value) }))}
                         className="mt-1.5 w-full accent-[var(--serie-2)]"
@@ -123,6 +113,15 @@ export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modelo
                 })}
               </div>
               {simulacion.isError && <Aviso tipo="error" className="mt-3">{simulacion.error.message}</Aviso>}
+              {estudiante.data.prediccion.inferencia && (
+                <TrayectoriaInferencia
+                  className="mt-5"
+                  base={estudiante.data.prediccion.inferencia}
+                  simulado={cambiado ? simulacion.data?.simulado.inferencia : undefined}
+                  niveles={niveles}
+                  valores={graficas.niveles}
+                />
+              )}
             </section>
 
             <section className="mt-8 rounded-xl border border-linea bg-hoja p-4">

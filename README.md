@@ -38,7 +38,8 @@ modelo-prescriptivo/
 │   ├── pipeline.py            Las cuatro etapas en una función (consola y aplicación)
 │   ├── esquema.py             Esquema de otros datasets (roles y codificación de columnas)
 │   ├── perfilado.py           Perfil de columnas, sugerencia de esquema y consultas
-│   ├── modelo.py              Modelo guardado en JSON: simulación y prescripción individual
+│   ├── modelo.py              Modelo guardado en JSON (esquema, preprocesador, pesos y configuración)
+│   ├── api.py                 PredictorFCM y PrescriptorAG: inferencia paso a paso, simulación y prescripción, sin interfaz
 │   └── servicio.py            Motor para la aplicación web (JSON por stdin/stdout)
 ├── app/                       Aplicación web local (Node.js + React), ver app/README.md
 ├── tests/                     Pruebas unitarias (pytest)
@@ -50,12 +51,15 @@ modelo-prescriptivo/
 
 `app/` contiene una aplicación local con interfaz web sobre este mismo motor,
 organizada en los cinco pasos: subir datasets de rendimiento o deserción (CSV o
-Excel) y leer su reporte inicial; clasificar cada columna como C_T, C_P o C_S y
-explorar cómo se relacionan las variables entre sí y con el objetivo (mapa de
-calor de correlaciones, dispersión por nivel, perfil medio de cada nivel);
-entrenar el PRV-FCM eligiendo el método de extracción de W y la máscara causal;
-prescribir por estudiante o para un perfil de riesgo; y leer el informe con el
-grafo NetworkX, la convergencia del AG y el reporte en frases. Un asistente
+Excel) y leer su reporte inicial; clasificar cada columna como C_T, C_P o C_S
+(arrastrándola en un tablero o desde la tabla) y explorar cómo se relacionan
+las variables entre sí y con el objetivo (mapa de calor de correlaciones,
+dispersión por nivel, perfil medio de cada nivel); entrenar el PRV-FCM
+eligiendo el método de extracción de W y la máscara causal, con la matriz W
+como mapa de calor y el grafo dirigido de pesos; simular acciones por
+estudiante viendo cada iteración de la inferencia y prescribir con el AG,
+cuya evolución se reproduce generación por generación; y leer el informe con
+el grafo NetworkX, la convergencia del AG y el reporte en frases. Un asistente
 (`qwen2.5:7b` en Ollama), limitado al tema del proyecto, consulta los datos y
 las prescripciones y redacta recomendaciones. Instrucciones en
 [app/README.md](app/README.md).
@@ -96,6 +100,45 @@ cruzada); `--poblacion`, `--generaciones`, `--torneo`,
 `--sigma-mutacion`, `--elitismo` (AG); `--beta`, `--delta-max`,
 `--permitir-reducciones` (prescripción); `--semilla`, `--prueba`, `--division`.
 El resto de parámetros está en `prvfcm/configuracion.py`.
+
+## API de Python: `PredictorFCM` y `PrescriptorAG`
+
+`prvfcm/api.py` expone el modelo entrenado sin ninguna interfaz: las clases no
+imprimen ni conocen la aplicación web, reciben datos en unidades originales y
+devuelven diccionarios listos para JSON. La aplicación las usa a través de
+`prvfcm/servicio.py`; un backend como FastAPI o Flask puede llamarlas desde
+sus rutas. El `modelo.json` lo guarda cada entrenamiento de la aplicación
+(`app/almacen/modelos/<id>/modelo.json`) o `servicio entrenar`.
+
+```python
+from prvfcm.api import PredictorFCM, PrescriptorAG
+
+predictor = PredictorFCM.desde_archivo("modelo.json")
+prescriptor = PrescriptorAG(predictor.modelo)
+
+perfil = {"gender": "M", "StageID": "MiddleSchool", ..., "raisedhands": 10, "VisITedResources": 8}
+
+# Inferencia: nivel final y trayectoria t = 0..T con la cuenta de cada iteración
+prediccion = predictor.predecir(perfil)
+prediccion["nivel"], prediccion["activacion"]
+prediccion["inferencia"]["series"][0]["valores"]   # activación del objetivo en cada iteración
+prediccion["inferencia"]["pasos"][0]               # memoria, influencia (de ella, la de las acciones), entrada y f(entrada)
+
+# «Qué pasaría si»: el mismo perfil con otras acciones
+predictor.simular(perfil, {"raisedhands": 80})     # {"acciones", "base", "simulado"}
+
+# Prescripción con el AG; al_progresar recibe cada generación (para SSE o WebSocket)
+resultado = prescriptor.prescribir(perfil, nivel_meta="H", beta=0.4, al_progresar=print)
+resultado["acciones"]                              # actual, recomendada y cambio de cada acción
+resultado["historial"]                             # mejor costo, costo medio, activación y acciones por generación
+```
+
+La entrada es un perfil (`dict` columna → valor; los conceptos dinámicos parten
+de su media de entrenamiento) o un registro del dataset (`DataFrame` de una
+fila; parten de su valor observado). Con un solo concepto dinámico y λ·k2 < 4,
+como en xAPI, el estado final no depende de ese valor de partida. `al_progresar`
+no consume números aleatorios: con la misma semilla, el resultado es idéntico
+con aviso o sin él.
 
 ## Dataset expandido
 

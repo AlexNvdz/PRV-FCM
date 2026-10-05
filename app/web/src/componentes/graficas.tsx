@@ -110,11 +110,11 @@ export function ItemLeyenda({ color, texto, forma = 'punto' }: { color: string; 
   );
 }
 
-function Globo({ children }: { children: ReactNode }) {
+export function Globo({ children }: { children: ReactNode }) {
   return <div className="rounded-md border border-linea bg-hoja px-3 py-2 text-xs text-tinta shadow-[0_2px_10px_rgba(0,0,0,0.08)]">{children}</div>;
 }
 
-const EJE = { stroke: 'var(--eje)' };
+export const EJE = { stroke: 'var(--eje)' };
 
 /** Nombre de categoría recortado a una línea; el nombre completo queda en el tooltip y en la tabla. */
 function TickRecortado(props: { x?: number; y?: number; payload?: { value: string } }) {
@@ -139,8 +139,8 @@ function EtiquetaValor(props: { x?: number | string; y?: number | string; width?
     </text>
   );
 }
-const TICK = { fill: 'var(--tinta-3)', fontSize: 12 };
-const REJILLA = <CartesianGrid stroke="var(--cuadricula)" vertical={false} />;
+export const TICK = { fill: 'var(--tinta-3)', fontSize: 12 };
+export const REJILLA = <CartesianGrid stroke="var(--cuadricula)" vertical={false} />;
 
 // ---------------------------------------------------------------------------
 // Distribución del objetivo

@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from prvfcm.api import PredictorFCM, PrescriptorAG
 from prvfcm.configuracion import ESQUEMA_XAPI, ConfigAG, ConfigFCM, ConfigPrescripcion, ConfigSeleccion
 from prvfcm.esquema import ESQUEMA_XAPI_DICT, ErrorEsquema, esquema_a_dict, esquema_desde_dict, validar_esquema
 from prvfcm.modelo import ModeloPRVFCM, guardar_modelo
@@ -173,14 +174,58 @@ def test_modelo_guardado_reproduce_el_fcm_del_pipeline(entrenado):
 def test_simular_y_prescribir_un_estudiante(entrenado):
     _, modelo, datos = entrenado
     registro = datos.iloc[[3]]
-    simulacion = modelo.simular(registro, {"horas_estudio": 30, "asistencia": 100, "tutorias": 12})
+    simulacion = PredictorFCM(modelo).simular(registro, {"horas_estudio": 30, "asistencia": 100, "tutorias": 12})
     assert simulacion["simulado"]["activacion"] >= simulacion["base"]["activacion"]  # Más acción, menos deserción.
-    with pytest.raises(ValueError):
-        modelo.simular(registro, {"edad": 20})
-    prescripcion = modelo.prescribir(registro, beta=0.0, delta_max=0.3)
+    with pytest.raises(ValueError, match="no es una acción"):
+        PredictorFCM(modelo).simular(registro, {"edad": 20})
+    prescripcion = PrescriptorAG(modelo).prescribir(registro, beta=0.0, delta_max=0.3)
     for accion in prescripcion["acciones"]:
         assert accion["cambio"] >= -1e-9  # Solo incrementos.
     assert prescripcion["prescrito"]["activacion"] >= prescripcion["base"]["activacion"] - 1e-9
+
+
+def test_inferencia_paso_a_paso_reproduce_la_regla_de_kosko(entrenado):
+    _, modelo, datos = entrenado
+    registro = datos.iloc[[3]]
+    predictor = PredictorFCM(modelo)
+    prediccion = predictor.predecir(registro, {"tutorias": 12})
+    inferencia = prediccion["inferencia"]
+    objetivo = inferencia["series"][0]
+    assert objetivo["columna"] == "desercion" and len(objetivo["valores"]) == inferencia["iteraciones"] + 1
+    # t = 0 es el estado inicial (valor observado) y el último punto, la activación final.
+    estado = predictor.con_acciones(modelo.estado(registro), {"tutorias": 12})
+    assert objetivo["valores"][0] == pytest.approx(estado[modelo.pre.indice_objetivo])
+    assert objetivo["valores"][-1] == pytest.approx(prediccion["activacion"])
+    p = inferencia["parametros"]
+    for paso in inferencia["pasos"]:
+        assert paso["entrada"] == pytest.approx(paso["memoria"] + paso["influencia"])
+        assert paso["activacion"] == pytest.approx(1 / (1 + np.exp(-p["lambda"] * paso["entrada"])))
+        assert paso["memoria"] == pytest.approx(p["k2"] * objetivo["valores"][paso["t"] - 1])
+    # Las acciones quedan fijas: su aporte a la entrada del objetivo es el mismo en cada iteración.
+    assert len({round(paso["influencia_acciones"], 12) for paso in inferencia["pasos"]}) == 1
+    sin_cambio = predictor.predecir(registro)
+    tutorias = modelo.pre.indice("tutorias")
+    delta = p["k1"] * modelo.fcm.pesos[tutorias, modelo.pre.indice_objetivo] * (estado[tutorias] - modelo.estado(registro)[tutorias])
+    assert inferencia["pasos"][0]["influencia_acciones"] - sin_cambio["inferencia"]["pasos"][0]["influencia_acciones"] == pytest.approx(delta)
+
+
+def test_prescriptor_ag_avisa_cada_generacion_sin_cambiar_el_resultado(entrenado):
+    _, modelo, datos = entrenado
+    registro = datos.iloc[[3]]
+    prescriptor = PrescriptorAG(modelo)
+    eventos = []
+    con_aviso = prescriptor.prescribir(registro, beta=0.4, semilla=7, al_progresar=eventos.append)
+    sin_aviso = prescriptor.prescribir(registro, beta=0.4, semilla=7)
+    assert con_aviso["historial"] == sin_aviso["historial"]  # El aviso no consume números aleatorios.
+    historial = con_aviso["historial"]
+    assert [e["generacion"] for e in eventos] == list(range(1, con_aviso["generaciones"] + 1))
+    assert [e["mejor_costo"] for e in eventos] == pytest.approx(historial["mejor"])
+    assert all(a >= b - 1e-12 for a, b in zip(historial["mejor"], historial["mejor"][1:]))  # Elitismo: nunca empeora.
+    assert len(historial["activacion"]) == len(historial["acciones"]) == con_aviso["generaciones"]
+    # La última generación es la prescripción final.
+    assert historial["acciones"][-1] == pytest.approx([a["recomendada"]["valor"] for a in con_aviso["acciones"]])
+    assert historial["activacion"][-1] == pytest.approx(con_aviso["prescrito"]["activacion"], abs=1e-4)
+    assert set(eventos[-1]["acciones"]) == {"horas_estudio", "asistencia", "tutorias"}
 
 
 def test_objetivo_numerico_se_discretiza_en_tres_niveles(tmp_path):
@@ -303,23 +348,25 @@ def test_perfil_de_riesgo_coincide_con_el_registro_y_genera_reporte(entrenado):
     _, modelo, datos = entrenado
     registro = datos.iloc[[5]]
     perfil = {c: registro.iloc[0][c] for c in modelo.esquema.columnas_origen if c != "desercion"}
+    prescriptor = PrescriptorAG(modelo)
     del perfil["edad"]
     with pytest.raises(ValueError, match="Faltan valores del perfil: edad"):
-        modelo.prescribir_perfil(perfil)
+        prescriptor.prescribir(perfil)
     perfil["edad"] = "veinte"
     with pytest.raises(ValueError, match="no es un número"):
-        modelo.prescribir_perfil(perfil)
+        prescriptor.prescribir(perfil)
     perfil["edad"] = str(registro.iloc[0]["edad"])
-    desde_perfil = modelo.prescribir_perfil(perfil, beta=0.4)
-    desde_registro = modelo.prescribir(registro, beta=0.4)
+    desde_perfil = prescriptor.prescribir(perfil, beta=0.4)
+    desde_registro = prescriptor.prescribir(registro, beta=0.4)
     # El objetivo es dinámico y su punto fijo no depende del valor inicial: misma predicción de partida.
     assert desde_perfil["base"]["activacion"] == pytest.approx(desde_registro["base"]["activacion"], abs=1e-4)
     assert desde_perfil["reporte"]["texto"].startswith("Para este perfil")
     assert len(desde_perfil["historial"]["mejor"]) == desde_perfil["generaciones"] == len(desde_perfil["historial"]["promedio"])
     assert {c["rol"] for c in desde_perfil["contribuciones"]} <= {"inmutable", "accion", "mutable"}
     assert desde_perfil["meta"]["nivel"] == "No"
+    assert desde_perfil["perfil"]["edad"] == perfil["edad"] and "perfil" not in desde_registro
     with pytest.raises(ValueError, match="no existe"):
-        modelo.prescribir_perfil(perfil, nivel_meta="Quizás")
+        prescriptor.prescribir(perfil, nivel_meta="Quizás")
 
 
 def test_reporte_individual_traduce_los_deltas_a_frases():

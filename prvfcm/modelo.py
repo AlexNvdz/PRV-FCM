@@ -1,17 +1,16 @@
 """
-Modelo PRV-FCM persistente en JSON y consultas rápidas sobre él.
+Modelo PRV-FCM persistente en JSON.
 
 ``guardar_modelo`` escribe el esquema, el preprocesador ajustado, el FCM y la
-configuración del AG. ``ModeloPRVFCM`` los recupera y responde lo que la
-aplicación pregunta en tiempo real: la inferencia de un estudiante con otras
-acciones (simulación) y su prescripción individual con el AG, también para un
-perfil de riesgo escrito a mano (valores de cada variable en unidades originales).
+configuración del AG. ``ModeloPRVFCM`` los recupera, describe el mapa (conceptos,
+aristas, acciones) y traduce entre unidades originales y activaciones en [0, 1].
+Las consultas en tiempo real (inferencia paso a paso, simulación y prescripción
+con el AG) están en :mod:`prvfcm.api`: ``PredictorFCM`` y ``PrescriptorAG``.
 """
 from __future__ import annotations
 
 import dataclasses
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -22,9 +21,7 @@ from .esquema import codificacion_de, esquema_a_dict, esquema_desde_dict, rol_de
 from .evaluacion import discretizar_rendimiento
 from .fcm import MapaCognitivoDifuso
 from .pipeline import ResultadoPipeline
-from .prescripcion import PrescriptorPRVFCM, ResultadoPrescripcion
 from .preprocesamiento import Preprocesador, como_texto
-from .reporte import reporte_individual
 
 VERSION = 1
 
@@ -52,7 +49,7 @@ def guardar_modelo(r: ResultadoPipeline, ruta: Path) -> None:
 
 
 class ModeloPRVFCM:
-    """FCM entrenado con su preprocesador, listo para simular y prescribir."""
+    """FCM entrenado con su preprocesador: lo que necesitan ``PredictorFCM`` y ``PrescriptorAG``."""
 
     def __init__(self, datos: dict):
         if datos.get("version") != VERSION:
@@ -131,7 +128,7 @@ class ModeloPRVFCM:
         return salida
 
     # ------------------------------------------------------------------
-    # Inferencia y prescripción
+    # Estados y unidades
     # ------------------------------------------------------------------
     def estado(self, registro: pd.DataFrame) -> np.ndarray:
         """Activaciones normalizadas de un registro (DataFrame de una fila)."""
@@ -157,12 +154,15 @@ class ModeloPRVFCM:
         return salida
 
     def describir(self, estado: np.ndarray, meta: float = 1.0) -> dict:
-        """Estado de convergencia del FCM partiendo de ``estado``.
+        """Estado de convergencia del FCM partiendo de ``estado`` (ver :meth:`describir_final`)."""
+        return self.describir_final(self.fcm.inferir(estado).estados, meta)
+
+    def describir_final(self, final: np.ndarray, meta: float = 1.0) -> dict:
+        """Activación y nivel del objetivo en un estado ya convergido.
 
         ``exito`` indica si el objetivo queda a menos de la tolerancia de la
         meta (por defecto 1, el mejor nivel).
         """
-        final = self.fcm.inferir(estado).estados
         objetivo = self.pre.indice_objetivo
         activacion = float(final[objetivo])
         return {
@@ -206,111 +206,6 @@ class ModeloPRVFCM:
             )
         return sorted(filas, key=lambda f: -abs(f["aporte_prescrito"]))
 
-    def simular(self, registro: pd.DataFrame, acciones: dict) -> dict:
-        """Compara el estado del estudiante con otro en el que cambian algunas acciones."""
-        base = self.estado(registro)
-        nuevo = base.copy()
-        indices_accion = set(self.pre.indices_accion.tolist())
-        for columna, valor in acciones.items():
-            i = self.pre.indice(columna)
-            if i not in indices_accion:
-                raise ValueError(f"{columna} no es una acción del modelo.")
-            nuevo[i] = self.valor_normalizado(columna, valor)
-        return {
-            "acciones": [
-                {
-                    "columna": self.pre.columnas[i],
-                    "actual": self.valor_original(self.pre.columnas[i], base[i]),
-                    "simulada": self.valor_original(self.pre.columnas[i], nuevo[i]),
-                }
-                for i in self.pre.indices_accion
-            ],
-            "base": self.describir(base),
-            "simulado": self.describir(nuevo),
-        }
-
-    def prescriptor(self, **cambios) -> PrescriptorPRVFCM:
-        config = replace(self.config_prescripcion, **cambios)
-        estado_deseado = {self.pre.indice(c): v for c, v in config.estado_deseado.items()}
-        pesos = {self.pre.indice(c): v for c, v in config.pesos_objetivo.items()}
-        return PrescriptorPRVFCM(self.fcm, self.pre.indices_accion, estado_deseado, pesos, self.config_ag, config)
-
-    def prescribir(
-        self,
-        registro: pd.DataFrame,
-        beta: float | None = None,
-        delta_max: float | None = None,
-        permitir_reducciones: bool | None = None,
-        semilla: int = 0,
-        nivel_meta: str | None = None,
-        sujeto: str = "este estudiante",
-    ) -> dict:
-        """Prescripción individual con el AG para un registro del dataset, en unidades originales."""
-        return self._prescribir_estado(
-            self.estado(registro), beta, delta_max, permitir_reducciones, semilla, nivel_meta, sujeto
-        )
-
-    def _prescribir_estado(
-        self,
-        estado: np.ndarray,
-        beta: float | None,
-        delta_max: float | None,
-        permitir_reducciones: bool | None,
-        semilla: int,
-        nivel_meta: str | None,
-        sujeto: str,
-    ) -> dict:
-        """Ejecuta el AG desde un estado normalizado y traduce el resultado a unidades originales.
-
-        El costo que minimiza el AG es |A*_objetivo - meta| + beta * media |a - a_actual|:
-        cercanía a la meta del concepto objetivo más el costo de intervención.
-        """
-        meta = self.meta(nivel_meta)
-        cambios = {"estado_deseado": {self.esquema.objetivo: meta["valor"]}}
-        if beta is not None:
-            cambios["beta_esfuerzo"] = float(beta)
-        if delta_max is not None:
-            cambios["delta_max"] = float(delta_max) if delta_max > 0 else None
-        if permitir_reducciones is not None:
-            cambios["solo_incrementos"] = not permitir_reducciones
-        prescriptor = self.prescriptor(**cambios)
-        resultado: ResultadoPrescripcion = prescriptor.prescribir(estado, np.random.default_rng([self.semilla, semilla]))
-        info = {a["columna"]: a for a in self.acciones()}
-        acciones = []
-        for k, i in enumerate(self.pre.indices_accion):
-            columna = self.pre.columnas[i]
-            actual = self.valor_original(columna, resultado.acciones_actuales[k])
-            recomendada = self.valor_original(columna, resultado.acciones_recomendadas[k])
-            acciones.append(
-                {
-                    **info[columna],
-                    "actual": actual,
-                    "recomendada": recomendada,
-                    "cambio": recomendada["valor"] - actual["valor"],
-                }
-            )
-        salida = {
-            "acciones": acciones,
-            "base": self.describir(resultado.estado_base, meta["valor"]),
-            "prescrito": self.describir(resultado.estado_prescrito, meta["valor"]),
-            "meta": meta,
-            "costo": resultado.costo,
-            "generaciones": resultado.generaciones,
-            "historial": {
-                "mejor": resultado.historial_costo.tolist(),
-                "promedio": [] if resultado.historial_promedio is None else resultado.historial_promedio.tolist(),
-            },
-            "contribuciones": self.contribuciones(resultado.estado_base, resultado.estado_prescrito),
-            "configuracion": {
-                "beta": prescriptor.config.beta_esfuerzo,
-                "delta_max": prescriptor.config.delta_max,
-                "solo_incrementos": prescriptor.config.solo_incrementos,
-            },
-        }
-        nombre_objetivo = self.esquema.conceptos[self.pre.indice_objetivo].nombre
-        salida["reporte"] = reporte_individual(salida, nombre_objetivo, sujeto)
-        return salida
-
     # ------------------------------------------------------------------
     # Perfil de riesgo escrito a mano
     # ------------------------------------------------------------------
@@ -344,19 +239,3 @@ class ModeloPRVFCM:
         estado = self.estado(self.registro_de_perfil(perfil))
         estado[self.pre.indices_dinamicos] = self.medias_dinamicos
         return estado
-
-    def prescribir_perfil(
-        self,
-        perfil: dict,
-        beta: float | None = None,
-        delta_max: float | None = None,
-        permitir_reducciones: bool | None = None,
-        nivel_meta: str | None = None,
-        semilla: int = 0,
-    ) -> dict:
-        """Prescripción del AG para un perfil de riesgo: qué valores deben tomar las acciones para llegar a la meta."""
-        salida = self._prescribir_estado(
-            self.estado_de_perfil(perfil), beta, delta_max, permitir_reducciones, semilla, nivel_meta, "este perfil"
-        )
-        salida["perfil"] = {c: perfil.get(c) for c in self.esquema.columnas_origen if c != self.esquema.objetivo}
-        return salida

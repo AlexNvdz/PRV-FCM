@@ -13,5 +13,9 @@ Módulos:
 * ``reporte``          reporte prescriptivo en lenguaje natural.
 * ``visualizacion``    gráficas de resultados y grafo del mapa con NetworkX.
 * ``pipeline``         las cuatro etapas en una función (consola y aplicación).
-* ``esquema``, ``perfilado``, ``modelo``, ``servicio``  motor de la aplicación web.
+* ``modelo``           modelo entrenado guardado en JSON (esquema, preprocesador, pesos).
+* ``api``              ``PredictorFCM`` (inferencia paso a paso y simulación) y
+                       ``PrescriptorAG`` (prescripción con el AG): sin interfaz, listos
+                       para rutas de un backend.
+* ``esquema``, ``perfilado``, ``servicio``  motor de la aplicación web.
 """

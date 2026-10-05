@@ -359,6 +359,20 @@ function Paso2() {
         </Aviso>
       </Bloque>
 
+      <Bloque id="paso-2-tablero" titulo="Tablero de clasificación">
+        <p>
+          Sobre la tabla, el <T a="tablero-clasificacion">tablero</T> muestra una tarjeta por columna en cinco carriles: objetivo, acciones, mutables,
+          inmutables y excluidas. Cada carril indica cuántas columnas tiene.
+        </p>
+        <Pasos>
+          <li>Arrastre una tarjeta a otro carril para cambiar su rol.</li>
+          <li>
+            Con el teclado, enfoque una tarjeta con <Tecla>Tab</Tecla> y use <Tecla>←</Tecla> y <Tecla>→</Tecla> para moverla al carril vecino.
+          </li>
+          <li>Las reglas son las del selector de rol de la tabla: al llevar una columna al objetivo, el objetivo anterior pasa a inmutable.</li>
+        </Pasos>
+      </Bloque>
+
       <Bloque id="paso-2-tabla" titulo="La tabla de columnas">
         <Defs>
           <Def t="Columna">Nombre en el archivo y, debajo, su rango o sus categorías y los vacíos.</Def>
@@ -766,6 +780,10 @@ function Paso4() {
             vuelve a las acciones actuales. Vea <Entradas a={['simulador']} />.
           </li>
           <li>
+            «Inferencia paso a paso»: la activación del objetivo en cada <T a="iteracion">iteración</T>, con las acciones actuales y con las del simulador.
+            Elija una iteración con las flechas, el control deslizante o un clic en la gráfica para ver su cuenta. Vea <Entradas a={['inferencia-paso-a-paso']} />.
+          </li>
+          <li>
             «Prescripción con el algoritmo genético»: elija la <T a="meta">meta</T>, la penalización del esfuerzo (de 0 a 1; 0,4 por defecto) y el cambio
             máximo (a la derecha, sin límite), y pulse «Prescribir». Las reducciones siguen la opción del entrenamiento.
           </li>
@@ -818,7 +836,12 @@ function Paso4() {
             Frases con cada cambio, las acciones sin cambio, el resultado estimado, los <T a="frenos">factores que frenan</T> y la nota de causalidad.
             Vea <Entradas a={['reporte-prescriptivo']} />.
           </Def>
-          <Def t="Convergencia del algoritmo genético">Mejor costo y costo medio de la población en cada generación.</Def>
+          <Def t="Evolución del algoritmo genético">
+            Reproduce el historial del AG al abrirse el resultado (sin animación si el sistema pide reducir el movimiento). «Pausar», «Reproducir»,
+            «Ir al final» y el control deslizante eligen la generación. Muestra el mejor costo, el costo medio, el objetivo con el mejor individuo, la
+            curva «Costo por generación» y las barras «Acciones actuales y prescritas por el modelo»; antes de la última generación, las barras son las
+            mejores acciones de esa generación. Si el AG se detuvo antes del máximo, lo indica. Vea <Entradas a={['evolucion-ag']} />.
+          </Def>
           <Def t="Qué empuja al objetivo">
             <T a="aporte">Aporte</T> de cada concepto con las acciones actuales y con el plan.
           </Def>
@@ -1065,7 +1088,16 @@ function Graficas() {
           </Def>
           <Def t="Convergencia del AG">
             En el paso 4 y el Informe, la mediana del mejor costo por generación entre estudiantes, con la banda de los cuartiles 1 y 3. En una
-            prescripción individual, el mejor costo (azul) y el costo medio de la población (naranja).
+            prescripción individual («Costo por generación»), el mejor costo (azul) y el costo medio de la población (naranja), que se dibujan hasta la
+            generación elegida.
+          </Def>
+          <Def t="Inferencia paso a paso">
+            Eje horizontal: la iteración t; vertical: la activación del objetivo, de 0 a 1, sobre las bandas de los niveles. Azul con las acciones
+            actuales, naranja con las del simulador; la línea vertical marca la iteración cuya cuenta se muestra debajo.
+          </Def>
+          <Def t="Acciones actuales y prescritas">
+            Una pareja de barras por acción: la actual (azul) y la prescrita o la mejor de la generación elegida (naranja), como fracción del rango de la
+            acción; la etiqueta da el valor en sus unidades.
           </Def>
           <Def t="Medidor">
             Barra de 0 a 1 con las zonas de los niveles y un punto en la activación final. Vea <Entradas a={['medidor']} />.
@@ -1098,6 +1130,9 @@ function Formulas() {
         <Formula lectura="Sigmoide con pendiente λ.">f(x) = 1 / (1 + e^(−λx))</Formula>
         <Formula lectura="Convergencia: se detiene cuando ningún cambio supera 0,00001, o a las 100 iteraciones.">máx_i |A_i(t+1) − A_i(t)| {'<'} 0,00001</Formula>
         <Formula lectura="Nivel predicho: el nivel cuyo valor normalizado está más cerca de la activación final.">nivel = argmin_nivel |A*_T − valor(nivel)|</Formula>
+        <Formula lectura="Cuenta de «Inferencia paso a paso»: la entrada del objetivo en cada iteración se separa en memoria, influencia de las acciones (constante, porque las acciones quedan fijas) e influencia del resto de conceptos.">
+          x_T(t) = k2·A_T(t−1) + k1·Σ_acciones w·a + k1·Σ_resto w·A(t−1),   A_T(t) = f(x_T(t))
+        </Formula>
       </Bloque>
 
       <Bloque id="formulas-pesos" titulo="Aprendizaje de W">

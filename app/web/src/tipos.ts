@@ -298,11 +298,33 @@ export interface PaginaFilas {
   filas: Record<string, string | number | boolean | null>[];
 }
 
+/** Una iteración de la regla de Kosko para el objetivo: A_o(t) = f(memoria + influencia), con A(t−1). */
+export interface PasoInferencia {
+  t: number;
+  memoria: number;
+  influencia: number;
+  /** Parte de la influencia que aportan las acciones (constante: las acciones quedan fijas). */
+  influencia_acciones: number;
+  entrada: number;
+  activacion: number;
+}
+
+/** Cómo llegó el FCM a su estado final (PredictorFCM.paso_a_paso). */
+export interface Inferencia {
+  iteraciones: number;
+  convergio: boolean;
+  parametros: { lambda: number; k1: number; k2: number; tolerancia: number };
+  /** Activación de cada concepto dinámico en t = 0..T; el objetivo primero. */
+  series: { id: string; columna: string; nombre: string; rol: Exclude<Rol, 'excluir'>; valores: number[] }[];
+  pasos: PasoInferencia[];
+}
+
 export interface EstadoPrediccion {
   activacion: number;
   nivel: string;
   exito: boolean;
   dinamicos: Record<string, number>;
+  inferencia?: Inferencia;
 }
 
 export interface ValorOriginal {
@@ -366,11 +388,20 @@ export interface Prescripcion {
   meta?: { valor: number; nivel: string; tolerancia: number };
   costo: number;
   generaciones: number;
-  historial?: { mejor: number[]; promedio: number[] };
+  /** Por generación del AG: mejor costo, costo medio, activación del objetivo y mejores acciones (en el orden de `acciones`). */
+  historial?: { mejor: number[]; promedio: number[]; activacion?: number[]; acciones?: number[][] };
   contribuciones?: Contribucion[];
   reporte?: ReporteIndividual;
   perfil?: Record<string, string | number | null>;
-  configuracion: { beta: number; delta_max: number | null; solo_incrementos: boolean };
+  configuracion: {
+    beta: number;
+    delta_max: number | null;
+    solo_incrementos: boolean;
+    poblacion?: number;
+    generaciones_max?: number;
+    /** Generaciones sin mejora antes de detenerse. */
+    paciencia?: number;
+  };
 }
 
 export interface PerfilBase {

@@ -322,9 +322,9 @@ export const GLOSARIO = {
   'convergencia-ag': {
     termino: 'Convergencia del AG',
     definicion:
-      'Cómo baja el costo generación tras generación. En el paso 4 y en el Informe, la línea es la mediana del mejor costo de cada generación entre los estudiantes y la banda, su rango intercuartílico. En una prescripción individual se ven el mejor costo y el costo medio de la población. Cuando la curva se aplana, el AG ya no encuentra mejoras.',
+      'Cómo baja el costo generación tras generación. En el paso 4 y en el Informe, la línea es la mediana del mejor costo de cada generación entre los estudiantes y la banda, su rango intercuartílico. En una prescripción individual se ven el mejor costo y el costo medio de la población («Costo por generación»). Cuando la curva se aplana, el AG ya no encuentra mejoras.',
     donde: 'Paso 4, Informe y resultado de una prescripción individual.',
-    ver: ['generacion', 'costo-medio', 'cuartiles', 'parada-temprana'],
+    ver: ['generacion', 'costo-medio', 'cuartiles', 'parada-temprana', 'evolucion-ag'],
   },
   convergencia: {
     termino: 'Convergencia del FCM',
@@ -502,6 +502,14 @@ export const GLOSARIO = {
     donde: 'Paso 3 (máscara de dirección causal y sección «Estructura aprendida»).',
     ver: ['arista', 'mascara', 'w'],
   },
+  'evolucion-ag': {
+    termino: 'Evolución del algoritmo genético',
+    definicion:
+      'Panel de una prescripción individual que reproduce el historial real del AG, generación por generación. «Reproducir», «Pausar», «Ir al final» y el control deslizante eligen la generación. Muestra el mejor costo, el costo medio, la activación del objetivo con el mejor individuo, la curva del costo hasta esa generación y, en barras, las acciones actuales frente a las mejores de esa generación; en la última, las prescritas. El AG de un estudiante tarda milisegundos: por eso se reproduce su historial en lugar de mostrarlo en vivo.',
+    donde: 'Resultado de una prescripción individual: panel del estudiante y perfil de riesgo.',
+    ver: ['convergencia-ag', 'generacion', 'funcion-costo', 'elitismo'],
+    claves: 'fitness aptitud progreso generaciones reproducir',
+  },
   exactitud: {
     termino: 'Exactitud',
     expansion: 'Accuracy',
@@ -673,9 +681,17 @@ export const GLOSARIO = {
   inferencia: {
     termino: 'Inferencia del FCM',
     definicion:
-      'Aplicar la regla de Kosko una y otra vez, a partir de un estado inicial, hasta que las activaciones se estabilizan. Los conceptos fijos toman los datos del estudiante y el objetivo parte de su media de entrenamiento (un valor neutro); el resultado es el nivel que predice el FCM.',
-    ver: ['kosko', 'convergencia', 'dinamico'],
+      'Aplicar la regla de Kosko una y otra vez, a partir de un estado inicial, hasta que las activaciones se estabilizan. Los conceptos fijos toman los datos del estudiante. El objetivo parte de su media de entrenamiento (un valor neutro) en la evaluación y en el perfil de riesgo, y de su valor observado en el panel del estudiante; con un solo concepto dinámico y λ·k2 menor que 4 el estado final es el mismo. El resultado es el nivel que predice el FCM.',
+    ver: ['kosko', 'convergencia', 'dinamico', 'inferencia-paso-a-paso'],
     claves: 'prediccion',
+  },
+  'inferencia-paso-a-paso': {
+    termino: 'Inferencia paso a paso',
+    definicion:
+      'Gráfica con la activación del objetivo en cada iteración t de la regla de Kosko, desde t = 0 (el valor de partida) hasta el punto fijo: azul con las acciones actuales y naranja con las del simulador. Las bandas son las zonas de los niveles. Debajo, la cuenta de la iteración elegida: memoria k2·A(t−1), influencia de las acciones, influencia del resto de conceptos, entrada x y f(x). Las acciones quedan fijas, así que su influencia es la misma en todas las iteraciones: cambiar una acción mueve la entrada del objetivo y la iteración lleva ese cambio hasta un nuevo punto fijo.',
+    donde: 'Paso 4, panel del estudiante, bajo el simulador de acciones.',
+    ver: ['inferencia', 'iteracion', 'memoria', 'simulador'],
+    claves: 'trayectoria iteraciones what if kosko estabilizacion',
   },
   inmutable: {
     termino: 'Inmutable',
@@ -1230,9 +1246,9 @@ export const GLOSARIO = {
   simulador: {
     termino: 'Simulador de acciones',
     definicion:
-      'Controles deslizantes del panel del estudiante: al mover una acción, el FCM recalcula al instante el nivel con esos valores. No usa el algoritmo genético; «Restablecer» vuelve a las acciones actuales y «Probar en el simulador» carga las prescritas.',
+      'Controles deslizantes del panel del estudiante: al mover una acción, el FCM recalcula al instante el nivel con esos valores y la gráfica «Inferencia paso a paso» muestra cada iteración. No usa el algoritmo genético; «Restablecer» vuelve a las acciones actuales y «Probar en el simulador» carga las prescritas.',
     donde: 'Paso 4, panel del estudiante.',
-    ver: ['inferencia', 'prescripcion'],
+    ver: ['inferencia', 'inferencia-paso-a-paso', 'prescripcion'],
     claves: 'simular escenario que pasaria si',
   },
   sobreajuste: {
@@ -1256,6 +1272,14 @@ export const GLOSARIO = {
       'Correlación calculada sobre el orden de los valores: capta relaciones monótonas aunque no sean lineales y es poco sensible a valores extremos. Es la que se usa por defecto.',
     donde: 'Datos («Correlación de cada variable con…», mapa de calor y dispersión) y asistente.',
     ver: ['correlacion', 'pearson', 'monotona'],
+  },
+  'tablero-clasificacion': {
+    termino: 'Tablero de clasificación',
+    definicion:
+      'Cinco carriles (objetivo, acciones, mutables, inmutables y excluidas) con una tarjeta por columna. Arrastre una tarjeta a otro carril para cambiar su rol, o enfóquela y use las flechas izquierda y derecha. Sigue las mismas reglas que el selector de rol de la tabla: al llevar una columna al objetivo, el objetivo anterior pasa a inmutable.',
+    donde: 'Paso 2, sobre la tabla de columnas.',
+    ver: ['rol', 'clasificacion'],
+    claves: 'arrastrar soltar drag drop carriles',
   },
   tanh: {
     termino: 'Tanh',

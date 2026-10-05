@@ -13,7 +13,9 @@ Cada individuo es un vector de genes reales acotados por gen a
 * Parada temprana si el mejor costo no mejora en ``paciencia`` generaciones.
 
 El AG minimiza una función de costo vectorizada: recibe la población completa
-(n_individuos, n_genes) y devuelve un costo por individuo.
+(n_individuos, n_genes) y devuelve un costo por individuo. Al terminar cada
+generación puede avisar a quien lo ejecuta (``al_generar``), por ejemplo para
+mostrar el progreso en vivo desde un servicio web.
 """
 from __future__ import annotations
 
@@ -36,6 +38,7 @@ class ResultadoAG:
     historial_mejor: np.ndarray     # Mejor costo al final de cada generación.
     historial_promedio: np.ndarray  # Costo medio de la población en cada generación.
     generaciones: int               # Generaciones ejecutadas (puede ser < máximo).
+    historial_cromosoma: np.ndarray | None = None  # Mejor individuo de cada generación (generaciones, n_genes).
 
 
 class AlgoritmoGenetico:
@@ -126,13 +129,22 @@ class AlgoritmoGenetico:
     # ------------------------------------------------------------------
     # Ciclo evolutivo
     # ------------------------------------------------------------------
-    def ejecutar(self, semillas: np.ndarray | None = None) -> ResultadoAG:
-        """Evoluciona la población y devuelve el mejor individuo encontrado."""
+    def ejecutar(
+        self,
+        semillas: np.ndarray | None = None,
+        al_generar: Callable[[int, float, float, np.ndarray], None] | None = None,
+    ) -> ResultadoAG:
+        """Evoluciona la población y devuelve el mejor individuo encontrado.
+
+        ``al_generar(generacion, mejor_costo, costo_medio, mejor_cromosoma)`` se
+        llama al final de cada generación. No consume números aleatorios: con o
+        sin él, la misma semilla da el mismo resultado.
+        """
         cfg = self.config
         poblacion = self.inicializar_poblacion(semillas)
         costos = self.funcion_costo(poblacion)
 
-        historial_mejor, historial_promedio = [], []
+        historial_mejor, historial_promedio, historial_cromosoma = [], [], []
         mejor_costo, sin_mejora = np.inf, 0
         n_hijos = cfg.tam_poblacion - cfg.elitismo
 
@@ -150,9 +162,13 @@ class AlgoritmoGenetico:
             poblacion = np.concatenate([elite, hijos])
             costos = np.concatenate([costos_elite, self.funcion_costo(hijos)])
 
-            mejor_generacion = float(costos.min())
+            indice_mejor = int(np.argmin(costos))
+            mejor_generacion = float(costos[indice_mejor])
             historial_mejor.append(mejor_generacion)
             historial_promedio.append(float(costos.mean()))
+            historial_cromosoma.append(poblacion[indice_mejor].copy())
+            if al_generar is not None:
+                al_generar(generacion, mejor_generacion, historial_promedio[-1], historial_cromosoma[-1])
 
             if mejor_generacion < mejor_costo - 1e-9:
                 mejor_costo, sin_mejora = mejor_generacion, 0
@@ -168,4 +184,5 @@ class AlgoritmoGenetico:
             historial_mejor=np.array(historial_mejor),
             historial_promedio=np.array(historial_promedio),
             generaciones=generacion,
+            historial_cromosoma=np.array(historial_cromosoma),
         )

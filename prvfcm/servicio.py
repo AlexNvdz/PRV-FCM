@@ -34,6 +34,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from .api import PredictorFCM, PrescriptorAG
 from .configuracion import ConfigAG, ConfigFCM, ConfigPrescripcion, ConfigSeleccion
 from .esquema import ESQUEMA_XAPI_DICT, ErrorEsquema, esquema_desde_dict, rol_de, segmento_desde_dict, validar_esquema
 from .fcm import METODOS_PESOS, construir_estructura
@@ -220,7 +221,7 @@ def m_estudiante(ruta: str, esquema: dict, id: int, modelo: str | None = None) -
         estado = m.estado(registro)
         salida["nivel_observado"] = m.pre.etiquetas(registro)[0]
         salida["en_prueba"] = int(id) in m.ids_prueba
-        salida["prediccion"] = m.describir(estado)
+        salida["prediccion"] = PredictorFCM(m).inferir(estado)
         salida["acciones"] = [
             {**info, "actual": m.valor_original(info["columna"], estado[m.pre.indice(info["columna"])])}
             for info in m.acciones()
@@ -230,22 +231,21 @@ def m_estudiante(ruta: str, esquema: dict, id: int, modelo: str | None = None) -
 
 def m_simular(modelo: str, ruta: str, esquema: dict, id: int, acciones: dict) -> dict:
     df, _ = _datos(ruta, esquema)
-    return _modelo(modelo).simular(_registro(df, id), acciones)
+    return PredictorFCM(_modelo(modelo)).simular(_registro(df, id), acciones)
 
 
 def m_prescribir(modelo: str, ruta: str, esquema: dict, id: int, beta: float | None = None,
                  delta_max: float | None = None, permitir_reducciones: bool | None = None,
                  nivel_meta: str | None = None) -> dict:
     df, _ = _datos(ruta, esquema)
-    return _modelo(modelo).prescribir(
-        _registro(df, id), beta, delta_max, permitir_reducciones, semilla=int(id), nivel_meta=nivel_meta,
-        sujeto=f"el estudiante {int(id)}",
+    return PrescriptorAG(_modelo(modelo)).prescribir(
+        _registro(df, id), nivel_meta, beta, delta_max, permitir_reducciones, semilla=int(id), sujeto=f"el estudiante {int(id)}"
     )
 
 
 def m_prescribir_perfil(modelo: str, perfil: dict, beta: float | None = None, delta_max: float | None = None,
                         permitir_reducciones: bool | None = None, nivel_meta: str | None = None) -> dict:
-    return _modelo(modelo).prescribir_perfil(perfil, beta, delta_max, permitir_reducciones, nivel_meta)
+    return PrescriptorAG(_modelo(modelo)).prescribir(perfil, nivel_meta, beta, delta_max, permitir_reducciones)
 
 
 def m_resumen_prescripciones(directorio: str, nivel: str | None = None) -> dict:

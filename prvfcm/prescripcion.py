@@ -47,6 +47,7 @@ class ResultadoPrescripcion:
     historial_costo: np.ndarray   # Mejor costo por generación del AG.
     generaciones: int
     historial_promedio: np.ndarray | None = None  # Costo medio de la población por generación.
+    historial_acciones: np.ndarray | None = None  # Mejores acciones de cada generación (generaciones, n_acciones).
 
 
 class PrescriptorPRVFCM:
@@ -100,7 +101,7 @@ class PrescriptorPRVFCM:
         diferencias = np.abs(estados_finales[:, self.indices_objetivo] - self.valores_deseados)
         return diferencias @ self.pesos_objetivo
 
-    def _estados_con_acciones(self, estado_actual: np.ndarray, acciones: np.ndarray) -> np.ndarray:
+    def estados_con_acciones(self, estado_actual: np.ndarray, acciones: np.ndarray) -> np.ndarray:
         """Copia el estado actual una vez por individuo y sustituye las acciones."""
         estados = np.repeat(estado_actual[None, :], len(acciones), axis=0)
         estados[:, self.indices_accion] = acciones
@@ -111,14 +112,23 @@ class PrescriptorPRVFCM:
         acciones_actuales = estado_actual[self.indices_accion]
 
         def costo(poblacion: np.ndarray) -> np.ndarray:
-            finales = self.fcm.inferir(self._estados_con_acciones(estado_actual, poblacion)).estados
+            finales = self.fcm.inferir(self.estados_con_acciones(estado_actual, poblacion)).estados
             esfuerzo = np.mean(np.abs(poblacion - acciones_actuales), axis=1)
             return self.error_objetivo(finales) + self.config.beta_esfuerzo * esfuerzo
 
         return costo
 
-    def prescribir(self, estado_actual: np.ndarray, rng: np.random.Generator | None = None) -> ResultadoPrescripcion:
-        """Ejecuta el AG para un estudiante y devuelve la mejor prescripción."""
+    def prescribir(
+        self,
+        estado_actual: np.ndarray,
+        rng: np.random.Generator | None = None,
+        al_generar: Callable[[int, float, float, np.ndarray], None] | None = None,
+    ) -> ResultadoPrescripcion:
+        """Ejecuta el AG para un estudiante y devuelve la mejor prescripción.
+
+        ``al_generar`` se pasa tal cual a :meth:`AlgoritmoGenetico.ejecutar`: recibe
+        la generación, el mejor costo, el costo medio y las mejores acciones (normalizadas).
+        """
         estado_actual = np.asarray(estado_actual, dtype=float)
         acciones_actuales = estado_actual[self.indices_accion]
         inferior, superior = self.limites(acciones_actuales)
@@ -126,7 +136,7 @@ class PrescriptorPRVFCM:
         ag = AlgoritmoGenetico(self.funcion_costo(estado_actual), inferior, superior, self.config_ag, rng)
         # Las acciones actuales se siembran en la población inicial: con elitismo,
         # la prescripción nunca es peor que mantener la situación actual.
-        resultado = ag.ejecutar(semillas=acciones_actuales)
+        resultado = ag.ejecutar(semillas=acciones_actuales, al_generar=al_generar)
 
         recomendadas = resultado.mejor_cromosoma
         estado_nuevo = estado_actual.copy()
@@ -144,6 +154,7 @@ class PrescriptorPRVFCM:
             historial_costo=resultado.historial_mejor,
             generaciones=resultado.generaciones,
             historial_promedio=resultado.historial_promedio,
+            historial_acciones=resultado.historial_cromosoma,
         )
 
     def prescribir_lote(

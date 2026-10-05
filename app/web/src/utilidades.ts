@@ -81,6 +81,26 @@ export const NOMBRE_METODO: Record<MetodoPesos, string> = {
   correlacion_parcial: 'Correlación parcial',
 };
 
+/** Nivel cuyo valor está más cerca de la activación, como `discretizar_rendimiento` del motor. */
+export function nivelCercano(activacion: number, valores: Record<string, number>) {
+  return Object.entries(valores).reduce((mejor, actual) => (Math.abs(actual[1] - activacion) < Math.abs(mejor[1] - activacion) ? actual : mejor))[0];
+}
+
+type RangoAccion = { categorias?: string[]; min?: number; max?: number };
+
+/** Paso de un control de acción: una categoría, o una fracción del rango numérico. */
+export function pasoAccion(accion: RangoAccion) {
+  if (accion.categorias) return 1;
+  const rango = (accion.max ?? 1) - (accion.min ?? 0);
+  return rango > 20 ? 1 : rango > 2 ? 0.1 : 0.01;
+}
+
+/** Valor de una acción en unidades originales; si es ordinal, la categoría que le corresponde. */
+export function etiquetaAccion(accion: RangoAccion, valor: number) {
+  if (accion.categorias) return accion.categorias[Math.round(valor)] ?? num(valor);
+  return num(valor, pasoAccion(accion) < 1 ? 2 : 0);
+}
+
 /** Color de cada nivel del objetivo: rampa ordinal azul (del peor al mejor). */
 export function colorNivel(indice: number, total: number) {
   const pasos: Record<number, number[]> = { 1: [3], 2: [1, 5], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5] };

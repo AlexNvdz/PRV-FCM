@@ -42,6 +42,8 @@ anterior (guardar la clasificación, entrenar el modelo).
    Min-Max a [0, 1], con la tabla de datos ya normalizados.
 2. **Clasificación de nodos** (Datos). Cada columna es objetivo C_T, acción o
    concepto prescriptivo C_P, o concepto del sistema C_S (inmutable o mutable).
+   El rol se cambia arrastrando la tarjeta de la columna entre los carriles del
+   tablero de clasificación (o con las flechas del teclado) o desde la tabla.
    "Sugerir con IA" pide roles y nombres a qwen2.5. Un resumen muestra los
    conceptos numerados tal como los verá el mapa. La pestaña "Relaciones entre
    variables" grafica el objetivo, la correlación de cada variable con él, el
@@ -57,7 +59,11 @@ anterior (guardar la clasificación, entrenar el modelo).
    confusión, selección de λ, el mapa interactivo y la matriz W.
 4. **Motor prescriptivo** (Prescripciones). Métricas antes y después, la
    función de costo del AG, la tabla por estudiante (con simulador y
-   prescripción individual) y el **perfil de riesgo**: se escribe o carga el
+   prescripción individual) y el **perfil de riesgo**. El simulador mueve las
+   acciones y la gráfica "Inferencia paso a paso" traza la activación del
+   objetivo en cada iteración de la regla de Kosko, con las acciones actuales y
+   las simuladas, y la cuenta de cada iteración (memoria, influencia de las
+   acciones y del resto). En el perfil de riesgo se escribe o carga el
    estado de un individuo, se elige la meta (nivel deseado del objetivo) y el
    AG calcula los valores exactos de cada acción.
 5. **Visualización y recomendaciones** (Informe). Reporte prescriptivo en
@@ -67,9 +73,13 @@ anterior (guardar la clasificación, entrenar el modelo).
 
 Cada prescripción individual (estudiante o perfil) muestra los niveles antes y
 después, las acciones con su cambio y el porcentaje de su rango, el reporte en
-frases, la convergencia del AG (mejor costo y costo medio de la población), el
-aporte de cada concepto al objetivo y un botón para que qwen2.5 redacte
-recomendaciones pedagógicas a partir de esas cifras.
+frases, la evolución del AG, el aporte de cada concepto al objetivo y un botón
+para que qwen2.5 redacte recomendaciones pedagógicas a partir de esas cifras.
+El AG de un estudiante tarda unos 20 ms, así que no se transmite en vivo: el
+motor devuelve su historial (mejor costo, costo medio, activación del objetivo
+y mejores acciones de cada generación) y la interfaz lo reproduce generación
+por generación, con la curva del costo y las barras de las acciones actuales
+frente a las prescritas.
 
 ## Asistente
 

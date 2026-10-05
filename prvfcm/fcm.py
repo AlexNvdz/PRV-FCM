@@ -181,6 +181,26 @@ class MapaCognitivoDifuso:
         """Estado de convergencia para cada estado inicial."""
         return self.inferir(estados_iniciales).estados
 
+    def terminos(self, estado: np.ndarray, fuentes: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+        """Los dos sumandos de la regla para un estado A(t), por concepto de destino i.
+
+            memoria_i    = k2 * A_i(t)
+            influencia_i = k1 * sum_j w_ji * A_j(t)
+
+        Para un concepto dinámico, A_i(t+1) = f(memoria_i + influencia_i); para
+        uno fijo los términos existen pero no se usan. ``fuentes`` limita la suma
+        a esos conceptos de origen j (por ejemplo, solo las acciones) para ver
+        cuánto aporta cada grupo a la entrada. Sirve para explicar la inferencia:
+        :meth:`inferir` hace la misma cuenta, restringida a los conceptos dinámicos.
+        """
+        cfg = self.config
+        A = np.asarray(estado, dtype=float)
+        origen = A
+        if fuentes is not None:
+            origen = np.zeros_like(A)
+            origen[..., fuentes] = A[..., fuentes]
+        return cfg.coef_memoria * A, cfg.coef_influencia * (origen @ self.pesos)
+
     # ------------------------------------------------------------------
     # Aprendizaje de los pesos a partir de datos
     # ------------------------------------------------------------------

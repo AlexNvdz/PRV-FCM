@@ -1,11 +1,12 @@
 // Resultado de una prescripción individual (estudiante o perfil de riesgo): niveles antes y
-// después, acciones recomendadas, reporte en lenguaje natural, convergencia del AG, aporte de
-// cada concepto al objetivo y recomendación redactada con qwen2.5.
+// después, acciones recomendadas, reporte en lenguaje natural, evolución del AG generación por
+// generación, aporte de cada concepto al objetivo y recomendación redactada con qwen2.5.
 import type { ReactNode } from 'react';
 
 import type { EstadoPrediccion, Prescripcion, ReporteIndividual } from '../tipos';
 import { clase, colorNivel, firmado, num, pct } from '../utilidades';
-import { GraficaConvergenciaIndividual, GraficaMancuernas } from './graficas';
+import { EvolucionAG } from './evolucion';
+import { GraficaMancuernas } from './graficas';
 import { RedaccionIA } from './RedaccionIA';
 import { NivelChip } from './ui';
 
@@ -145,7 +146,7 @@ export function ResultadoPrescripcion({
         {acciones}
       </section>
       {prescripcion.reporte && <ReporteTexto reporte={prescripcion.reporte} />}
-      {prescripcion.historial && prescripcion.historial.mejor.length > 0 && <GraficaConvergenciaIndividual historial={prescripcion.historial} />}
+      <EvolucionAG key={`${prescripcion.costo}-${prescripcion.generaciones}`} prescripcion={prescripcion} niveles={niveles} valores={valores} />
       <GraficaAportes prescripcion={prescripcion} />
       <RedaccionIA key={JSON.stringify(prescripcion.acciones.map((a) => a.recomendada.valor))} modeloId={modeloId} pedido={{ tipo: 'individual', sujeto, prescripcion }} />
     </div>
