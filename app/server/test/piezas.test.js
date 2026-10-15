@@ -11,7 +11,7 @@ import { ejecutarHerramienta, leerCorrelaciones } from '../herramientas.js';
 import { ErrorMotor } from '../motor.js';
 import { crearBuscadorColumnas } from '../rutas/chat.js';
 import { opcionesMotor, OpcionesEntrenamiento } from '../rutas/datasets.js';
-import { validarSeguimiento } from '../rutas/modelos.js';
+import { modelosParaConsulta, validarSeguimiento } from '../rutas/modelos.js';
 
 function probarOrigen(headers) {
   let status = 200;
@@ -256,6 +256,34 @@ test('prescribir_perfil parte del perfil base, cambia los valores pedidos y usa 
   assert.equal(params.beta, 0.4);
   assert.deepEqual(llamadas[0][1].id, 3);
   assert.equal(eventos[0].tipo, 'perfil');
+});
+
+test('la lista de /consulta trae el perfil de cada modelo y deja los del artículo al final', async () => {
+  const raiz = await fs.mkdtemp(path.join(os.tmpdir(), 'pizarra-'));
+  try {
+    const almacen = new Almacen(raiz);
+    await almacen.iniciar();
+    const origen = path.join(raiz, 'origen.csv');
+    await fs.writeFile(origen, 'a,b\n1,2\n');
+    const dataset = await almacen.crearDataset({ nombre: 'heart', archivo: origen, origen: 'copiar' });
+    const crear = async (perfil) => {
+      const modelo = await almacen.crearModelo({ datasetId: dataset.id, opciones: {} });
+      await almacen.guardarModelo({ ...modelo, estado: 'listo' });
+      if (perfil) await Almacen.escribirJson(path.join(almacen.dirModelo(modelo.id), 'metricas.json'), { configuracion: { perfil } });
+      return modelo.id;
+    };
+    const articulo = await crear('articulo');
+    const antiguo = await crear(null); // Sin perfil en las métricas: «mejorado».
+    const mejorado = await crear('mejorado');
+    await almacen.crearModelo({ datasetId: dataset.id, opciones: {} }); // En curso: no aparece.
+    const lista = await modelosParaConsulta(almacen);
+    assert.deepEqual(new Set(lista.slice(0, 2).map((m) => m.id)), new Set([antiguo, mejorado]));
+    assert.deepEqual(lista.map((m) => m.perfil), ['mejorado', 'mejorado', 'articulo']);
+    assert.equal(lista[2].id, articulo);
+    assert.equal(lista[2].tema, 'heart');
+  } finally {
+    await fs.rm(raiz, { recursive: true, force: true });
+  }
 });
 
 test('el almacén crea, lista y elimina datasets con sus modelos', async () => {

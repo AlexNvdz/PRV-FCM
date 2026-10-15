@@ -501,6 +501,8 @@ export interface ModeloListo {
   tema: string;
   creado: string;
   opciones: Record<string, unknown>;
+  /** Los del perfil «articulo» llegan al final de la lista. */
+  perfil: PerfilModelo;
 }
 
 /** Resultado observado tras aplicar una prescripción (seguimiento.jsonl del modelo). */
