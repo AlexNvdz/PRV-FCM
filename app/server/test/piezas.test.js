@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { Almacen } from '../almacen.js';
 import { protegerOrigen } from '../app.js';
 import { ejecutarHerramienta, leerCorrelaciones } from '../herramientas.js';
+import { ErrorMotor } from '../motor.js';
 import { crearBuscadorColumnas } from '../rutas/chat.js';
 import { opcionesMotor, OpcionesEntrenamiento } from '../rutas/datasets.js';
 import { validarSeguimiento } from '../rutas/modelos.js';
@@ -49,6 +50,28 @@ test('las herramientas devuelven errores legibles para que el modelo corrija', a
   assert.match(sinModelo.error, /No hay un modelo PRV-FCM entrenado/);
   const malos = await ejecutarHerramienta('analizar_estudiante', { id_estudiante: 'abc' }, { modelo: {} });
   assert.match(malos.error, /Argumentos no válidos/);
+});
+
+test('un nivel inexistente llega al modelo como error con los niveles válidos, no como lista vacía', async () => {
+  const mensaje = 'El nivel «response» no existe. Niveles válidos: 0, 1.';
+  const ctx = {
+    modelo: { id: 'md-prueba' },
+    dirModelo: 'dir',
+    rutaDatos: 'datos.csv',
+    rutaModelo: 'modelo.json',
+    dataset: { esquema: ESQUEMA },
+    resultados: { graficas: { acciones: [] } },
+    emitir: () => assert.fail('no debe emitir gráficas ni tarjetas'),
+    columnaReal: (c) => c,
+    motor: { llamar: async () => Promise.reject(new ErrorMotor(mensaje)) },
+  };
+  for (const [nombre, args] of [
+    ['resumen_prescripciones', { nivel: 'response' }],
+    ['prescribir_perfil', { nivel_meta: 'response' }],
+    ['buscar_estudiantes', { nivel: 'response' }],
+  ]) {
+    assert.deepEqual(await ejecutarHerramienta(nombre, args, ctx), { error: mensaje }, nombre);
+  }
 });
 
 test('analizar_estudiante acepta "id" como alias de id_estudiante', async () => {

@@ -124,6 +124,7 @@ Cómo trabajas:
 - Cada registro se identifica por su id (el argumento id_estudiante): la fila del archivo.
 - Qué herramienta usar: recomendaciones generales o por nivel → resumen_prescripciones; un registro concreto → analizar_estudiante; un perfil hipotético («un estudiante con más de 7 ausencias que casi no visita recursos») → prescribir_perfil; panorama de cómo se relacionan todas las variables → correlaciones_variables; la relación entre dos variables que el usuario nombra → relacion_variables con x e y.
 - Si una herramienta devuelve un campo «reporte» o «texto», úsalo como base de tu respuesta y conserva sus cifras.
+- Si una herramienta devuelve «error», lee el mensaje, corrige los argumentos (por ejemplo, usa un nivel de la lista válida) y vuelve a llamarla una vez.
 - Al recomendar, combina la prescripción del modelo con ${practicas} y explica el porqué.
 - Para un registro concreto, recomienda el plan moderado y menciona el plan máximo solo como techo. No recomiendes cambiar una acción que la prescripción deja igual: el modelo no espera un beneficio que compense el esfuerzo de cambiarla.
 - Si un cambio recomendado es muy grande, propón metas intermedias realistas y un seguimiento periódico.
@@ -178,7 +179,9 @@ export function describirContexto({ dataset, modelo, resultados, sujeto }) {
   const metodo = NOMBRE_METODO[metricas.configuracion.fcm.metodo_pesos ?? 'bptt'] ?? metricas.configuracion.fcm.metodo_pesos;
   const excluidas = metricas.configuracion.aristas_excluidas?.length ?? 0;
   const equilibrada = exactitudEquilibrada(pred);
+  const nivelesModelo = Object.entries(graficas.niveles ?? {}).sort((a, b) => a[1] - b[1]).map(([n]) => n);
   lineas.push(
+    `- Niveles del modelo, del peor al mejor: ${nivelesModelo.join(', ')}. Los argumentos nivel y nivel_meta usan estos nombres exactos; resumen_prescripciones solo tiene registros de ${(metricas.configuracion.prescripcion?.clases_a_prescribir ?? nivelesModelo.slice(0, -1)).join(', ')}.`,
     `- Modelo PRV-FCM entrenado con ${metricas.configuracion.n_entrenamiento} registros; pesos por ${metodo}${metricas.configuracion.fcm.balancear_niveles ? ' con niveles equilibrados' : ''} (λ = ${metricas.configuracion.fcm.lambda_})${excluidas ? `, con ${excluidas} aristas excluidas por la máscara causal` : ''}; exactitud en prueba ${(100 * pred.exactitud_rendimiento).toFixed(1)} % (equilibrada ${(100 * equilibrada).toFixed(1)} %).`,
     `- Prescripción para ${presc.n_estudiantes} ${s.plural} de prueba fuera del mejor nivel: llegan al mejor nivel ${presc.PSR_base.toFixed(1)} % con sus acciones actuales y ${presc.PSR.toFixed(1)} % con las prescritas según el FCM; un bosque aleatorio independiente lo confirma para ${ext.PSR_externo_base.toFixed(1)} % → ${ext.PSR_externo.toFixed(1)} %.`,
     `- Signo de los pesos: positivo = al aumentar la variable ${s.el} ${s.singular} se acerca a ${graficas.mejor_nivel} (mejor nivel); negativo = se aleja.`,

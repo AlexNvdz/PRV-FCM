@@ -225,17 +225,18 @@ test('el sujeto del modelo cambia el contexto y concuerda en género', () => {
   const esquema = { columnas: [{ columna: 'chol', rol: 'accion' }, { columna: 'target', rol: 'objetivo', orden: ['0', '1'] }] };
   const resultados = {
     metricas: {
-      configuracion: { n_entrenamiento: 200, fcm: { lambda_: 1, sesgo: true }, prescripcion: {} },
+      configuracion: { n_entrenamiento: 200, fcm: { lambda_: 1, sesgo: true }, prescripcion: { clases_a_prescribir: ['0'] } },
       prediccion_fcm: { exactitud_rendimiento: 0.8, por_clase: {} },
       prescripcion: { n_estudiantes: 42, PSR_base: 10, PSR: 20 },
       validacion_externa: { PSR_externo_base: 10, PSR_externo: 12 },
     },
-    graficas: { objetivo: 'target', mejor_nivel: '1', sesgo: true, conceptos: [{ columna: 'target', sesgo: 0.3 }], influencias: [{ nombre: 'chol', rol: 'accion', peso: -0.4 }] },
+    graficas: { objetivo: 'target', mejor_nivel: '1', niveles: { 1: 1, 0: 0 }, sesgo: true, conceptos: [{ columna: 'target', sesgo: 0.3 }], influencias: [{ nombre: 'chol', rol: 'accion', peso: -0.4 }] },
   };
   const paciente = sujetoDe({ singular: 'paciente', plural: 'pacientes', femenino: false });
   const texto = agente.describirContexto({ dataset: { nombre: 'heart', esquema }, modelo: { id: 'md' }, resultados, sujeto: paciente });
   assert.match(texto, /Cada registro es un paciente: habla de pacientes, no de estudiantes/);
   assert.match(texto, /Prescripción para 42 pacientes de prueba/);
+  assert.match(texto, /Niveles del modelo, del peor al mejor: 0, 1\. .*resumen_prescripciones solo tiene registros de 0\./);
   assert.match(texto, /el paciente se acerca a 1/);
   assert.match(texto, /igual para todos los pacientes/);
   assert.doesNotMatch(texto, /estudiantes de prueba/);
