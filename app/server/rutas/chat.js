@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { ejecutarAgente } from '../agente.js';
 import { ErrorHerramienta } from '../herramientas.js';
 import { abrirSSE } from '../sse.js';
+import { sujetoDe, sujetoModelo } from '../sujeto.js';
 
 const MAX_MENSAJES = 30;
 
@@ -50,14 +51,17 @@ export function rutasChat({ almacen, motor }) {
     const modelo = dataset.esquemaConfirmado ? await almacen.modeloActivo(dataset.id) : null;
     const rutaDatos = almacen.rutaDatos(dataset.id);
     const columnaReal = crearBuscadorColumnas(dataset.esquema);
+    const resultados = modelo ? await almacen.resultadosModelo(modelo.id) : null;
+    const rutaModelo = modelo ? path.join(almacen.dirModelo(modelo.id), 'modelo.json') : null;
     return {
       dataset,
       modelo,
-      resultados: modelo ? await almacen.resultadosModelo(modelo.id) : null,
+      resultados,
+      sujeto: sujetoDe(modelo ? await sujetoModelo(motor, rutaModelo, resultados?.graficas) : (dataset.validacion?.sujeto ?? dataset.esquema?.sujeto)),
       motor,
       rutaDatos,
       dirModelo: modelo ? almacen.dirModelo(modelo.id) : null,
-      rutaModelo: modelo ? path.join(almacen.dirModelo(modelo.id), 'modelo.json') : null,
+      rutaModelo,
       columnaReal,
       /** Columna que es un concepto del mapa: las one-hot se expanden en varios conceptos y no sirven como eje. */
       conceptoReal(nombre) {

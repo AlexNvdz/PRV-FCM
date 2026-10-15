@@ -1256,9 +1256,9 @@ export const GLOSARIO = {
   },
   registro: {
     termino: 'Registro',
-    definicion: 'Una fila del archivo: un estudiante o, en datasets expandidos, una variante de un estudiante.',
+    definicion: 'Una fila del archivo: un estudiante, un paciente o un cliente, según el dataset; en datasets expandidos, una variante de uno de ellos. El paso 2 define cómo se llama.',
     donde: 'Datos, pestaña «Registros».',
-    ver: ['id-estudiante'],
+    ver: ['id-estudiante', 'sujeto'],
     claves: 'fila',
   },
   'regla-inferencia': {
@@ -1336,8 +1336,8 @@ export const GLOSARIO = {
     termino: 'Segmento',
     expansion: 'Comparar por grupo',
     definicion:
-      'Opción del paso 2 que separa a los estudiantes en dos grupos según el valor de una columna (por ejemplo, ausentismo «Above-7» frente al resto), para comparar el éxito de la prescripción entre ellos con el FCM y con el bosque aleatorio.',
-    donde: 'Paso 2 («Comparar por grupo») y paso 4 («Estudiantes que llegan a…, por grupo»).',
+      'Opción del paso 2 que separa los registros en dos grupos según el valor de una columna (por ejemplo, ausentismo «Above-7» frente al resto), para comparar el éxito de la prescripción entre ellos con el FCM y con el bosque aleatorio.',
+    donde: 'Paso 2 («Comparar por grupo») y paso 4 («… que llegan a…, por grupo»).',
     ver: ['psr', 'bosque'],
     claves: 'grupo comparar',
   },
@@ -1413,6 +1413,15 @@ export const GLOSARIO = {
       'Correlación calculada sobre el orden de los valores: capta relaciones monótonas aunque no sean lineales y es poco sensible a valores extremos. Es la que se usa por defecto.',
     donde: 'Datos («Correlación de cada variable con…», mapa de calor y dispersión) y asistente.',
     ver: ['correlacion', 'pearson', 'monotona'],
+  },
+  sujeto: {
+    termino: 'Sujeto',
+    expansion: 'Cómo se llama cada registro',
+    definicion:
+      'Nombre de lo que representa cada fila del dataset, en singular y plural, y si es femenino. La interfaz y el asistente lo usan en sus textos («42 pacientes de prueba», «la persona 7»). Se guarda en el esquema y en cada modelo al entrenar. Sin él, la aplicación dice «registro»; con el esquema de xAPI, «estudiante».',
+    donde: 'Paso 2, «Cómo se llama cada registro».',
+    ver: ['registro', 'esquema'],
+    claves: 'registro paciente cliente nombre singular plural femenino',
   },
   'tablero-clasificacion': {
     termino: 'Tablero de clasificación',

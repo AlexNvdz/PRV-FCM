@@ -16,7 +16,7 @@ import { Aviso, Barra, Boton, Cargando, Clase, Dato, Encabezado, estiloControl, 
 import { useDatasetActivo } from '../contexto';
 import { nivelesDe, useDataset, useEstadisticas, useModelo } from '../hooks';
 import type { Dataset, DefectosPerfil, EventoMotor, Graficas, MetodoPesos, ModeloMeta, OpcionDePerfil, OpcionesEntrenamiento, PerfilModelo } from '../tipos';
-import { clase, duracion, entero, fecha, NOMBRE_ACTIVACION, NOMBRE_INFERENCIA, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num, pct, pctDe } from '../utilidades';
+import { clase, duracion, entero, fecha, mayuscula, NOMBRE_ACTIVACION, NOMBRE_INFERENCIA, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num, pct, pctDe, sujetoDeDataset } from '../utilidades';
 
 // Las opciones que dependen del perfil empiezan vacías: el motor usa las del perfil elegido.
 const OPCIONES_INICIALES: OpcionesEntrenamiento = {
@@ -551,7 +551,7 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
             <option value="agrupada">Agrupada por perfil (recomendada)</option>
             <option value="aleatoria">Aleatoria</option>
           </select>
-          <p className="text-xs text-tinta-3">Agrupada evita que variantes del mismo estudiante estén en ambas partes.</p>
+          <p className="text-xs text-tinta-3">Agrupada evita que variantes {sujetoDeDataset(dataset).femenino ? 'de la misma' : 'del mismo'} {sujetoDeDataset(dataset).singular} estén en ambas partes.</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="prueba" className="text-sm font-medium">Datos de prueba (%)</label>
@@ -712,6 +712,7 @@ export function Modelo() {
   const niveles = nivelesDe(dataset.esquema);
   const m = modelo.data?.metricas;
   const g = modelo.data?.graficas;
+  const s = sujetoDeDataset(dataset, modelo.data);
   // Sin la clave (modelos antiguos) o con b = 0 en el objetivo (expertos, correlación parcial) no hay sesgo.
   const conSesgo = Boolean(g?.sesgo ?? m?.configuracion.fcm.sesgo) && Boolean(g?.conceptos.find((c) => c.columna === g.objetivo)?.sesgo);
   const ocupado = Boolean(enCurso) || Boolean(trabajo && !trabajo.terminado);
@@ -724,7 +725,7 @@ export function Modelo() {
         descripcion={
           <>
             El mapa cognitivo difuso se entrena con los datos de <strong className="text-tinta">{dataset.nombre}</strong>: se extrae la matriz de pesos W, la
-            pendiente λ se elige por validación cruzada y el algoritmo genético prescribe acciones para los estudiantes de prueba fuera del mejor nivel.
+            pendiente λ se elige por validación cruzada y el algoritmo genético prescribe acciones para {s.los} {s.plural} de prueba fuera del mejor nivel.
           </>
         }
       />
@@ -749,7 +750,7 @@ export function Modelo() {
       {modelo.isLoading && idVisto && <Cargando texto="Cargando resultados…" />}
       {m && g && (
         <>
-          <Seccion titulo="Calidad predictiva" descripcion={`Modelo del ${fecha(modelo.data!.creado)}. El FCM predice el nivel de ${g.objetivo} de estudiantes que no vio al entrenar.`}>
+          <Seccion titulo="Calidad predictiva" descripcion={`Modelo del ${fecha(modelo.data!.creado)}. El FCM predice el nivel de ${g.objetivo} de ${s.plural} que no vio al entrenar.`.replace('..', '.')}>
             <dl className="grid grid-cols-2 gap-6 sm:grid-cols-4 xl:grid-cols-8">
               <Dato etiqueta="Exactitud del FCM" valor={pctDe(m.prediccion_fcm.exactitud_rendimiento)} />
               <Dato
@@ -794,7 +795,7 @@ export function Modelo() {
                       <th scope="col" className="pb-1 text-right font-medium">Precisión</th>
                       <th scope="col" className="pb-1 text-right font-medium">Recall</th>
                       <th scope="col" className="pb-1 text-right font-medium">F1</th>
-                      <th scope="col" className="pb-1 text-right font-medium">Estudiantes</th>
+                      <th scope="col" className="pb-1 text-right font-medium">{mayuscula(s.plural)}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -835,7 +836,7 @@ export function Modelo() {
                 <Link to="/prescripciones" className="inline-flex h-9 items-center gap-2 rounded-md bg-boton px-3.5 text-sm font-medium text-boton-texto hover:opacity-90">
                   Continuar al paso 4: motor prescriptivo <ArrowRight className="size-4" aria-hidden />
                 </Link>
-                <span className="text-sm text-tinta-2">El AG ya prescribió acciones a los estudiantes de prueba; ahí también puede probar un perfil de riesgo.</span>
+                <span className="text-sm text-tinta-2">El AG ya prescribió acciones a {s.los} {s.plural} de prueba; ahí también puede probar un perfil de riesgo.</span>
               </div>
             )}
           </Seccion>

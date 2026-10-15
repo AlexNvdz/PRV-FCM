@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { after, before, test } from 'node:test';
 
+import { sujetoDe } from '../sujeto.js';
+
 let servidor;
 let peticiones = [];
 let respuestasStream = [];
@@ -72,14 +74,54 @@ test('el agente llama una herramienta y responde con su resultado', async () => 
   assert.match(segunda.messages[0].content, /Eres Pizarra/);
 });
 
-test('la guardia responde sin llamar al modelo principal si el tema no corresponde', async () => {
+const HEART = {
+  dataset: {
+    nombre: 'heart',
+    esquema: { columnas: [{ columna: 'chol', rol: 'accion', nombre: 'Colesterol' }, { columna: 'target', rol: 'objetivo', orden: ['0', '1'] }] },
+    validacion: { sujeto: { singular: 'paciente', plural: 'pacientes', femenino: false } },
+  },
+  modelo: null,
+  resultados: null,
+};
+const XAPI = { ...CTX, dataset: { ...CTX.dataset, validacion: { sujeto: { singular: 'estudiante', plural: 'estudiantes', femenino: false } } } };
+const promptDeGuardia = () => peticiones.find((p) => !p.stream).messages[0].content;
+
+test('la guardia toma el tema del dataset: acepta preguntas de pacientes y rechaza las ajenas', async () => {
+  peticiones = [];
+  enAlcance = true;
+  respuestasStream = [[{ message: { role: 'assistant', content: 'Bajar el colesterol.' }, done: true }]];
+  const eventos = [];
+  await agente.ejecutarAgente({ mensajes: [{ rol: 'usuario', contenido: '¿Qué debe cambiar el paciente 213?' }], ctx: HEART, emitir: (e) => eventos.push(e) });
+  assert.match(promptDeGuardia(), /analítica prescriptiva/);
+  assert.match(promptDeGuardia(), /«heart»\. Cada registro es un paciente; el objetivo es target y las acciones son chol \(Colesterol\)/);
+  assert.match(promptDeGuardia(), /sobre los pacientes \(uno concreto/);
+  assert.doesNotMatch(promptDeGuardia(), /rendimiento académico/);
+  assert.equal(eventos.filter((e) => e.tipo === 'texto').map((e) => e.delta).join(''), 'Bajar el colesterol.');
+  assert.match(peticiones.find((p) => p.stream).messages[0].content, /Alcance: los datos de «heart» \(los pacientes/);
+
+  // Fuera de tema: no llama al modelo principal y responde con el tema de los datos.
+  peticiones = [];
+  enAlcance = false;
+  eventos.length = 0;
+  await agente.ejecutarAgente({ mensajes: [{ rol: 'usuario', contenido: 'Dame una receta' }], ctx: HEART, emitir: (e) => eventos.push(e) });
+  assert.equal(peticiones.filter((p) => p.stream).length, 0);
+  assert.match(eventos.find((e) => e.tipo === 'texto').delta, /datos de «heart».*Analiza al paciente 14/);
+  assert.equal(eventos.at(-1).fueraDeTema, true);
+});
+
+test('con estudiantes la guardia y los prompts conservan los términos educativos', async () => {
   peticiones = [];
   enAlcance = false;
   const eventos = [];
-  await agente.ejecutarAgente({ mensajes: [{ rol: 'usuario', contenido: 'Dame una receta' }], ctx: CTX, emitir: (e) => eventos.push(e) });
-  assert.equal(peticiones.filter((p) => p.stream).length, 0);
+  await agente.ejecutarAgente({ mensajes: [{ rol: 'usuario', contenido: 'Dame una receta' }], ctx: XAPI, emitir: (e) => eventos.push(e) });
+  assert.match(promptDeGuardia(), /rendimiento académico, deserción o permanencia escolar/);
+  assert.match(promptDeGuardia(), /«¿y el estudiante 14\?»/);
   assert.equal(eventos.find((e) => e.tipo === 'texto').delta, agente.RESPUESTA_FUERA_DE_TEMA);
-  assert.equal(eventos.at(-1).fueraDeTema, true);
+  const sistema = agente.construirPromptSistema('', agente.temaDe(XAPI));
+  assert.match(sistema, /su rendimiento o en su riesgo de deserción/);
+  assert.match(sistema, /prácticas pedagógicas concretas/);
+  // Sin datos: alcance genérico.
+  assert.match(agente.promptGuardia(null), /Todavía no hay datos cargados\.\n\nDentro del alcance: analítica prescriptiva/);
 });
 
 test('redactarRecomendacion convierte una prescripción en texto sin herramientas', async () => {
@@ -173,6 +215,33 @@ test('el contexto menciona el perfil y, si existen, las métricas de reconstrucc
   });
   assert.match(linea, /120 registros.*ecuación 19 0\.875 \(cociente.*MAE 0\.123, RMSE 0\.141, R² 0\.61/);
   assert.match(linea, /\(p > 0\.05\): Manos levantadas\. Con diferencia significativa: Recursos visitados\./);
+});
+
+test('el sujeto del modelo cambia el contexto y concuerda en género', () => {
+  assert.deepEqual(sujetoDe(), { singular: 'registro', plural: 'registros', femenino: false, el: 'el', los: 'los', al: 'al', un: 'un', todos: 'todos los' });
+  const persona = sujetoDe({ singular: 'persona', plural: 'personas', femenino: true });
+  assert.equal(`${persona.un} ${persona.singular}, ${persona.todos} ${persona.plural}`, 'una persona, todas las personas');
+
+  const esquema = { columnas: [{ columna: 'chol', rol: 'accion' }, { columna: 'target', rol: 'objetivo', orden: ['0', '1'] }] };
+  const resultados = {
+    metricas: {
+      configuracion: { n_entrenamiento: 200, fcm: { lambda_: 1, sesgo: true }, prescripcion: {} },
+      prediccion_fcm: { exactitud_rendimiento: 0.8, por_clase: {} },
+      prescripcion: { n_estudiantes: 42, PSR_base: 10, PSR: 20 },
+      validacion_externa: { PSR_externo_base: 10, PSR_externo: 12 },
+    },
+    graficas: { objetivo: 'target', mejor_nivel: '1', sesgo: true, conceptos: [{ columna: 'target', sesgo: 0.3 }], influencias: [{ nombre: 'chol', rol: 'accion', peso: -0.4 }] },
+  };
+  const paciente = sujetoDe({ singular: 'paciente', plural: 'pacientes', femenino: false });
+  const texto = agente.describirContexto({ dataset: { nombre: 'heart', esquema }, modelo: { id: 'md' }, resultados, sujeto: paciente });
+  assert.match(texto, /Cada registro es un paciente: habla de pacientes, no de estudiantes/);
+  assert.match(texto, /Prescripción para 42 pacientes de prueba/);
+  assert.match(texto, /el paciente se acerca a 1/);
+  assert.match(texto, /igual para todos los pacientes/);
+  assert.doesNotMatch(texto, /estudiantes de prueba/);
+  // Sin modelo, el sujeto sale de la validación del esquema (xAPI: estudiante).
+  const xapi = { nombre: 'xAPI', esquema, validacion: { sujeto: { singular: 'estudiante', plural: 'estudiantes', femenino: false } } };
+  assert.match(agente.describirContexto({ dataset: xapi }), /es un estudiante: habla de estudiantes, aunque/);
 });
 
 test('todas las llamadas usan el mismo tamaño de contexto (Ollama no recarga el modelo)', () => {

@@ -13,7 +13,7 @@ import { RedaccionIA } from '../componentes/RedaccionIA';
 import { Aviso, Cargando, Encabezado, estiloControl, NivelChip, Seccion, Vacio } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import { useModelo } from '../hooks';
-import { entero, NOMBRE_METODO, num, pct } from '../utilidades';
+import { entero, mayuscula, NOMBRE_METODO, num, pct, sujetoDe } from '../utilidades';
 import type { Reconstruccion } from '../tipos';
 import { DetalleEstudiante } from './DetalleEstudiante';
 
@@ -24,7 +24,7 @@ const FIGURAS: Record<string, { titulo: string; descripcion: string }> = {
   },
   'convergencia_ag.png': {
     titulo: 'Convergencia del algoritmo genético',
-    descripcion: 'Mejor costo por generación: mediana y rango intercuartílico entre los estudiantes prescritos.',
+    descripcion: 'Mejor costo por generación: mediana y rango intercuartílico de los prescritos.',
   },
   'rendimiento_antes_despues.png': { titulo: 'Objetivo antes y después de prescribir', descripcion: 'Activación que infiere el FCM con las acciones actuales y con las prescritas.' },
   'pesos_fcm.png': { titulo: 'Matriz de pesos aprendida', descripcion: 'Pesos w_ji hacia los conceptos dinámicos (origen en filas, destino en columnas).' },
@@ -152,6 +152,7 @@ export function Informe() {
   const figuras = g.figuras ?? [];
   const r = resumen.data;
   const rangos = new Map(g.acciones.map((a) => [a.columna, a]));
+  const s = sujetoDe(modelo.data.sujeto);
 
   return (
     <div>
@@ -172,7 +173,7 @@ export function Informe() {
         }
       />
 
-      <Seccion titulo="Reporte prescriptivo" descripcion="Los cambios que el algoritmo genético propone a los estudiantes de prueba, traducidos a frases. Cada cifra sale de las prescripciones.">
+      <Seccion titulo="Reporte prescriptivo" descripcion={`Los cambios que el algoritmo genético propone a ${s.los} ${s.plural} de prueba, traducidos a frases. Cada cifra sale de las prescripciones.`}>
         <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
           <label htmlFor="nivel-informe" className="text-tinta-2">
             Nivel observado
@@ -242,12 +243,12 @@ export function Informe() {
                 </table>
               )}
               <div>
-                <p className="text-sm font-semibold">Estudiantes con más mejora</p>
+                <p className="text-sm font-semibold">{mayuscula(s.plural)} con más mejora</p>
                 <ul className="mt-2 flex flex-wrap gap-2">
                   {r.ejemplos.map((e) => (
                     <li key={e.id_estudiante}>
                       <button type="button" onClick={() => setEstudiante(e.id_estudiante)} className="inline-flex items-center gap-1.5 rounded-full border border-linea bg-hoja px-3 py-1 text-sm hover:bg-hoja-2">
-                        Estudiante {e.id_estudiante}: <NivelChip nivel={e.nivel_observado} niveles={niveles} /> → <NivelChip nivel={e.nivel_prescrito} niveles={niveles} />
+                        {mayuscula(s.singular)} {e.id_estudiante}: <NivelChip nivel={e.nivel_observado} niveles={niveles} /> → <NivelChip nivel={e.nivel_prescrito} niveles={niveles} />
                       </button>
                     </li>
                   ))}
@@ -286,7 +287,7 @@ export function Informe() {
 
       <Seccion titulo="Convergencia del algoritmo genético" descripcion="Cómo baja el costo generación a generación: la versión interactiva y la figura de matplotlib.">
         <div className="grid items-start gap-6 xl:grid-cols-2">
-          <GraficaConvergencia datos={g.convergencia} />
+          <GraficaConvergencia datos={g.convergencia} s={s} />
           {figuras.includes('convergencia_ag.png') && <Figura modeloId={modelo.data.id} nombre="convergencia_ag.png" />}
         </div>
       </Seccion>
@@ -303,7 +304,7 @@ export function Informe() {
         </Seccion>
       )}
 
-      {estudiante !== null && <DetalleEstudiante modeloId={modelo.data.id} id={estudiante} graficas={g} alCerrar={() => setEstudiante(null)} />}
+      {estudiante !== null && <DetalleEstudiante modeloId={modelo.data.id} id={estudiante} graficas={g} s={s} alCerrar={() => setEstudiante(null)} />}
     </div>
   );
 }

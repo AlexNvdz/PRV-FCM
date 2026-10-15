@@ -107,7 +107,7 @@ export function GraficaAportes({ prescripcion }: { prescripcion: Prescripcion })
   return (
     <GraficaMancuernas
       titulo="Qué empuja al objetivo"
-      descripcion={`Aporte de cada concepto a la entrada del objetivo (peso × activación). Positivo acerca al mejor nivel; solo las acciones cambian con el plan.${sesgo ? ' El sesgo es una constante del modelo, igual para todos los estudiantes.' : ''}`}
+      descripcion={`Aporte de cada concepto a la entrada del objetivo (peso × activación). Positivo acerca al mejor nivel; solo las acciones cambian con el plan.${sesgo ? ' El sesgo es una constante del modelo, igual para todos.' : ''}`}
       filas={filas}
       dominio={dominio}
       referencia={0}

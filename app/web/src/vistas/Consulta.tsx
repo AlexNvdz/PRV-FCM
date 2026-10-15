@@ -11,7 +11,7 @@ import { ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, Clase, Encabezado, estiloControl, NivelChip, Seccion, Vacio } from '../componentes/ui';
 import { nivelesDe, useDataset, useModelo } from '../hooks';
 import type { ColumnaEsquema, Dataset, Esquema, ModeloDetalle, MetodoPesos, PerfilModelo, Prescripcion } from '../tipos';
-import { descargarCsv, fecha, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num } from '../utilidades';
+import { descargarCsv, fecha, mayuscula, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num, sujetoDe } from '../utilidades';
 import { Campo } from './PerfilRiesgo';
 
 type Valores = Record<string, string | number>;
@@ -223,6 +223,7 @@ function Seguimiento({ modelo, esquema, dataset, prescripcion, perfil }: { model
 function FormularioConsulta({ modelo, dataset, tema }: { modelo: ModeloDetalle; dataset?: Dataset; tema: string }) {
   const esquema = modelo.esquema!;
   const g = modelo.graficas!;
+  const s = sujetoDe(modelo.sujeto);
   // Niveles del modelo (con el objetivo binarizado son «<N» y «≥N»), del peor al mejor.
   const niveles = useMemo(() => Object.entries(g.niveles).sort((a, b) => a[1] - b[1]).map(([n]) => n), [g.niveles]);
   const columnas = esquema.columnas.filter((c) => c.rol !== 'excluir' && c.rol !== 'objetivo');
@@ -283,7 +284,7 @@ function FormularioConsulta({ modelo, dataset, tema }: { modelo: ModeloDetalle; 
   return (
     <>
       <div className="no-imprimir">
-        <Seccion titulo="2. El caso y el estado deseado" descripcion="Complete lo que sepa. Un dato vacío toma el valor típico del dataset (se muestra en gris).">
+        <Seccion titulo={`2. ${mayuscula(s.el)} ${s.singular} y el estado deseado`} descripcion={`Complete lo que sepa ${s.del} ${s.singular}. Un dato vacío toma el valor típico del dataset (se muestra en gris).`}>
           <form
             className="space-y-6 rounded-xl border border-linea bg-hoja p-5"
             onSubmit={(e) => {
@@ -375,7 +376,7 @@ function FormularioConsulta({ modelo, dataset, tema }: { modelo: ModeloDetalle; 
               {prescribir.data.deseados.map((d) => `${d.nombre} = ${typeof d.valor === 'number' ? num(d.valor, 2) : d.valor}${d.dinamico ? ' (meta del AG)' : ' (punto de partida)'}`).join('; ')}.
             </Aviso>
           ) : null}
-          <ResultadoPrescripcion modeloId={modelo.id} prescripcion={prescribir.data} niveles={niveles} valores={g.niveles} sujeto="este caso" />
+          <ResultadoPrescripcion modeloId={modelo.id} prescripcion={prescribir.data} niveles={niveles} valores={g.niveles} sujeto={`${s.este} ${s.singular}`} />
         </Seccion>
       )}
 

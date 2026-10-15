@@ -51,7 +51,7 @@ function ZonaSubida() {
         <FileUp className="size-7 text-tinta-3" aria-hidden />
         <p className="mt-3 font-medium text-tinta">Arrastre aquí un archivo CSV o Excel</p>
         <p className="mt-1 max-w-[52ch] text-sm text-tinta-2">
-          Una fila por estudiante. Debe incluir el resultado (rendimiento, nota final o deserción) y las acciones que se pueden cambiar.
+          Una fila por registro (un estudiante, un paciente, un cliente). Debe incluir el resultado (rendimiento, nota final o deserción) y las acciones que se pueden cambiar.
           CSV con coma o punto y coma, o Excel (.xlsx, .xls: se usa la primera hoja con datos), hasta 50 MB.
         </p>
         <Boton variante="principal" className="mt-5" cargando={subir.isPending} onClick={() => entrada.current?.click()}>

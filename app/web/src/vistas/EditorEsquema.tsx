@@ -8,8 +8,8 @@ import { Link } from 'react-router';
 import { api } from '../api';
 import { Aviso, Boton, Clase, estiloControl } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
-import type { Codificacion, ColumnaEsquema, Dataset, Esquema, PerfilColumna, Rol, Validacion } from '../tipos';
-import { clase, colorNivel, DESCRIPCION_ROL, NOMBRE_CODIFICACION, NOMBRE_ROL, rolConNotacion } from '../utilidades';
+import type { Codificacion, ColumnaEsquema, Dataset, Esquema, PerfilColumna, Rol, Sujeto, Validacion } from '../tipos';
+import { clase, colorNivel, DESCRIPCION_ROL, NOMBRE_CODIFICACION, NOMBRE_ROL, rolConNotacion, sujetoDe } from '../utilidades';
 
 const ROLES: Rol[] = ['objetivo', 'accion', 'mutable', 'inmutable', 'excluir'];
 const CODIFICACIONES: Codificacion[] = ['numerica', 'ordinal', 'nominal', 'one_hot', 'numero_en_texto', 'fecha'];
@@ -228,6 +228,13 @@ export function EditorEsquema({ dataset }: { dataset: Dataset }) {
   const [avisosIA, setAvisosIA] = useState<string[]>([]);
   const [guardado, setGuardado] = useState(false);
   const modificado = JSON.stringify(borrador) !== JSON.stringify(dataset.esquema);
+  // Con el campo vacío manda el motor: registro, o estudiante si el esquema es el de xAPI.
+  const sujetoPorDefecto = sujetoDe(borrador.sujeto ? null : validacion?.sujeto);
+  const cambiarSujeto = (cambio: Partial<Sujeto>) =>
+    setBorrador(({ sujeto, ...resto }) => {
+      const nuevo = { singular: '', plural: '', femenino: false, ...sujeto, ...cambio };
+      return nuevo.singular || nuevo.plural || nuevo.femenino ? { ...resto, sujeto: nuevo } : resto;
+    });
 
   useEffect(() => {
     if (!modificado) {
@@ -410,10 +417,28 @@ export function EditorEsquema({ dataset }: { dataset: Dataset }) {
               </label>
             </div>
           )}
+          <h3 className="mt-6 font-serif text-lg font-semibold">Cómo se llama cada registro</h3>
+          <p className="mt-2 text-sm text-tinta-2">
+            Los textos de la aplicación y del asistente lo usan, por ejemplo «42 pacientes de prueba». Vacío: «{sujetoPorDefecto.singular}» y «{sujetoPorDefecto.plural}».
+          </p>
+          <div className="mt-3 grid max-w-md grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1 text-xs text-tinta-2">
+              Singular
+              <input className={estiloControl} maxLength={40} placeholder={sujetoPorDefecto.singular} value={borrador.sujeto?.singular ?? ''} onChange={(e) => cambiarSujeto({ singular: e.target.value })} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-tinta-2">
+              Plural
+              <input className={estiloControl} maxLength={40} placeholder={sujetoPorDefecto.plural} value={borrador.sujeto?.plural ?? ''} onChange={(e) => cambiarSujeto({ plural: e.target.value })} />
+            </label>
+          </div>
+          <label className="mt-2 inline-flex items-center gap-2 text-sm text-tinta">
+            <input type="checkbox" checked={Boolean(borrador.sujeto?.femenino)} onChange={(e) => cambiarSujeto({ femenino: e.target.checked })} className="size-4 accent-[var(--pizarra)]" />
+            Femenino (la, esta: «la persona 7»)
+          </label>
         </div>
         <div>
           <h3 className="font-serif text-lg font-semibold">Comparar por grupo</h3>
-          <p className="mt-2 text-sm text-tinta-2">Opcional: separa el éxito de la prescripción entre estudiantes con un valor y el resto.</p>
+          <p className="mt-2 text-sm text-tinta-2">Opcional: separa el éxito de la prescripción entre los registros con un valor y el resto.</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <select
               aria-label="Columna del segmento"

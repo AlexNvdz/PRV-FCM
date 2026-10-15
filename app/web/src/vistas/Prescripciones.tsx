@@ -12,11 +12,11 @@ import { Aviso, Boton, Cargando, Clase, Encabezado, estiloControl, Formula, Nive
 import { useDatasetActivo } from '../contexto';
 import { useDataset, useModelo } from '../hooks';
 import type { Graficas, Metricas } from '../tipos';
-import { clase, entero, firmado, num, pct, pctDe } from '../utilidades';
+import { clase, entero, firmado, mayuscula, num, pct, pctDe, sujetoDe, sujetoDeDataset, type SujetoTexto } from '../utilidades';
 import { DetalleEstudiante } from './DetalleEstudiante';
 import { PerfilRiesgo } from './PerfilRiesgo';
 
-function Aptitud({ m }: { m: Metricas }) {
+function Aptitud({ m, s }: { m: Metricas; s: SujetoTexto }) {
   const ag = m.configuracion.ag;
   return (
     <details className="mt-6 max-w-4xl rounded-lg border border-linea px-4 py-3 text-sm">
@@ -26,7 +26,7 @@ function Aptitud({ m }: { m: Metricas }) {
           costo(a) = |A*_T(a) − D_T| + β · media_k |a_k − a_k,actual|
         </Formula>
         <p className="text-xs text-tinta-2">
-          Cada cromosoma <span className="font-mono">a</span> es un valor en [0, 1] por acción <Clase letra="P" />. Para evaluarlo, el FCM parte del perfil del estudiante
+          Cada cromosoma <span className="font-mono">a</span> es un valor en [0, 1] por acción <Clase letra="P" />. Para evaluarlo, el FCM parte del perfil {s.del} {s.singular}
           con esas acciones y se itera hasta converger: <span className="font-mono">A*_T</span> es la activación final del objetivo <Clase letra="T" /> y{' '}
           <span className="font-mono">D_T</span> la meta (1 = mejor nivel). Los conceptos <Clase letra="S" /> no cambian. Operadores: torneo de {String(ag.tam_torneo)},
           cruce {String(ag.tipo_cruce)} ({String(ag.tasa_cruce)}), mutación gaussiana ({String(ag.tasa_mutacion)}), elitismo de {String(ag.elitismo)}, población{' '}
@@ -38,11 +38,11 @@ function Aptitud({ m }: { m: Metricas }) {
   );
 }
 
-function TablaMetricas({ m }: { m: Metricas }) {
+function TablaMetricas({ m, s }: { m: Metricas; s: SujetoTexto }) {
   const p = m.prescripcion;
   const e = m.validacion_externa;
   const filas: [string, string, string, string][] = [
-    ['Tasa de éxito prescriptivo (FCM)', pct(p.PSR_base), pct(p.PSR), 'Estudiantes que el FCM ubica en el mejor nivel'],
+    ['Tasa de éxito prescriptivo (FCM)', pct(p.PSR_base), pct(p.PSR), `${mayuscula(s.plural)} que el FCM ubica en el mejor nivel`],
     ['En el mejor nivel según el bosque aleatorio', pct(e.PSR_externo_base), pct(e.PSR_externo), 'Modelo independiente: la cifra prudente'],
     ['MAE respecto al estado deseado', num(p.MAE_base, 3), num(p.MAE, 3), 'Menor es mejor'],
     ['MSE', num(p.MSE_base, 3), num(p.MSE, 3), ''],
@@ -72,7 +72,7 @@ function TablaMetricas({ m }: { m: Metricas }) {
   );
 }
 
-function Recomendaciones({ modeloId, g, m, alElegir }: { modeloId: string; g: Graficas; m: Metricas; alElegir: (id: number) => void }) {
+function Recomendaciones({ modeloId, g, m, s, alElegir }: { modeloId: string; g: Graficas; m: Metricas; s: SujetoTexto; alElegir: (id: number) => void }) {
   const [desde, setDesde] = useState(0);
   const [clasePrescrita, setClase] = useState('');
   const [exito, setExito] = useState<'' | '1' | '0'>('');
@@ -125,7 +125,7 @@ function Recomendaciones({ modeloId, g, m, alElegir }: { modeloId: string; g: Gr
             <option value="0">No</option>
           </select>
         </label>
-        {pagina && <span className="ml-auto text-tinta-2">{entero(pagina.total)} estudiantes. Seleccione uno para simular.</span>}
+        {pagina && <span className="ml-auto text-tinta-2">{entero(pagina.total)} {s.plural}. Seleccione {s.un === 'una' ? 'una' : 'uno'} para simular.</span>}
       </div>
       {consulta.isError && <Aviso tipo="error">{consulta.error.message}</Aviso>}
       {pagina && (
@@ -133,7 +133,7 @@ function Recomendaciones({ modeloId, g, m, alElegir }: { modeloId: string; g: Gr
           <table className="tabular w-full min-w-[860px] text-sm">
             <thead className="bg-hoja-2 text-left text-xs text-tinta-2">
               <tr>
-                <Cabecera columna="id_estudiante" texto="Estudiante" />
+                <Cabecera columna="id_estudiante" texto={mayuscula(s.singular)} />
                 <th scope="col" className="px-3 py-2 font-medium">Observado</th>
                 {g.acciones.map((a) => (
                   <Cabecera key={a.columna} columna={`${a.columna}_cambio`} texto={`${a.nombre}`} derecha />
@@ -203,7 +203,7 @@ export function Prescripciones() {
       <div>
         <FlujoPasos actual={4} compacto />
         <Vacio titulo="Todavía no hay prescripciones" accion={<Link to="/modelo" className="inline-flex h-9 items-center rounded-md bg-boton px-4 text-sm font-medium text-boton-texto">Entrenar el modelo</Link>}>
-          Entrene el modelo PRV-FCM (paso 3) para que el algoritmo genético proponga acciones a los estudiantes de prueba.
+          Entrene el modelo PRV-FCM (paso 3) para que el algoritmo genético proponga acciones a {sujetoDeDataset(dataset).los} {sujetoDeDataset(dataset).plural} de prueba.
         </Vacio>
       </div>
     );
@@ -212,28 +212,29 @@ export function Prescripciones() {
   const m = modelo.data.metricas;
   const g = modelo.data.graficas;
   const segmentos = Object.entries(m.exito_por_segmento ?? {});
+  const s = sujetoDe(modelo.data.sujeto);
 
   return (
     <div>
       <FlujoPasos actual={4} compacto />
       <Encabezado
         titulo="Paso 4: motor prescriptivo"
-        descripcion={`${entero(m.prescripcion.n_estudiantes)} estudiantes de prueba con nivel ${m.configuracion.prescripcion.clases_a_prescribir.join(' o ')}. Para cada uno, el algoritmo genético busca cómo cambiar sus acciones para llegar a ${g.mejor_nivel}.`}
+        descripcion={`${entero(m.prescripcion.n_estudiantes)} ${s.plural} de prueba con nivel ${m.configuracion.prescripcion.clases_a_prescribir.join(' o ')}. Para cada uno, el algoritmo genético busca cómo cambiar sus acciones para llegar a ${g.mejor_nivel}.`}
       />
       <p className="max-w-[62ch] font-serif text-[1.6rem] leading-snug">
         El FCM ubicaría en {g.mejor_nivel} al <span className="resaltado">{pct(m.prescripcion.PSR)}</span>; hoy ubica al {pct(m.prescripcion.PSR_base)}. Un bosque aleatorio lo confirma para el {pct(m.validacion_externa.PSR_externo)}.
       </p>
       <div className="mt-8 max-w-4xl">
-        <TablaMetricas m={m} />
+        <TablaMetricas m={m} s={s} />
         <p className="mt-2 text-xs text-tinta-3">
           Cambio medio por acción: {num(m.prescripcion.cambio_medio_por_accion, 2)} del rango. Generaciones medias del AG: {num(m.prescripcion.generaciones_medias_ag)}. β = {m.configuracion.prescripcion.beta_esfuerzo}.
         </p>
       </div>
-      <Aptitud m={m} />
+      <Aptitud m={m} s={s} />
 
       <Seccion titulo="Qué propone el algoritmo genético">
         <div className="grid gap-6 xl:grid-cols-2">
-          <GraficaAntesDespues datos={g.antes_despues} umbral={g.umbral_mejor} mejor={g.mejor_nivel} />
+          <GraficaAntesDespues datos={g.antes_despues} umbral={g.umbral_mejor} mejor={g.mejor_nivel} s={s} />
           <GraficaMancuernas
             titulo="Acciones: nivel medio actual y recomendado"
             descripcion="Unidades originales del dataset."
@@ -241,7 +242,7 @@ export function Prescripciones() {
           />
           {segmentos.length > 0 && (
             <GraficaMancuernas
-              titulo={`Estudiantes que llegan a ${g.mejor_nivel}, por grupo`}
+              titulo={`${mayuscula(s.plural)} que llegan a ${g.mejor_nivel}, por grupo`}
               descripcion="El FCM frente al bosque aleatorio independiente, con acciones actuales y prescritas."
               dominio={[0, 100]}
               formato={(v) => pct(v)}
@@ -252,12 +253,12 @@ export function Prescripciones() {
               ])}
             />
           )}
-          <GraficaConvergencia datos={g.convergencia} />
+          <GraficaConvergencia datos={g.convergencia} s={s} />
         </div>
       </Seccion>
 
-      <Seccion titulo="Por estudiante" descripcion={`Probabilidad media del mejor nivel según el bosque: ${pctDe(m.validacion_externa.prob_H_base)} → ${pctDe(m.validacion_externa.prob_H_prescrita)}.`}>
-        <Recomendaciones modeloId={modelo.data.id} g={g} m={m} alElegir={setEstudiante} />
+      <Seccion titulo={`Por ${s.singular}`} descripcion={`Probabilidad media del mejor nivel según el bosque: ${pctDe(m.validacion_externa.prob_H_base)} → ${pctDe(m.validacion_externa.prob_H_prescrita)}.`}>
+        <Recomendaciones modeloId={modelo.data.id} g={g} m={m} s={s} alElegir={setEstudiante} />
       </Seccion>
 
       <Seccion
@@ -274,7 +275,7 @@ export function Prescripciones() {
         <span className="text-sm text-tinta-2">Grafo del mapa, convergencia del AG y reporte prescriptivo en lenguaje natural.</span>
       </div>
 
-      {estudiante !== null && <DetalleEstudiante modeloId={modelo.data.id} id={estudiante} graficas={g} alCerrar={() => setEstudiante(null)} />}
+      {estudiante !== null && <DetalleEstudiante modeloId={modelo.data.id} id={estudiante} graficas={g} s={s} alCerrar={() => setEstudiante(null)} />}
     </div>
   );
 }

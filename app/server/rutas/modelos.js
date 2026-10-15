@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { redactarRecomendacion } from '../agente.js';
 import { Almacen } from '../almacen.js';
 import { abrirSSE } from '../sse.js';
+import { sujetoModelo } from '../sujeto.js';
 
 function error(status, mensaje) {
   return Object.assign(new Error(mensaje), { status });
@@ -82,7 +83,7 @@ export function validarSeguimiento(datos, esquema) {
 }
 
 const CuerpoRedactar = z.discriminatedUnion('tipo', [
-  z.object({ tipo: z.literal('individual'), sujeto: z.string().max(120).default('este estudiante'), prescripcion: PrescripcionRecibida }),
+  z.object({ tipo: z.literal('individual'), sujeto: z.string().max(120).default('este caso'), prescripcion: PrescripcionRecibida }),
   z.object({ tipo: z.literal('poblacion'), nivel: z.string().max(80).nullable().optional() }),
 ]);
 
@@ -126,6 +127,7 @@ export function rutasModelos({ almacen, motor, trabajos }) {
     if (modelo.estado === 'listo') {
       const esquema = JSON.parse(await fs.readFile(path.join(almacen.dirModelo(modelo.id), 'esquema.json'), 'utf8').catch(() => 'null'));
       resultados = { ...(await almacen.resultadosModelo(modelo.id)), esquema };
+      resultados.sujeto = await sujetoModelo(motor, path.join(almacen.dirModelo(modelo.id), 'modelo.json'), resultados.graficas);
     }
     res.json({ ...modelo, enCurso: trabajos.estaActivo(modelo.id), ...resultados });
   });
@@ -261,7 +263,7 @@ export function rutasModelos({ almacen, motor, trabajos }) {
 
   // Recomendación en lenguaje natural redactada por qwen2.5 a partir de la prescripción (SSE).
   router.post('/:id/redactar', async (req, res) => {
-    const { modelo, dataset } = await cargarListo(req.params.id);
+    const { modelo, dataset, base } = await cargarListo(req.params.id);
     const cuerpo = CuerpoRedactar.parse(req.body);
     const { metricas, graficas } = await almacen.resultadosModelo(modelo.id);
     let datos;
@@ -277,7 +279,7 @@ export function rutasModelos({ almacen, motor, trabajos }) {
       await redactarRecomendacion({
         tipo: cuerpo.tipo,
         datos,
-        contexto: { dataset: dataset.nombre, objetivo: graficas?.objetivo, mejorNivel: graficas?.mejor_nivel, metricas },
+        contexto: { dataset: dataset.nombre, objetivo: graficas?.objetivo, mejorNivel: graficas?.mejor_nivel, metricas, sujeto: await sujetoModelo(motor, base.modelo, graficas) },
         signal: controlador.signal,
         emitir: sse.enviar,
       });

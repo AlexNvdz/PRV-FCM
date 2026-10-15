@@ -1,4 +1,4 @@
-// Panel lateral de un estudiante: predicción, simulador de acciones y prescripción individual.
+// Panel lateral de un registro (estudiante, paciente, cliente): predicción, simulador de acciones y prescripción individual.
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { MessagesSquare, RotateCcw, Sparkles, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -9,11 +9,11 @@ import { TrayectoriaInferencia } from '../componentes/inferencia';
 import { Medidor, ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, estiloControl, NivelChip } from '../componentes/ui';
 import type { Graficas } from '../tipos';
-import { etiquetaAccion, num, pasoAccion } from '../utilidades';
+import { etiquetaAccion, mayuscula, num, pasoAccion, type SujetoTexto } from '../utilidades';
 
 export { Medidor };
 
-export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modeloId: string; id: number; graficas: Graficas; alCerrar: () => void }) {
+export function DetalleEstudiante({ modeloId, id, graficas, s, alCerrar }: { modeloId: string; id: number; graficas: Graficas; s: SujetoTexto; alCerrar: () => void }) {
   const navegar = useNavigate();
   const niveles = useMemo(() => Object.entries(graficas.niveles).sort((a, b) => a[1] - b[1]).map(([n]) => n), [graficas.niveles]);
   const estudiante = useQuery({ queryKey: ['estudiante', modeloId, id], queryFn: () => api.estudiante(modeloId, id) });
@@ -51,7 +51,7 @@ export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modelo
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="titulo-estudiante" className="font-serif text-2xl font-semibold">
-              Estudiante {id}
+              {mayuscula(s.singular)} {id}
             </h2>
             {estudiante.data && (
               <p className="mt-1 text-sm text-tinta-2">
@@ -126,7 +126,7 @@ export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modelo
 
             <section className="mt-8 rounded-xl border border-linea bg-hoja p-4">
               <h3 className="font-semibold">Prescripción con el algoritmo genético</h3>
-              <p className="mt-1 text-sm text-tinta-2">Busca el menor cambio en las acciones que acerque al estudiante a la meta.</p>
+              <p className="mt-1 text-sm text-tinta-2">Busca el menor cambio en las acciones que acerque {s.al} {s.singular} a la meta.</p>
               <label className="mt-4 flex max-w-xs flex-col gap-1 text-sm">
                 <span className="text-tinta">Meta (estado deseado del objetivo)</span>
                 <select className={estiloControl} value={meta} onChange={(e) => setMeta(e.target.value)}>
@@ -162,7 +162,7 @@ export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modelo
                   prescripcion={prescribir.data}
                   niveles={niveles}
                   valores={graficas.niveles}
-                  sujeto={`el estudiante ${id}`}
+                  sujeto={`${s.el} ${s.singular} ${id}`}
                   acciones={
                     <Boton onClick={() => setValores(Object.fromEntries(prescribir.data!.acciones.map((a) => [a.columna, a.recomendada.valor])))}>
                       Probar en el simulador
@@ -175,9 +175,9 @@ export function DetalleEstudiante({ modeloId, id, graficas, alCerrar }: { modelo
             <Boton
               className="mt-6"
               icono={<MessagesSquare className="size-4" aria-hidden />}
-              onClick={() => navegar(`/asistente?pregunta=${encodeURIComponent(`Analiza al estudiante ${id} y dame recomendaciones concretas.`)}`)}
+              onClick={() => navegar(`/asistente?pregunta=${encodeURIComponent(`Analiza ${s.al} ${s.singular} ${id} y dame recomendaciones concretas.`)}`)}
             >
-              Preguntar al asistente por este estudiante
+              Preguntar al asistente por {s.este} {s.singular}
             </Boton>
 
             <details className="mt-6 text-sm">

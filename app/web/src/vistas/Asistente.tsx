@@ -10,9 +10,9 @@ import { GraficaDivergente, GraficaMancuernas, GraficaVariable } from '../compon
 import { GraficaDispersion, MapaCalor } from '../componentes/relaciones';
 import { Aviso, Boton, NivelChip } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
-import { nivelesDe } from '../hooks';
+import { nivelesDe, useModelo } from '../hooks';
 import type { EventoChat, Prescripcion, Simulacion } from '../tipos';
-import { clase, firmado, num } from '../utilidades';
+import { clase, firmado, mayuscula, num, sujetoDeDataset, type SujetoTexto } from '../utilidades';
 
 type Artefacto = Extract<EventoChat, { tipo: 'grafica' | 'estudiante' | 'simulacion' | 'perfil' }>;
 type Consulta = { nombre: string; argumentos: Record<string, unknown>; ok?: boolean; error?: string };
@@ -27,14 +27,14 @@ interface Mensaje {
   error?: string;
 }
 
-const NOMBRES_HERRAMIENTA: Record<string, (a: Record<string, unknown>) => string> = {
+const NOMBRES_HERRAMIENTA: Record<string, (a: Record<string, unknown>, s: SujetoTexto) => string> = {
   resumen_datos: () => 'Resumen de los datos',
   resumen_modelo: () => 'Métricas del modelo',
   influencias_fcm: () => 'Pesos del mapa cognitivo',
   estadisticas_variable: (a) => `Estadísticas de ${String(a.columna ?? 'una variable')}`,
-  buscar_estudiantes: () => 'Búsqueda de estudiantes',
-  analizar_estudiante: (a) => `Análisis del estudiante ${String(a.id_estudiante ?? a.id ?? '')}`,
-  simular_escenario: (a) => `Simulación del estudiante ${String(a.id_estudiante ?? a.id ?? '')}`,
+  buscar_estudiantes: (_a, s) => `Búsqueda de ${s.plural}`,
+  analizar_estudiante: (a, s) => `Análisis ${s.del} ${s.singular} ${String(a.id_estudiante ?? a.id ?? '')}`,
+  simular_escenario: (a, s) => `Simulación ${s.del} ${s.singular} ${String(a.id_estudiante ?? a.id ?? '')}`,
   prescribir_perfil: () => 'Prescripción de un perfil de riesgo',
   resumen_prescripciones: (a) => `Resumen de las prescripciones${a.nivel ? ` del nivel ${String(a.nivel)}` : ''}`,
   correlaciones_variables: () => 'Correlaciones entre variables',
@@ -81,11 +81,11 @@ function TablaAcciones({ filas, antes, despues }: { filas: { nombre: string; cel
   );
 }
 
-function TarjetaEstudiante({ id, prescripcion, maxima, niveles }: { id: number; prescripcion: Prescripcion; maxima?: Prescripcion; niveles: string[] }) {
+function TarjetaEstudiante({ id, prescripcion, maxima, niveles, s }: { id: number; prescripcion: Prescripcion; maxima?: Prescripcion; niveles: string[]; s: SujetoTexto }) {
   const valor = (v: { valor: number; categoria?: string }) => v.categoria ?? num(v.valor);
   return (
     <div className="rounded-xl border border-linea bg-hoja p-4">
-      <p className="text-sm font-semibold">Estudiante {id}</p>
+      <p className="text-sm font-semibold">{mayuscula(s.singular)} {id}</p>
       <p className="mt-1 text-sm text-tinta-2">
         Hoy <NivelChip nivel={prescripcion.base.nivel} niveles={niveles} />, con el plan moderado <NivelChip nivel={prescripcion.prescrito.nivel} niveles={niveles} />
         {maxima && (
@@ -118,11 +118,11 @@ function TarjetaEstudiante({ id, prescripcion, maxima, niveles }: { id: number; 
   );
 }
 
-function TarjetaSimulacion({ id, simulacion, niveles }: { id: number; simulacion: Simulacion; niveles: string[] }) {
+function TarjetaSimulacion({ id, simulacion, niveles, s }: { id: number; simulacion: Simulacion; niveles: string[]; s: SujetoTexto }) {
   const valor = (v: { valor: number; categoria?: string }) => v.categoria ?? num(v.valor);
   return (
     <div className="rounded-xl border border-linea bg-hoja p-4">
-      <p className="text-sm font-semibold">Simulación del estudiante {id}</p>
+      <p className="text-sm font-semibold">Simulación {s.del} {s.singular} {id}</p>
       <p className="mt-1 text-sm text-tinta-2">
         <NivelChip nivel={simulacion.base.nivel} niveles={niveles} /> ({num(simulacion.base.activacion, 3)}) pasa a{' '}
         <NivelChip nivel={simulacion.simulado.nivel} niveles={niveles} /> ({num(simulacion.simulado.activacion, 3)}), {firmado(simulacion.simulado.activacion - simulacion.base.activacion, 3)}.
@@ -174,9 +174,9 @@ function TarjetaPerfil({ origen, cambios, prescripcion, niveles }: { origen: str
   );
 }
 
-function VerArtefacto({ artefacto, niveles }: { artefacto: Artefacto; niveles: string[] }) {
-  if (artefacto.tipo === 'estudiante') return <TarjetaEstudiante id={artefacto.id} prescripcion={artefacto.prescripcion} maxima={artefacto.prescripcionMaxima} niveles={niveles} />;
-  if (artefacto.tipo === 'simulacion') return <TarjetaSimulacion id={artefacto.id} simulacion={artefacto.simulacion} niveles={niveles} />;
+function VerArtefacto({ artefacto, niveles, s }: { artefacto: Artefacto; niveles: string[]; s: SujetoTexto }) {
+  if (artefacto.tipo === 'estudiante') return <TarjetaEstudiante id={artefacto.id} prescripcion={artefacto.prescripcion} maxima={artefacto.prescripcionMaxima} niveles={niveles} s={s} />;
+  if (artefacto.tipo === 'simulacion') return <TarjetaSimulacion id={artefacto.id} simulacion={artefacto.simulacion} niveles={niveles} s={s} />;
   if (artefacto.tipo === 'perfil') return <TarjetaPerfil origen={artefacto.origen} cambios={artefacto.cambios} prescripcion={artefacto.prescripcion} niveles={niveles} />;
   if (artefacto.grafica === 'influencias') {
     return (
@@ -204,10 +204,10 @@ function VerArtefacto({ artefacto, niveles }: { artefacto: Artefacto; niveles: s
   if (artefacto.grafica === 'acciones') {
     return <GraficaMancuernas titulo={artefacto.titulo} descripcion="Media actual y recomendada de cada acción, en unidades originales." filas={artefacto.datos} />;
   }
-  return <GraficaVariable variable={artefacto.datos} niveles={niveles} />;
+  return <GraficaVariable variable={artefacto.datos} niveles={niveles} s={s} />;
 }
 
-function Burbuja({ mensaje, niveles }: { mensaje: Mensaje; niveles: string[] }) {
+function Burbuja({ mensaje, niveles, s }: { mensaje: Mensaje; niveles: string[]; s: SujetoTexto }) {
   if (mensaje.rol === 'usuario') {
     return (
       <div className="flex justify-end">
@@ -230,7 +230,7 @@ function Burbuja({ mensaje, niveles }: { mensaje: Mensaje; niveles: string[] }) 
               ) : (
                 <CircleAlert className="size-3.5 text-aviso" aria-hidden />
               )}
-              Consultó: {(NOMBRES_HERRAMIENTA[c.nombre] ?? (() => c.nombre))(c.argumentos)}
+              Consultó: {(NOMBRES_HERRAMIENTA[c.nombre] ?? (() => c.nombre))(c.argumentos, s)}
               {c.error && <span className="text-tinta-3"> ({c.error})</span>}
             </li>
           ))}
@@ -238,7 +238,7 @@ function Burbuja({ mensaje, niveles }: { mensaje: Mensaje; niveles: string[] }) 
       ) : null}
       {mensaje.artefactos?.map((a, i) => (
         <div key={i} className={clase('my-3', a.tipo !== 'grafica' && 'max-w-2xl')}>
-          <VerArtefacto artefacto={a} niveles={niveles} />
+          <VerArtefacto artefacto={a} niveles={niveles} s={s} />
         </div>
       ))}
       {mensaje.contenido ? (
@@ -271,6 +271,8 @@ export function Asistente() {
 function Conversacion({ clave }: { clave: string }) {
   const { dataset } = useDatasetActivo();
   const niveles = useMemo(() => nivelesDe(dataset?.esquema), [dataset?.esquema]);
+  const modelo = useModelo(dataset?.modeloActivo);
+  const s = sujetoDeDataset(dataset, modelo.data);
   const [mensajes, setMensajes] = useState<Mensaje[]>(() => leerHistorial(clave));
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -358,12 +360,12 @@ function Conversacion({ clave }: { clave: string }) {
   const accion = dataset?.esquema?.columnas.find((c) => c.rol === 'accion');
   const sugerencias = dataset?.modeloActivo
     ? [
-        `¿Qué recomendaciones generales da el modelo para los estudiantes en ${niveles[0] ?? 'el nivel más bajo'}?`,
+        `¿Qué recomendaciones generales da el modelo para ${s.los} ${s.plural} en ${niveles[0] ?? 'el nivel más bajo'}?`,
         '¿Cómo se relacionan las variables entre sí y con el objetivo?',
-        `Usa un perfil de riesgo: un estudiante típico con ${accion?.nombre ?? accion?.columna ?? 'la primera acción'} en 5. ¿Qué le recomienda el algoritmo genético?`,
+        `Usa un perfil de riesgo: ${s.un} ${s.singular} ${s.femenino ? 'típica' : 'típico'} con ${accion?.nombre ?? accion?.columna ?? 'la primera acción'} en 5. ¿Qué le recomienda el algoritmo genético?`,
         '¿Qué variables influyen más en el rendimiento según el modelo?',
         '¿Qué tan confiable es el modelo? Explícamelo en palabras simples.',
-        'Analiza al estudiante 14 y dame recomendaciones concretas.',
+        `Analiza ${s.al} ${s.singular} 14 y dame recomendaciones concretas.`,
       ]
     : ['¿Qué es PRV-FCM y cómo prescribe acciones?', '¿Qué columnas tiene el dataset y cuál es el objetivo?', '¿Cómo se relacionan las variables con el objetivo?'];
 
@@ -397,7 +399,7 @@ function Conversacion({ clave }: { clave: string }) {
             </ul>
           </div>
         ) : (
-          mensajes.map((m) => <Burbuja key={m.id} mensaje={m} niveles={niveles} />)
+          mensajes.map((m) => <Burbuja key={m.id} mensaje={m} niveles={niveles} s={s} />)
         )}
         <div ref={final} />
       </div>
@@ -419,7 +421,7 @@ function Conversacion({ clave }: { clave: string }) {
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             onKeyDown={alTeclear}
-            placeholder="Pregunte sobre el rendimiento, la deserción o un estudiante (Enter envía, Mayús + Enter salta de línea)"
+            placeholder={`Pregunte sobre los datos, el modelo o ${s.un} ${s.singular} (Enter envía, Mayús + Enter salta de línea)`}
             className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-[0.97rem] text-tinta outline-none placeholder:text-tinta-3"
             style={{ fieldSizing: 'content' } as CSSProperties}
           />

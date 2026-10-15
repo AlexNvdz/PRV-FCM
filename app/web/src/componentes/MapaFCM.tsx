@@ -285,7 +285,7 @@ export function MapaFCM({ conceptos, aristas, objetivo, titulo = 'Mapa cognitivo
                   </strong>{' '}
                   (objetivo):{' '}
                   {sesgoCentro !== undefined
-                    ? `sesgo b = ${firmado(sesgoCentro)}, una constante que se suma a su entrada en cada iteración y empuja a todos los estudiantes hacia el ${sesgoCentro >= 0 ? 'mejor' : 'peor'} nivel.`
+                    ? `sesgo b = ${firmado(sesgoCentro)}, una constante que se suma a su entrada en cada iteración y empuja a todos hacia el ${sesgoCentro >= 0 ? 'mejor' : 'peor'} nivel.`
                     : 'recibe los pesos de los demás conceptos. Este modelo no tiene sesgo.'}
                 </>
               ) : activoConcepto ? (

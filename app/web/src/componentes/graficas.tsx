@@ -19,7 +19,7 @@ import {
 } from 'recharts';
 
 import type { EstadisticaVariable, FilaSeleccion } from '../tipos';
-import { clase, colorNivel, firmado, num, pct } from '../utilidades';
+import { clase, colorNivel, firmado, mayuscula, num, pct, type SujetoTexto } from '../utilidades';
 
 // ---------------------------------------------------------------------------
 // Marco común: título, alternar gráfica/tabla
@@ -145,14 +145,14 @@ export const REJILLA = <CartesianGrid stroke="var(--cuadricula)" vertical={false
 // ---------------------------------------------------------------------------
 // Distribución del objetivo
 // ---------------------------------------------------------------------------
-export function GraficaNiveles({ niveles, objetivo }: { niveles: { etiqueta: string; n: number }[]; objetivo: string }) {
+export function GraficaNiveles({ niveles, objetivo, s }: { niveles: { etiqueta: string; n: number }[]; objetivo: string; s: SujetoTexto }) {
   const total = niveles.reduce((s, n) => s + n.n, 0);
   const datos = niveles.map((n, i) => ({ ...n, color: colorNivel(i, niveles.length), porcentaje: (100 * n.n) / total }));
   return (
     <MarcoGrafica
-      titulo={`Estudiantes por nivel de ${objetivo}`}
+      titulo={`${mayuscula(s.plural)} por nivel de ${objetivo}`}
       descripcion="Del peor al mejor nivel."
-      tabla={{ columnas: ['Nivel', 'Estudiantes', 'Porcentaje'], filas: datos.map((d) => [d.etiqueta, d.n, pct(d.porcentaje)]) }}
+      tabla={{ columnas: ['Nivel', mayuscula(s.plural), 'Porcentaje'], filas: datos.map((d) => [d.etiqueta, d.n, pct(d.porcentaje)]) }}
     >
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={datos} margin={{ top: 18, right: 8, left: -12, bottom: 0 }} barCategoryGap="28%">
@@ -164,7 +164,7 @@ export function GraficaNiveles({ niveles, objetivo }: { niveles: { etiqueta: str
             content={({ active, payload }) =>
               active && payload?.[0] ? (
                 <Globo>
-                  <strong>{payload[0].payload.etiqueta}</strong>: {payload[0].payload.n} estudiantes ({pct(payload[0].payload.porcentaje)})
+                  <strong>{payload[0].payload.etiqueta}</strong>: {payload[0].payload.n} {s.plural} ({pct(payload[0].payload.porcentaje)})
                 </Globo>
               ) : null
             }
@@ -252,7 +252,7 @@ export function GraficaDivergente({
 // ---------------------------------------------------------------------------
 // Una variable por nivel del objetivo
 // ---------------------------------------------------------------------------
-export function GraficaVariable({ variable, niveles }: { variable: EstadisticaVariable; niveles: string[] }) {
+export function GraficaVariable({ variable, niveles, s }: { variable: EstadisticaVariable; niveles: string[]; s: SujetoTexto }) {
   const colores = Object.fromEntries(niveles.map((n, i) => [n, colorNivel(i, niveles.length)]));
   const leyenda = niveles.map((n) => <ItemLeyenda key={n} color={colores[n]} texto={n} />);
   const correlacion = variable.correlacion === null ? '' : ` Correlación con el objetivo: ${firmado(variable.correlacion)}.`;
@@ -287,7 +287,7 @@ export function GraficaVariable({ variable, niveles }: { variable: EstadisticaVa
                     <strong>{label}</strong>
                     {payload.map((p) => (
                       <div key={String(p.dataKey)}>
-                        {String(p.dataKey)}: {String(p.value)} estudiantes
+                        {String(p.dataKey)}: {String(p.value)} {s.plural}
                       </div>
                     ))}
                   </Globo>
@@ -312,10 +312,10 @@ export function GraficaVariable({ variable, niveles }: { variable: EstadisticaVa
   return (
     <MarcoGrafica
       titulo={`${variable.nombre}: nivel del objetivo en cada categoría`}
-      descripcion={`Porcentaje de estudiantes de cada categoría en cada nivel.${correlacion}`}
+      descripcion={`Porcentaje de ${s.plural} de cada categoría en cada nivel.${correlacion}`}
       leyenda={leyenda}
       tabla={{
-        columnas: ['Categoría', 'Estudiantes', ...niveles],
+        columnas: ['Categoría', mayuscula(s.plural), ...niveles],
         filas: categorias.map((c) => [c.categoria, c.n, ...niveles.map((n) => c.por_nivel[n] ?? 0)]),
       }}
     >
@@ -328,7 +328,7 @@ export function GraficaVariable({ variable, niveles }: { variable: EstadisticaVa
             content={({ active, payload, label }) =>
               active && payload?.length ? (
                 <Globo>
-                  <strong>{label}</strong> ({payload[0].payload.total} estudiantes)
+                  <strong>{label}</strong> ({payload[0].payload.total} {s.plural})
                   {payload.map((p) => (
                     <div key={String(p.dataKey)}>
                       {String(p.dataKey)}: {pct(Number(p.value))}
@@ -432,12 +432,12 @@ export function GraficaSeleccion({ tabla, lambda, alpha, mayoritaria }: { tabla:
 // ---------------------------------------------------------------------------
 // Antes y después de la prescripción
 // ---------------------------------------------------------------------------
-export function GraficaAntesDespues({ datos, umbral, mejor }: { datos: { id: number; base: number; prescrito: number }[]; umbral: number; mejor: string }) {
+export function GraficaAntesDespues({ datos, umbral, mejor, s }: { datos: { id: number; base: number; prescrito: number }[]; umbral: number; mejor: string; s: SujetoTexto }) {
   const puntos = datos.map((d, i) => ({ ...d, orden: i + 1 }));
   return (
     <MarcoGrafica
       titulo="Activación del objetivo antes y después de prescribir"
-      descripcion={`Cada estudiante ordenado por su activación actual. Sobre la línea (${num(umbral, 2)}) queda en ${mejor}.`}
+      descripcion={`Cada ${s.singular} ${s.femenino ? 'ordenada' : 'ordenado'} por su activación actual. Sobre la línea (${num(umbral, 2)}) queda en ${mejor}.`}
       leyenda={
         <>
           <ItemLeyenda color="var(--serie-1)" texto="Acciones actuales" forma="linea" />
@@ -445,7 +445,7 @@ export function GraficaAntesDespues({ datos, umbral, mejor }: { datos: { id: num
         </>
       }
       tabla={{
-        columnas: ['Estudiante (id)', 'Actual', 'Prescrita'],
+        columnas: [`${mayuscula(s.singular)} (id)`, 'Actual', 'Prescrita'],
         filas: puntos.map((p) => [p.id, num(p.base, 3), num(p.prescrito, 3)]),
       }}
     >
@@ -461,7 +461,7 @@ export function GraficaAntesDespues({ datos, umbral, mejor }: { datos: { id: num
             content={({ active, payload }) =>
               active && payload?.length ? (
                 <Globo>
-                  <strong>Estudiante {payload[0].payload.id}</strong>
+                  <strong>{mayuscula(s.singular)} {payload[0].payload.id}</strong>
                   <div>Actual: {num(payload[0].payload.base, 3)}</div>
                   <div>Prescrita: {num(payload[0].payload.prescrito, 3)}</div>
                 </Globo>
@@ -477,12 +477,12 @@ export function GraficaAntesDespues({ datos, umbral, mejor }: { datos: { id: num
 // ---------------------------------------------------------------------------
 // Convergencia del AG
 // ---------------------------------------------------------------------------
-export function GraficaConvergencia({ datos }: { datos: { generacion: number[]; q1: number[]; mediana: number[]; q3: number[] } }) {
+export function GraficaConvergencia({ datos, s }: { datos: { generacion: number[]; q1: number[]; mediana: number[]; q3: number[] }; s: SujetoTexto }) {
   const filas = datos.generacion.map((g, i) => ({ generacion: g, banda: [datos.q1[i], datos.q3[i]], mediana: datos.mediana[i] }));
   return (
     <MarcoGrafica
       titulo="Convergencia del algoritmo genético"
-      descripcion="Mejor costo por generación: mediana y rango intercuartílico entre estudiantes."
+      descripcion={`Mejor costo por generación: mediana y rango intercuartílico entre ${s.plural}.`}
       leyenda={<ItemLeyenda color="var(--serie-1)" texto="Mediana (banda: cuartiles 1 y 3)" forma="linea" />}
       tabla={{
         columnas: ['Generación', 'Cuartil 1', 'Mediana', 'Cuartil 3'],

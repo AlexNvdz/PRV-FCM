@@ -8,7 +8,7 @@ import { MapaFCM } from '../componentes/MapaFCM';
 import { Aviso, Cargando, Dato, Vacio } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import { nivelesDe, useEstadisticas, useModelo } from '../hooks';
-import { entero, fecha, num, pct, pctDe } from '../utilidades';
+import { entero, fecha, num, pct, pctDe, sujetoDeDataset } from '../utilidades';
 
 const enlacePrincipal = 'inline-flex h-10 items-center gap-2 rounded-md bg-boton px-4 text-sm font-medium text-boton-texto hover:opacity-90';
 const enlaceSecundario = 'inline-flex h-10 items-center gap-2 rounded-md border border-linea bg-hoja px-4 text-sm font-medium text-tinta hover:bg-hoja-2';
@@ -36,6 +36,7 @@ export function Resumen() {
   const mejor = niveles.at(-1) ?? '';
   const metricas = modelo.data?.metricas;
   const graficas = modelo.data?.graficas;
+  const s = sujetoDeDataset(dataset, modelo.data);
 
   const pasoActual = !dataset.esquemaConfirmado ? 2 : !dataset.modeloActivo ? 3 : 5;
 
@@ -64,11 +65,11 @@ export function Resumen() {
           ) : !metricas || !graficas ? (
             <>
               <h1 className="mt-3 font-serif text-[2.2rem] font-semibold leading-[1.15] tracking-[-0.015em]">
-                Entrene el modelo PRV-FCM para ver qué acciones llevarían a cada estudiante a {mejor}.
+                Entrene el modelo PRV-FCM para ver qué acciones llevarían a cada {s.singular} a {mejor}.
               </h1>
               <p className="mt-4 max-w-[60ch] text-tinta-2">
                 El mapa cognitivo difuso aprende cómo influye cada variable en {dataset.esquema?.objetivo}; después, el algoritmo genético
-                busca el cambio en las acciones que mejora a cada estudiante.
+                busca el cambio en las acciones que mejora a cada {s.singular}.
               </p>
               <div className="mt-7">
                 <Link to="/modelo" className={enlacePrincipal}>
@@ -80,7 +81,7 @@ export function Resumen() {
             <>
               <h1 className="mt-3 font-serif text-[2.35rem] font-semibold leading-[1.14] tracking-[-0.015em]">
                 Con las acciones prescritas, <span className="resaltado">{pct(metricas.prescripcion.PSR, 0)}</span> de los{' '}
-                {entero(metricas.prescripcion.n_estudiantes)} estudiantes de prueba por debajo de {mejor} llegaría a {mejor} según el FCM.
+                {entero(metricas.prescripcion.n_estudiantes)} {s.plural} de prueba por debajo de {mejor} llegaría a {mejor} según el FCM.
               </h1>
               <p className="mt-5 max-w-[60ch] text-[1.02rem] text-tinta-2">
                 Hoy lo logra el {pct(metricas.prescripcion.PSR_base)}. Un bosque aleatorio independiente confirma la mejora para el{' '}
@@ -107,7 +108,7 @@ export function Resumen() {
         {graficas ? (
           <MapaFCM conceptos={graficas.conceptos} aristas={graficas.aristas} objetivo={graficas.objetivo} compacto />
         ) : estadisticas.data ? (
-          <GraficaNiveles niveles={estadisticas.data.objetivo.niveles} objetivo={estadisticas.data.objetivo.columna} />
+          <GraficaNiveles niveles={estadisticas.data.objetivo.niveles} objetivo={estadisticas.data.objetivo.columna} s={s} />
         ) : null}
       </div>
 

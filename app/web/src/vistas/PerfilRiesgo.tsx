@@ -8,7 +8,7 @@ import { api } from '../api';
 import { ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, Clase, estiloControl } from '../componentes/ui';
 import type { ColumnaEsquema, Dataset, ModeloDetalle } from '../tipos';
-import { num } from '../utilidades';
+import { mayuscula, num, sujetoDe } from '../utilidades';
 
 type Valores = Record<string, string | number>;
 
@@ -127,7 +127,7 @@ export function PerfilRiesgo({ modelo, dataset }: { modelo: ModeloDetalle; datas
           </Boton>
           <div className="flex items-end gap-2">
             <label className="flex flex-col gap-1 text-xs text-tinta-2">
-              Estudiante (fila)
+              {mayuscula(sujetoDe(modelo.sujeto).singular)} (fila)
               <input type="number" min={0} className={`${estiloControl} w-[7rem]!`} value={estudiante} onChange={(e) => setEstudiante(e.target.value)} />
             </label>
             <Boton disabled={estudiante === ''} cargando={cargar.isPending && cargar.variables !== null} onClick={() => cargar.mutate(Number(estudiante))}>

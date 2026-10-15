@@ -1,5 +1,5 @@
 // Formatos y ayudas compartidas.
-import type { Activacion, Codificacion, MetodoPesos, PerfilModelo, ReglaInferencia, Rol } from './tipos';
+import { SUJETO_POR_DEFECTO, type Activacion, type Codificacion, type DatasetResumen, type MetodoPesos, type PerfilModelo, type ReglaInferencia, type Rol, type Sujeto } from './tipos';
 
 const numero = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
 
@@ -31,6 +31,30 @@ export function fecha(iso: string) {
   return new Date(iso).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+export const mayuscula = (texto: string) => texto.charAt(0).toUpperCase() + texto.slice(1);
+
+/** Cómo se llama cada registro (paciente, cliente, estudiante) con sus artículos; por defecto «registro». */
+export function sujetoDe(sujeto?: Partial<Sujeto> | null) {
+  const { singular, plural, femenino } = { ...SUJETO_POR_DEFECTO, ...sujeto };
+  return {
+    singular,
+    plural,
+    femenino,
+    el: femenino ? 'la' : 'el',
+    los: femenino ? 'las' : 'los',
+    al: femenino ? 'a la' : 'al',
+    del: femenino ? 'de la' : 'del',
+    este: femenino ? 'esta' : 'este',
+    un: femenino ? 'una' : 'un',
+    todos: femenino ? 'todas las' : 'todos los',
+  };
+}
+export type SujetoTexto = ReturnType<typeof sujetoDe>;
+
+/** El del modelo si hay uno; si no, el que el motor resolvió al validar el esquema (xAPI: estudiante). */
+export const sujetoDeDataset = (dataset?: Pick<DatasetResumen, 'esquema' | 'validacion'> | null, modelo?: { sujeto?: Sujeto } | null) =>
+  sujetoDe(modelo?.sujeto ?? dataset?.validacion?.sujeto ?? dataset?.esquema?.sujeto);
+
 export function duracion(ms?: number) {
   if (!ms) return '';
   const s = Math.round(ms / 1000);
@@ -60,7 +84,7 @@ export function rolConNotacion(rol: Rol) {
 
 export const DESCRIPCION_ROL: Record<Rol, string> = {
   objetivo: 'Concepto objetivo: la métrica a maximizar o minimizar, como el rendimiento o la permanencia.',
-  accion: 'Concepto prescriptivo: lo que la institución o el estudiante pueden cambiar. El AG lo ajusta.',
+  accion: 'Concepto prescriptivo: lo que se puede cambiar directamente (una intervención o un comportamiento). El AG lo ajusta.',
   mutable: 'Concepto del sistema que cambia pero no se controla directamente: ausencias, satisfacción.',
   inmutable: 'Concepto del sistema fijo en el periodo: edad, género, curso.',
   excluir: 'No se usa: identificadores, texto libre o columnas redundantes.',

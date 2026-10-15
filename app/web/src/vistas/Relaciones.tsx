@@ -10,7 +10,7 @@ import { GraficaDispersion, GraficaPerfilNiveles, MapaCalor } from '../component
 import { Aviso, Cargando, estiloControl, Vacio } from '../componentes/ui';
 import { useEstadisticas } from '../hooks';
 import type { Dataset, MetodoCorrelacion } from '../tipos';
-import { clase, NOMBRE_ROL } from '../utilidades';
+import { clase, NOMBRE_ROL, sujetoDeDataset } from '../utilidades';
 
 const METODOS: { valor: MetodoCorrelacion; texto: string; ayuda: string }[] = [
   { valor: 'spearman', texto: 'Spearman', ayuda: 'Por rangos: capta relaciones monótonas aunque no sean lineales.' },
@@ -30,6 +30,7 @@ function Seccion({ titulo, descripcion, children }: { titulo: string; descripcio
 
 export function Relaciones({ dataset }: { dataset: Dataset }) {
   const explorable = Boolean(dataset.esquema && (dataset.esquemaConfirmado || dataset.validacion?.ok));
+  const s = sujetoDeDataset(dataset);
   const estadisticas = useEstadisticas(dataset.id, dataset.esquema, explorable);
   const [metodo, setMetodo] = useState<MetodoCorrelacion>('spearman');
   const [variable, setVariable] = useState<string | null>(null);
@@ -79,7 +80,7 @@ export function Relaciones({ dataset }: { dataset: Dataset }) {
         </Aviso>
       )}
       <div className="grid items-start gap-6 xl:grid-cols-2">
-        <GraficaNiveles niveles={datos!.objetivo.niveles} objetivo={datos!.objetivo.columna} />
+        <GraficaNiveles niveles={datos!.objetivo.niveles} objetivo={datos!.objetivo.columna} s={s} />
         <GraficaDivergente
           titulo={`Correlación de cada variable con ${datos!.objetivo.columna}`}
           descripcion="Spearman sobre los valores codificados. Asociación, no causa. Las nominales con media del objetivo se asocian con él por construcción."
@@ -89,7 +90,7 @@ export function Relaciones({ dataset }: { dataset: Dataset }) {
       </div>
 
       {datos!.perfil_niveles && (
-        <Seccion titulo="Cómo cambia cada variable entre niveles" descripcion="Si los puntos de los niveles quedan separados, la variable distingue a los estudiantes por su resultado.">
+        <Seccion titulo="Cómo cambia cada variable entre niveles" descripcion={`Si los puntos de los niveles quedan separados, la variable distingue a ${s.los} ${s.plural} por su resultado.`}>
           <GraficaPerfilNiveles perfil={datos!.perfil_niveles} niveles={niveles} />
         </Seccion>
       )}
@@ -168,7 +169,7 @@ export function Relaciones({ dataset }: { dataset: Dataset }) {
         </select>
         {elegida && (
           <div className="mt-4">
-            <GraficaVariable variable={elegida} niveles={niveles} />
+            <GraficaVariable variable={elegida} niveles={niveles} s={s} />
           </div>
         )}
       </Seccion>

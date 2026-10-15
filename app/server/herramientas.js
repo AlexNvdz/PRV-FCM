@@ -80,7 +80,7 @@ export function leerCorrelaciones(corr, limite = 6) {
 const HERRAMIENTAS = {
   resumen_datos: {
     descripcion:
-      'Resumen del dataset activo: número de registros, columna objetivo con cuántos estudiantes hay en cada nivel, y las variables según su rol (acciones, inmutables, mutables).',
+      'Resumen del dataset activo: número de registros, columna objetivo con cuántos registros hay en cada nivel, y las variables según su rol (acciones, inmutables, mutables).',
     parametros: z.object({}),
     async ejecutar(_args, ctx) {
       const { dataset } = ctx;
@@ -91,7 +91,7 @@ const HERRAMIENTAS = {
         objetivo: {
           columna: estad.objetivo.columna,
           mejor_nivel: estad.objetivo.mejor_nivel,
-          niveles: estad.objetivo.niveles.map((n) => ({ nivel: n.etiqueta, estudiantes: n.n })),
+          niveles: estad.objetivo.niveles.map((n) => ({ nivel: n.etiqueta, registros: n.n })),
         },
         acciones: columnasPorRol(dataset.esquema, 'accion'),
         mutables: columnasPorRol(dataset.esquema, 'mutable'),
@@ -123,7 +123,7 @@ const HERRAMIENTAS = {
         f1_macro: porcentaje(100 * pred.F1_macro),
         exactitud_clase_mayoritaria: porcentaje(100 * pred.exactitud_clase_mayoritaria),
         exactitud_bosque_aleatorio: porcentaje(100 * ext.exactitud_prueba),
-        estudiantes_prescritos: presc.n_estudiantes,
+        registros_prescritos: presc.n_estudiantes,
         psr_acciones_actuales: porcentaje(presc.PSR_base),
         psr_prescripcion: porcentaje(presc.PSR),
         bosque_mejor_nivel_actual: porcentaje(ext.PSR_externo_base),
@@ -132,7 +132,7 @@ const HERRAMIENTAS = {
           Object.entries(metricas.exito_por_segmento ?? {}).map(([nombre, s]) => [
             nombre,
             {
-              estudiantes: s.n,
+              registros: s.n,
               psr_fcm: `${porcentaje(s.PSR_base)} → ${porcentaje(s.PSR)}`,
               bosque: `${porcentaje(ext.por_segmento?.[nombre]?.PSR_externo_base)} → ${porcentaje(ext.por_segmento?.[nombre]?.PSR_externo)}`,
             },
@@ -188,7 +188,7 @@ const HERRAMIENTAS = {
       if (variable.por_nivel) {
         resumen.media_por_nivel = Object.fromEntries(variable.por_nivel.map((n) => [n.nivel, redondear(n.media, 2)]));
       } else {
-        resumen.por_categoria = variable.categorias.map((c) => ({ categoria: c.categoria, estudiantes: c.n, por_nivel: c.por_nivel }));
+        resumen.por_categoria = variable.categorias.map((c) => ({ categoria: c.categoria, registros: c.n, por_nivel: c.por_nivel }));
       }
       return resumen;
     },
@@ -196,7 +196,7 @@ const HERRAMIENTAS = {
 
   buscar_estudiantes: {
     descripcion:
-      'Lista estudiantes que cumplen condiciones. Devuelve su id_estudiante (fila del archivo), el nivel del objetivo y sus variables principales. Operadores: =, !=, <, <=, >, >=, contiene.',
+      'Lista registros que cumplen condiciones. Devuelve su id_estudiante (fila del archivo), el nivel del objetivo y sus variables principales. Operadores: =, !=, <, <=, >, >=, contiene.',
     parametros: z.object({
       nivel: z.string().optional(),
       filtros: z.array(FILTRO).max(5).optional(),
@@ -222,14 +222,14 @@ const HERRAMIENTAS = {
         total_que_cumplen: pagina.total,
         mostrados: pagina.filas.length,
         nota: 'Para analizar o simular a uno, use su id_estudiante.',
-        estudiantes: pagina.filas.map(({ id, ...resto }) => ({ id_estudiante: id, ...resto })),
+        registros: pagina.filas.map(({ id, ...resto }) => ({ id_estudiante: id, ...resto })),
       };
     },
   },
 
   analizar_estudiante: {
     descripcion:
-      'Perfil de un estudiante por su id_estudiante: sus datos, el nivel que predice el FCM y dos prescripciones del algoritmo genético: un plan moderado (cambios pequeños, preferible para recomendar) y un plan máximo (el mayor efecto posible, solo como techo).',
+      'Perfil de un registro por su id_estudiante: sus datos, el nivel que predice el FCM y dos prescripciones del algoritmo genético: un plan moderado (cambios pequeños, preferible para recomendar) y un plan máximo (el mayor efecto posible, solo como techo).',
     parametros: conIdEstudiante(),
     async ejecutar({ id_estudiante: id }, ctx) {
       requiereModelo(ctx);
@@ -270,7 +270,7 @@ const HERRAMIENTAS = {
 
   prescribir_perfil: {
     descripcion:
-      'Prescripción del algoritmo genético para un perfil de riesgo hipotético. Sin id_estudiante parte del perfil típico del dataset: no envíe id_estudiante salvo que el usuario nombre un estudiante concreto. Cambia las variables de "valores" (unidades originales o categorías, por ejemplo {"StudentAbsenceDays": "Above-7", "VisITedResources": 10}). Devuelve el plan moderado y su reporte.',
+      'Prescripción del algoritmo genético para un perfil de riesgo hipotético. Sin id_estudiante parte del perfil típico del dataset: no envíe id_estudiante salvo que el usuario nombre un registro concreto. Cambia las variables de "valores" (unidades originales o categorías, por ejemplo {"StudentAbsenceDays": "Above-7", "VisITedResources": 10}). Devuelve el plan moderado y su reporte.',
     parametros: z.preprocess(
       conAliasId,
       z.object({
@@ -311,7 +311,7 @@ const HERRAMIENTAS = {
 
   resumen_prescripciones: {
     descripcion:
-      'Resumen de las prescripciones que el algoritmo genético generó para los estudiantes de prueba fuera del mejor nivel: cuántos llegan al mejor nivel, qué acciones se recomiendan con más frecuencia y cuánto cambian, también por nivel observado. Úsala para recomendaciones generales o institucionales.',
+      'Resumen de las prescripciones que el algoritmo genético generó para los registros de prueba fuera del mejor nivel: cuántos llegan al mejor nivel, qué acciones se recomiendan con más frecuencia y cuánto cambian, también por nivel observado. Úsala para recomendaciones generales o institucionales.',
     parametros: z.object({ nivel: z.string().optional() }),
     async ejecutar({ nivel }, ctx) {
       requiereModelo(ctx);
@@ -341,7 +341,7 @@ const HERRAMIENTAS = {
           sin_cambio_en: porcentaje(a.pct_igual),
         })),
         por_nivel: resumen.por_nivel.map((g) => ({ nivel: g.nivel, registros: g.n, llegan_al_mejor_nivel: porcentaje(g.pct_exito) })),
-        estudiantes_con_mas_mejora: resumen.ejemplos.map((e) => ({
+        registros_con_mas_mejora: resumen.ejemplos.map((e) => ({
           id_estudiante: e.id_estudiante,
           nivel_observado: e.nivel_observado,
           nivel_prescrito: e.nivel_prescrito,
@@ -422,7 +422,7 @@ const HERRAMIENTAS = {
 
   simular_escenario: {
     descripcion:
-      'Simula el nivel que alcanzaría un estudiante (id_estudiante) si cambian algunas acciones. "cambios" asigna a cada acción su nuevo valor en unidades originales, por ejemplo {"raisedhands": 60}.',
+      'Simula el nivel que alcanzaría un registro (id_estudiante) si cambian algunas acciones. "cambios" asigna a cada acción su nuevo valor en unidades originales, por ejemplo {"raisedhands": 60}.',
     parametros: conIdEstudiante({ cambios: z.record(z.string(), z.union([z.number(), z.string()])) }),
     async ejecutar({ id_estudiante: id, cambios }, ctx) {
       requiereModelo(ctx);

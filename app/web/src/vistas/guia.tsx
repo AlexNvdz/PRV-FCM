@@ -410,6 +410,15 @@ function Paso2() {
         </Lista>
       </Bloque>
 
+      <Bloque id="paso-2-sujeto" titulo="Cómo se llama cada registro">
+        <p>
+          Debajo del objetivo, escriba el singular y el plural de lo que es cada fila (paciente y pacientes, cliente y clientes) y marque «Femenino» si va
+          con «la» y «esta» («la persona 7»). Los textos de los pasos 4 y 5, la consulta y el asistente lo usan; el modelo lo guarda al entrenar, así que
+          un cambio vale para los modelos nuevos. Vacíos, los campos muestran el valor por defecto: «registro», o «estudiante» si el esquema es el de xAPI.
+          Vea <Entradas a={['sujeto']} />.
+        </p>
+      </Bloque>
+
       <Bloque id="paso-2-segmento" titulo="Comparar por grupo">
         <p>
           Opcional. Elija una columna categórica y uno de sus valores: el paso 4 mostrará el éxito de la prescripción para «columna = valor» frente a

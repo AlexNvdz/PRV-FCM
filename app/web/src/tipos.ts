@@ -27,8 +27,18 @@ export interface Segmento {
   nombre_no: string;
 }
 
+/** Cómo se llama cada registro del dataset en los textos; `femenino` decide los artículos. */
+export interface Sujeto {
+  singular: string;
+  plural: string;
+  femenino: boolean;
+}
+
+export const SUJETO_POR_DEFECTO: Sujeto = { singular: 'registro', plural: 'registros', femenino: false };
+
 export interface Esquema {
   nombre?: string;
+  sujeto?: Sujeto;
   objetivo: string | null;
   invertir_objetivo?: boolean;
   niveles?: Record<string, number>;
@@ -41,6 +51,8 @@ export interface Validacion {
   errores: string[];
   avisos: string[];
   filas_utiles: number;
+  /** Sujeto del esquema ya resuelto por el motor (xAPI: estudiante). */
+  sujeto?: Sujeto;
 }
 
 export interface PerfilColumna {
@@ -323,6 +335,7 @@ export interface Graficas {
   sesgo?: boolean;
   aristas_excluidas?: [string, string][];
   figuras?: string[];
+  sujeto?: Sujeto;
 }
 
 export interface ModeloDetalle extends ModeloMeta {
@@ -330,6 +343,8 @@ export interface ModeloDetalle extends ModeloMeta {
   metricas?: Metricas;
   graficas?: Graficas;
   esquema?: Esquema;
+  /** Siempre resuelto en un modelo listo (los antiguos de xAPI: estudiante). */
+  sujeto?: Sujeto;
 }
 
 export interface EstadisticaVariable {

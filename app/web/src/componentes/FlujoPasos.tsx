@@ -28,7 +28,7 @@ const PASOS: { n: NumeroPaso; titulo: string; detalle: ReactNode }[] = [
     ),
   },
   { n: 3, titulo: 'Entrenamiento del FCM', detalle: 'Matriz de pesos W y máscara causal opcional.' },
-  { n: 4, titulo: 'Motor prescriptivo', detalle: 'Algoritmo genético por estudiante y perfil de riesgo.' },
+  { n: 4, titulo: 'Motor prescriptivo', detalle: 'Algoritmo genético por registro y perfil de riesgo.' },
   { n: 5, titulo: 'Visualización y recomendaciones', detalle: 'Grafo, convergencia y reporte en lenguaje natural.' },
 ];
 
