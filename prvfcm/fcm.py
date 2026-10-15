@@ -3,15 +3,18 @@ Etapa 2: Inferencia difusa con Mapas Cognitivos Difusos (FCM).
 
 Regla de Kosko modificada, con memoria (Stylios y Groumpos, 2004):
 
-    A_i(t+1) = f( k2 * A_i(t) + k1 * sum_{j != i} w_ji * A_j(t) )
+    A_i(t+1) = f( k2 * A_i(t) + k1 * (sum_{j != i} w_ji * A_j(t) + b_i) )
 
 con activación sigmoide f(x) = 1 / (1 + exp(-lambda * x)). El término
 ``k2 * A_i(t)`` es la memoria: cada concepto conserva parte de su estado previo.
+b_i es el sesgo (``ConfigFCM.sesgo``): solo existe en los conceptos que reciben
+aristas, va en [peso_min, peso_max] y equivale al peso de un concepto constante
+igual a 1. Sin sesgo, b = 0.
 
 Convención de pesos: ``pesos[j, i] = w_ji`` es la influencia causal del concepto
 j sobre el concepto i. Con los estados como filas, la regla queda:
 
-    A(t+1) = f( k2 * A(t) + k1 * A(t) @ W )
+    A(t+1) = f( k2 * A(t) + k1 * (A(t) @ W + b) )
 
 Los conceptos fijos (inmutables, acciones y mutables no dinámicos) conservan su
 valor durante la inferencia (clamped); solo los conceptos dinámicos se
@@ -23,13 +26,14 @@ estiman las aristas que permite la estructura (y la máscara causal opcional):
 
 * ``bptt`` (por defecto): minimiza el error cuadrático del estado final de la
   inferencia más una penalización L2, con gradiente exacto (BPTT) y L-BFGS-B
-  con los pesos acotados a [-1, 1].
+  con los pesos y los sesgos acotados a [-1, 1].
 * ``ridge`` y ``lasso``: regresión lineal regularizada, una por concepto
   dinámico. Su valor observado y es un punto fijo de la regla si
-  sum_j w_ji A_j = (logit(y) / lambda - k2 * y) / k1; ese es el objetivo de la
-  regresión. Los coeficientes se truncan a (-1, 1) con la tangente hiperbólica.
+  sum_j w_ji A_j + b_i = (logit(y) / lambda - k2 * y) / k1; ese es el objetivo
+  de la regresión, y el sesgo es su intercepto recortado a [-1, 1]. Los
+  coeficientes se truncan a (-1, 1) con la tangente hiperbólica.
 * ``correlacion_parcial``: w_ji es la correlación parcial entre C_j y C_i
-  dados los demás conceptos (ya está en [-1, 1]). Describe asociaciones
+  dados los demás conceptos (ya está en [-1, 1]); b = 0. Describe asociaciones
   directas, pero no calibra la inferencia.
 """
 from __future__ import annotations
@@ -123,6 +127,8 @@ class MapaCognitivoDifuso:
         self.config = config
         self.nombres = nombres or [f"C{i + 1}" for i in range(self.n_conceptos)]
         self.pesos = np.zeros((self.n_conceptos, self.n_conceptos))
+        self.sesgo = np.zeros(self.n_conceptos)  # b_i; cero en los conceptos sin aristas entrantes.
+        self.receptores = np.flatnonzero(self.estructura.any(axis=0))
         self.historial_perdida: list[float] = []
         self.resultado_optimizacion = None
 
@@ -160,12 +166,13 @@ class MapaCognitivoDifuso:
         W = self.pesos if pesos is None else pesos
         libres = self.indices_libres
         W_libres = W[:, libres]
+        b_libres = self.sesgo[libres]
         max_iter = cfg.max_iter if max_iter is None else max_iter
 
         trayectoria = [A.copy()] if guardar_trayectoria else None
         cambio, iteraciones = np.inf, 0
         for iteraciones in range(1, max_iter + 1):
-            x = cfg.coef_memoria * A[:, libres] + cfg.coef_influencia * (A @ W_libres)
+            x = cfg.coef_memoria * A[:, libres] + cfg.coef_influencia * (A @ W_libres + b_libres)
             nuevos = sigmoide(x, cfg.lambda_)
             cambio = float(np.max(np.abs(nuevos - A[:, libres]))) if libres.size else 0.0
             A[:, libres] = nuevos
@@ -181,14 +188,17 @@ class MapaCognitivoDifuso:
         """Estado de convergencia para cada estado inicial."""
         return self.inferir(estados_iniciales).estados
 
-    def terminos(self, estado: np.ndarray, fuentes: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
-        """Los dos sumandos de la regla para un estado A(t), por concepto de destino i.
+    def terminos(
+        self, estado: np.ndarray, fuentes: np.ndarray | None = None
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Los tres sumandos de la regla para un estado A(t), por concepto de destino i.
 
             memoria_i    = k2 * A_i(t)
             influencia_i = k1 * sum_j w_ji * A_j(t)
+            sesgo_i      = k1 * b_i   (no depende del estado)
 
-        Para un concepto dinámico, A_i(t+1) = f(memoria_i + influencia_i); para
-        uno fijo los términos existen pero no se usan. ``fuentes`` limita la suma
+        Para un concepto dinámico, A_i(t+1) = f(memoria_i + influencia_i + sesgo_i);
+        para uno fijo los términos existen pero no se usan. ``fuentes`` limita la suma
         a esos conceptos de origen j (por ejemplo, solo las acciones) para ver
         cuánto aporta cada grupo a la entrada. Sirve para explicar la inferencia:
         :meth:`inferir` hace la misma cuenta, restringida a los conceptos dinámicos.
@@ -199,11 +209,28 @@ class MapaCognitivoDifuso:
         if fuentes is not None:
             origen = np.zeros_like(A)
             origen[..., fuentes] = A[..., fuentes]
-        return cfg.coef_memoria * A, cfg.coef_influencia * (origen @ self.pesos)
+        sesgo = np.broadcast_to(cfg.coef_influencia * self.sesgo, A.shape)
+        return cfg.coef_memoria * A, cfg.coef_influencia * (origen @ self.pesos), sesgo
 
     # ------------------------------------------------------------------
     # Aprendizaje de los pesos a partir de datos
     # ------------------------------------------------------------------
+    def _empaquetar(self, W: np.ndarray, b: np.ndarray) -> np.ndarray:
+        """Parámetros del optimizador: pesos de las aristas permitidas y, con sesgo, b de los receptores."""
+        if not self.config.sesgo:
+            return W[self.estructura]
+        return np.concatenate([W[self.estructura], b[self.receptores]])
+
+    def _desempaquetar(self, theta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Inversa de :meth:`_empaquetar`: matriz W (n, n) y vector b (n,)."""
+        n_aristas = int(self.estructura.sum())
+        W = np.zeros_like(self.pesos)
+        W[self.estructura] = theta[:n_aristas]
+        b = np.zeros(self.n_conceptos)
+        if self.config.sesgo:
+            b[self.receptores] = theta[n_aristas:]
+        return W, b
+
     def _perdida_y_gradiente(
         self, theta: np.ndarray, A0: np.ndarray, Y: np.ndarray, c: np.ndarray, v: np.ndarray | None = None
     ) -> tuple[float, np.ndarray]:
@@ -212,26 +239,28 @@ class MapaCognitivoDifuso:
         Se despliegan ``config.pasos_entrenamiento`` iteraciones de la regla y se
         retropropaga el error a través de ellas:
 
-            x_t = k2 * A_t[:, M] + k1 * A_t @ W[:, M]
+            x_t = k2 * A_t[:, M] + k1 * (A_t @ W[:, M] + b[M])
             A_{t+1}[:, M] = f(x_t)
             dL/dx_t = dL/dA_{t+1}[:, M] * lambda * A_{t+1} * (1 - A_{t+1})
             dL/dW[:, M] += k1 * A_t^T @ dL/dx_t
+            dL/db[M] += k1 * suma por registros de dL/dx_t
             dL/dA_t[:, M] = dL/dx_t @ (k2 * I + k1 * W[M, M]^T)
 
         donde M son los conceptos dinámicos (los fijos no dependen de W). ``v``
-        pondera cada registro (media 1); sin ``v`` todos pesan lo mismo.
+        pondera cada registro (media 1); sin ``v`` todos pesan lo mismo. La
+        penalización L2 incluye el sesgo, como el peso de un concepto constante.
         """
         cfg = self.config
         libres = self.indices_libres
-        W = np.zeros_like(self.pesos)
-        W[self.estructura] = theta
+        W, b = self._desempaquetar(theta)
         W_libres = W[:, libres]
         W_mm = W[np.ix_(libres, libres)]
+        b_libres = b[libres]
 
         estados = [A0]
         A = A0
         for _ in range(cfg.pasos_entrenamiento):
-            x = cfg.coef_memoria * A[:, libres] + cfg.coef_influencia * (A @ W_libres)
+            x = cfg.coef_memoria * A[:, libres] + cfg.coef_influencia * (A @ W_libres + b_libres)
             A = A.copy()
             A[:, libres] = sigmoide(x, cfg.lambda_)
             estados.append(A)
@@ -246,15 +275,19 @@ class MapaCognitivoDifuso:
             perdida = float(np.sum(c * np.mean(error**2, axis=0)) + cfg.alpha_l2 * np.sum(theta**2))
             G = 2.0 * c * error / n
         grad_libres = np.zeros_like(W_libres)
+        grad_b_libres = np.zeros_like(b_libres)
         for t in range(cfg.pasos_entrenamiento - 1, -1, -1):
             S = estados[t + 1][:, libres]
             D = G * cfg.lambda_ * S * (1.0 - S)
             grad_libres += cfg.coef_influencia * (estados[t].T @ D)
+            grad_b_libres += cfg.coef_influencia * D.sum(axis=0)
             G = cfg.coef_memoria * D + cfg.coef_influencia * (D @ W_mm.T)
 
         grad_W = np.zeros_like(W)
         grad_W[:, libres] = grad_libres
-        grad = grad_W[self.estructura] + 2.0 * cfg.alpha_l2 * theta
+        grad_b = np.zeros(self.n_conceptos)
+        grad_b[libres] = grad_b_libres
+        grad = self._empaquetar(grad_W, grad_b) + 2.0 * cfg.alpha_l2 * theta
         return perdida, grad
 
     def ajustar(
@@ -268,8 +301,8 @@ class MapaCognitivoDifuso:
 
         Minimiza el error cuadrático medio entre el estado final de la
         inferencia y los valores observados de los conceptos dinámicos, con
-        regularización L2, usando L-BFGS-B con los pesos acotados a
-        [peso_min, peso_max].
+        regularización L2, usando L-BFGS-B con los pesos (y los sesgos, si
+        ``config.sesgo``) acotados a [peso_min, peso_max].
 
         Parameters
         ----------
@@ -301,7 +334,7 @@ class MapaCognitivoDifuso:
         def registrar(intermediate_result):
             self.historial_perdida.append(float(intermediate_result.fun))
 
-        theta0 = self.pesos[self.estructura]
+        theta0 = self._empaquetar(self.pesos, self.sesgo)
         resultado = minimize(
             self._perdida_y_gradiente,
             theta0,
@@ -312,14 +345,16 @@ class MapaCognitivoDifuso:
             options={"maxiter": cfg.max_iter_optimizador},
             callback=registrar,
         )
-        self.pesos = np.zeros_like(self.pesos)
-        self.pesos[self.estructura] = resultado.x
+        self.pesos, self.sesgo = self._desempaquetar(resultado.x)
         self.resultado_optimizacion = resultado
         return self
 
     def matriz_pesos(self) -> pd.DataFrame:
-        """Pesos como DataFrame (filas: origen, columnas: destino)."""
-        return pd.DataFrame(self.pesos, index=self.nombres, columns=self.nombres)
+        """Pesos como DataFrame (filas: origen, columnas: destino); con sesgo, b va en la última fila."""
+        tabla = pd.DataFrame(self.pesos, index=self.nombres, columns=self.nombres)
+        if self.config.sesgo:
+            tabla.loc["sesgo"] = self.sesgo
+        return tabla
 
 
 def con_dinamicos_neutros(X: np.ndarray, indices_dinamicos: np.ndarray, valores: np.ndarray) -> np.ndarray:
@@ -342,36 +377,48 @@ def pesos_equilibrados(etiquetas: np.ndarray) -> np.ndarray:
     return pesos / pesos.mean()
 
 
-def pesos_por_regresion(X: np.ndarray, estructura: np.ndarray, config: ConfigFCM, pesos_muestras: np.ndarray | None = None) -> np.ndarray:
-    """Pesos por regresión Ridge o Lasso sin intercepto, una por concepto que recibe aristas.
+def pesos_por_regresion(
+    X: np.ndarray, estructura: np.ndarray, config: ConfigFCM, pesos_muestras: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray]:
+    """Pesos y sesgos por regresión Ridge o Lasso, una por concepto que recibe aristas.
 
     Para cada concepto dinámico i con fuentes S (aristas permitidas C_j -> C_i):
 
         z_i = (logit(y_i) / lambda - k2 * y_i) / k1,   y_i recortado a [margen, 1 - margen]
-        Ridge:  min_w ||z_i - X_S w||^2 + alpha * n * ||w||^2   (MSE + alpha ||w||^2, la escala de BPTT)
-        Lasso:  min_w ||z_i - X_S w||^2 / (2n) + alpha * ||w||_1
+        Ridge:  min_w ||z_i - b_i - X_S w||^2 + alpha * n * ||w||^2   (MSE + alpha ||w||^2, la escala de BPTT)
+        Lasso:  min_w ||z_i - b_i - X_S w||^2 / (2n) + alpha * ||w||_1
         w_ji = tanh(coeficiente_j)
 
     Con esos pesos, el valor observado de C_i es (por mínimos cuadrados) un
-    punto fijo de la regla de Kosko modificada. La regla no tiene sesgo, por
-    eso la regresión no lleva intercepto.
+    punto fijo de la regla de Kosko modificada. Con sesgo, b_i es el
+    intercepto c de la misma regresión (sin penalizar) recortado a
+    [peso_min, peso_max], y los pesos se ajustan con b_i fijo: si c cabe en el
+    rango es el ajuste con intercepto; si no (en xAPI, c = -2.3), los pesos
+    compensan la parte recortada. Con b_i = tanh(c) sin reajustar, la
+    exactitud en xAPI cae de 77 % a 52 %. Sin sesgo, b = 0.
     """
     if config.metodo_pesos not in ("ridge", "lasso"):
         raise ValueError(f"pesos_por_regresion usa ridge o lasso, no {config.metodo_pesos}.")
     X = np.asarray(X, dtype=float)
     n = X.shape[0]
+
+    def regresion(intercepto: bool) -> Ridge | Lasso:
+        if config.metodo_pesos == "ridge":
+            return Ridge(alpha=config.alpha_l2 * n, fit_intercept=intercepto)
+        return Lasso(alpha=config.alpha_l2, fit_intercept=intercepto, max_iter=20_000)
+
     pesos = np.zeros((X.shape[1], X.shape[1]))
+    sesgo = np.zeros(X.shape[1])
     for i in np.flatnonzero(estructura.any(axis=0)):
         fuentes = np.flatnonzero(estructura[:, i])
         y = np.clip(X[:, i], MARGEN_REGRESION, 1.0 - MARGEN_REGRESION)
         z = (logit(y) / config.lambda_ - config.coef_memoria * y) / config.coef_influencia
-        if config.metodo_pesos == "ridge":
-            modelo = Ridge(alpha=config.alpha_l2 * n, fit_intercept=False)
-        else:
-            modelo = Lasso(alpha=config.alpha_l2, fit_intercept=False, max_iter=20_000)
-        modelo.fit(X[:, fuentes], z, sample_weight=pesos_muestras)
+        if config.sesgo:
+            intercepto = regresion(True).fit(X[:, fuentes], z, sample_weight=pesos_muestras).intercept_
+            sesgo[i] = np.clip(intercepto, config.peso_min, config.peso_max)
+        modelo = regresion(False).fit(X[:, fuentes], z - sesgo[i], sample_weight=pesos_muestras)
         pesos[fuentes, i] = np.tanh(modelo.coef_)
-    return pesos
+    return pesos, sesgo
 
 
 def correlaciones_parciales(X: np.ndarray) -> np.ndarray:
@@ -408,7 +455,7 @@ def entrenar_fcm(
     ``aristas_excluidas`` es la máscara de dirección causal opcional: una matriz
     booleana (n, n) en la que ``True`` en [j, i] elimina la arista C_j -> C_i
     aunque la estructura la permita. El método de extracción de pesos es
-    ``config.metodo_pesos``. ``pesos_muestras`` pondera cada registro en BPTT,
+    ``config.metodo_pesos``; con ``config.sesgo`` también se aprende b. ``pesos_muestras`` pondera cada registro en BPTT,
     Ridge y Lasso (ver ``pesos_equilibrados``); la correlación parcial no los usa.
 
     Los conceptos dinámicos parten de su media en ``X``. Devuelve el FCM y esas
@@ -426,5 +473,5 @@ def entrenar_fcm(
     elif config.metodo_pesos == "correlacion_parcial":
         fcm.pesos = pesos_por_correlacion_parcial(X, estructura)
     else:
-        fcm.pesos = pesos_por_regresion(X, estructura, config, pesos_muestras)
+        fcm.pesos, fcm.sesgo = pesos_por_regresion(X, estructura, config, pesos_muestras)
     return fcm, medias

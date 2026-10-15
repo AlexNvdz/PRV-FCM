@@ -22,6 +22,8 @@ Uso:
     python main.py --cruce un_punto --tasa-mutacion 0.3 --beta 0.1
     python main.py --metodo-pesos ridge                    # pesos por regresión Ridge (también lasso, correlacion_parcial)
     python main.py --excluir gender Class                  # máscara causal: sin la arista gender -> Class
+    python main.py --sin-sesgo                             # regla sin sesgo b_i
+    python main.py --sin-tope-ausentismo                   # sin el tope de acciones con más de 7 ausencias
     python main.py --help
 """
 from __future__ import annotations
@@ -74,6 +76,7 @@ def parsear_argumentos() -> argparse.Namespace:
         "--excluir", nargs=2, action="append", default=[], metavar=("ORIGEN", "DESTINO"),
         help="máscara de dirección causal: elimina la arista ORIGEN -> DESTINO (columnas del CSV); se puede repetir",
     )
+    grupo.add_argument("--sin-sesgo", action="store_true", help="regla sin sesgo b_i (la del artículo)")
     grupo.add_argument(
         "--equilibrar-niveles", action="store_true",
         help="pondera cada registro por la inversa de la frecuencia de su nivel al aprender W (objetivos desbalanceados)",
@@ -104,6 +107,11 @@ def parsear_argumentos() -> argparse.Namespace:
     grupo.add_argument("--beta", type=float, default=presc.beta_esfuerzo, help="penalización del esfuerzo")
     grupo.add_argument("--delta-max", type=float, default=presc.delta_max, help="cambio máximo por acción (0-1)")
     grupo.add_argument("--permitir-reducciones", action="store_true", help="permite recomendar valores menores a los actuales")
+    grupo.add_argument(
+        "--tope-ausentismo", type=float, default=presc.condicion_delta_max,
+        help=f"subida máxima por acción (0-1) si {presc.condicion_columna} = Above-7",
+    )
+    grupo.add_argument("--sin-tope-ausentismo", action="store_true", help="no limita las acciones con ausentismo alto")
     parser.add_argument("--sin-graficas", action="store_true", help="no genera las figuras PNG")
     return parser.parse_args()
 
@@ -120,7 +128,7 @@ def opciones_desde_argumentos(args: argparse.Namespace) -> OpcionesPipeline:
         validacion_cruzada=not args.sin_cv,
         config_fcm=ConfigFCM(
             lambda_=args.lambda_, alpha_l2=args.alpha_l2, tolerancia=args.tolerancia, metodo_pesos=args.metodo_pesos,
-            balancear_niveles=args.equilibrar_niveles,
+            balancear_niveles=args.equilibrar_niveles, sesgo=not args.sin_sesgo,
         ),
         config_seleccion=ConfigSeleccion(
             pliegues=args.pliegues,
@@ -141,6 +149,8 @@ def opciones_desde_argumentos(args: argparse.Namespace) -> OpcionesPipeline:
             beta_esfuerzo=args.beta,
             solo_incrementos=not args.permitir_reducciones,
             delta_max=args.delta_max,
+            condicion_columna=None if args.sin_tope_ausentismo else ConfigPrescripcion.condicion_columna,
+            condicion_delta_max=args.tope_ausentismo,
         ),
         segmento=SEGMENTO_AUSENTISMO,
         aristas_excluidas=tuple((origen, destino) for origen, destino in args.excluir),
@@ -200,8 +210,10 @@ def imprimir_fcm(r: ResultadoPipeline) -> None:
     nombres = fcm.nombres
     print(
         f"f(x) = 1/(1+exp(-{config.lambda_:g}*x)) | A(t+1) = f({config.coef_memoria:g}*A(t) + "
-        f"{config.coef_influencia:g}*A(t)W)"
+        f"{config.coef_influencia:g}*({'A(t)W + b' if config.sesgo else 'A(t)W'}))"
     )
+    if config.sesgo:
+        print(f"Sesgo del objetivo: b = {fcm.sesgo[r.pre.indice_objetivo]:.4f}")
     print(f"Conceptos que se actualizan en la inferencia: {[nombres[i] for i in r.pre.indices_dinamicos]}")
     if r.opciones.aristas_excluidas:
         print(f"Máscara causal: aristas excluidas {[f'{o} -> {d}' for o, d in r.opciones.aristas_excluidas]}")
@@ -237,6 +249,8 @@ def imprimir_inicio_prescripcion(r: ResultadoPipeline) -> None:
     ag, presc = r.opciones.config_ag, r.config_prescripcion
     print(f"Cromosoma: {[r.pre.columnas[i] for i in r.pre.indices_accion]} (genes reales en [0, 1])")
     print(f"Estado deseado: {presc.estado_deseado} | beta (esfuerzo) = {presc.beta_esfuerzo:g}")
+    if r.prescriptor.indice_condicion is not None:
+        print(f"Tope con {presc.condicion_columna} activo: cada acción sube como máximo {presc.condicion_delta_max:g}")
     print(
         f"AG: población {ag.tam_poblacion}, generaciones {ag.generaciones}, torneo {ag.tam_torneo}, "
         f"cruce {ag.tipo_cruce} ({ag.tasa_cruce:g}), mutación {ag.tasa_mutacion:g} "

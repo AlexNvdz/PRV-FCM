@@ -36,6 +36,7 @@ def guardar_modelo(r: ResultadoPipeline, ruta: Path) -> None:
             "nombres": r.fcm.nombres,
             "estructura": r.fcm.estructura.astype(int).tolist(),
             "pesos": r.fcm.pesos.tolist(),
+            "sesgo": r.fcm.sesgo.tolist(),
             "indices_fijos": r.fcm.indices_fijos.tolist(),
             "config": dataclasses.asdict(r.config_fcm),
         },
@@ -58,10 +59,14 @@ class ModeloPRVFCM:
         self.segmento = segmento_desde_dict(datos["esquema"].get("segmento"))
         self.pre = Preprocesador.desde_dict(datos["preprocesador"], self.esquema)
         f = datos["fcm"]
+        # Un modelo anterior al sesgo no guarda "sesgo": se carga con b = 0 y config.sesgo = False.
+        config_fcm = ConfigFCM(**{"sesgo": False, **f["config"]})
         self.fcm = MapaCognitivoDifuso(
-            np.array(f["estructura"], dtype=bool), np.array(f["indices_fijos"], dtype=int), ConfigFCM(**f["config"]), f["nombres"]
+            np.array(f["estructura"], dtype=bool), np.array(f["indices_fijos"], dtype=int), config_fcm, f["nombres"]
         )
         self.fcm.pesos = np.array(f["pesos"], dtype=float)
+        if "sesgo" in f:
+            self.fcm.sesgo = np.array(f["sesgo"], dtype=float)
         self.medias_dinamicos = np.array(datos["medias_dinamicos"], dtype=float)
         self.config_ag = ConfigAG(**datos["config_ag"])
         presc = dict(datos["config_prescripcion"])
@@ -78,6 +83,7 @@ class ModeloPRVFCM:
     # Descripción del modelo
     # ------------------------------------------------------------------
     def conceptos(self) -> list[dict]:
+        """Conceptos del mapa; ``sesgo`` es b_i (0 en los conceptos fijos)."""
         return [
             {
                 "id": c.id,
@@ -86,8 +92,9 @@ class ModeloPRVFCM:
                 "rol": rol_de(self.esquema, c),
                 "dinamico": bool(c.dinamico),
                 "codificacion": codificacion_de(self.esquema, c.columna),
+                "sesgo": float(b),
             }
-            for c in self.esquema.conceptos
+            for c, b in zip(self.esquema.conceptos, self.fcm.sesgo)
         ]
 
     def aristas(self) -> list[dict]:

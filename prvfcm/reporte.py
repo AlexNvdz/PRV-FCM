@@ -72,12 +72,21 @@ def frase_accion(accion: dict) -> tuple[str, bool]:
     return f"{verbo} {accion['nombre']} de {actual} a {recomendada} ({detalle})", True
 
 
+def frase_restriccion(nombre: str, delta_max: float) -> str:
+    """Frase del tope condicionado de la prescripción (``delta_max`` en escala normalizada)."""
+    return (
+        f"Como «{nombre}» está activo, cada acción puede subir como máximo un {porcentaje(100 * delta_max, 0)} "
+        "de su rango: con esa condición, los datos casi no registran el mejor nivel."
+    )
+
+
 def reporte_individual(prescripcion: dict, nombre_objetivo: str, sujeto: str = "este perfil") -> dict:
     """Reporte de una prescripción individual.
 
-    ``prescripcion`` es la salida de ``ModeloPRVFCM.prescribir``: acciones con
-    valores actual y recomendado, estados base y prescrito, meta y aportes de
-    cada concepto al objetivo. Devuelve el texto completo y sus partes.
+    ``prescripcion`` es la salida de ``PrescriptorAG.prescribir``: acciones con
+    valores actual y recomendado, estados base y prescrito, meta, aportes de
+    cada concepto al objetivo y la restricción aplicada, si la hay. Devuelve el
+    texto completo y sus partes.
     """
     frases = [frase_accion(a) for a in prescripcion["acciones"]]
     cambios = [f for f, cambia in frases if cambia]
@@ -87,9 +96,9 @@ def reporte_individual(prescripcion: dict, nombre_objetivo: str, sujeto: str = "
     if cambios:
         plan = f"Para {sujeto} se recomienda {unir(cambios)}."
     else:
-        plan = f"Para {sujeto} el algoritmo genético no encontró un cambio en las acciones que lo acerque a la meta."
+        plan = f"Para {sujeto} el algoritmo genético no encontró un cambio en las acciones cuyo avance hacia la meta compense el esfuerzo."
     if mantener and cambios:
-        plan += f" Además, {unir(mantener)}: el modelo no espera beneficio de cambiarla{'s' if len(mantener) > 1 else ''}."
+        plan += f" Además, {unir(mantener)}: el modelo no espera un beneficio que compense el esfuerzo de cambiarla{'s' if len(mantener) > 1 else ''}."
 
     llega = abs(prescrito["activacion"] - meta["valor"]) <= meta["tolerancia"] + 1e-9
     resultado = (
@@ -111,10 +120,14 @@ def reporte_individual(prescripcion: dict, nombre_objetivo: str, sujeto: str = "
         detalle = unir([f"{c['nombre']} (aporte {numero(c['aporte_prescrito'], 2)})" for c in frenos[:3]])
         texto_frenos = f"Factores del sistema que lo alejan del mejor nivel y que el plan no cambia: {detalle}."
 
-    texto = " ".join(t for t in (plan, resultado, texto_frenos) if t)
+    restriccion = prescripcion.get("restriccion")
+    texto_restriccion = restriccion["texto"] if restriccion else ""
+
+    texto = " ".join(t for t in (plan, texto_restriccion, resultado, texto_frenos) if t)
     return {
         "texto": texto,
         "plan": plan,
+        "restriccion": texto_restriccion,
         "acciones": [f[0].upper() + f[1:] + "." for f in cambios],
         "mantener": [f[0].upper() + f[1:] + "." for f in mantener],
         "resultado": resultado,

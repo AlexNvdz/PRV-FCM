@@ -20,6 +20,12 @@ Función de costo (a minimizar):
 * beta: penalización opcional del esfuerzo. Con beta = 0 el costo es solo el
   error absoluto; con beta > 0, entre dos prescripciones con error similar se
   prefiere la que exige menos cambio.
+
+Restricciones (límites de cada gen, ver :meth:`PrescriptorPRVFCM.limites`):
+solo incrementos, cambio máximo ``delta_max`` y un tope condicionado: si el
+concepto ``condicion_columna`` está activo (por ejemplo, más de 7 ausencias),
+cada acción solo puede subir ``condicion_delta_max``. El tope vive aquí y no
+en el AG, que es genérico y no conoce conceptos.
 """
 from __future__ import annotations
 
@@ -65,6 +71,9 @@ class PrescriptorPRVFCM:
         {índice de concepto: importancia}. Los conceptos ausentes pesan 1.
     config_ag, config:
         Hiperparámetros del AG y de la prescripción.
+    indice_condicion:
+        Índice del concepto de ``config.condicion_columna`` (None si el esquema
+        no lo tiene: no hay tope condicionado).
     """
 
     def __init__(
@@ -75,6 +84,7 @@ class PrescriptorPRVFCM:
         pesos_objetivo: dict[int, float] | None = None,
         config_ag: ConfigAG = ConfigAG(),
         config: ConfigPrescripcion = ConfigPrescripcion(),
+        indice_condicion: int | None = None,
     ):
         self.fcm = fcm
         self.indices_accion = np.asarray(indices_accion, dtype=int)
@@ -85,14 +95,22 @@ class PrescriptorPRVFCM:
         self.pesos_objetivo = pesos / pesos.sum()
         self.config_ag = config_ag
         self.config = config
+        self.indice_condicion = None if config.condicion_columna is None else indice_condicion
 
-    def limites(self, acciones_actuales: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def condicion_activa(self, estado_actual: np.ndarray) -> bool:
+        """True si el concepto de la condición está activo (>= 0.5) y limita la subida de las acciones."""
+        return self.indice_condicion is not None and bool(estado_actual[self.indice_condicion] >= 0.5)
+
+    def limites(self, estado_actual: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Límites de cada gen según las restricciones de la prescripción."""
+        acciones_actuales = estado_actual[self.indices_accion]
         inferior = acciones_actuales.copy() if self.config.solo_incrementos else np.zeros_like(acciones_actuales)
         superior = np.ones_like(acciones_actuales)
         if self.config.delta_max is not None:
             inferior = np.maximum(inferior, acciones_actuales - self.config.delta_max)
             superior = np.minimum(superior, acciones_actuales + self.config.delta_max)
+        if self.condicion_activa(estado_actual):
+            superior = np.minimum(superior, acciones_actuales + self.config.condicion_delta_max)
         return inferior, superior
 
     def error_objetivo(self, estados_finales: np.ndarray) -> np.ndarray:
@@ -131,7 +149,7 @@ class PrescriptorPRVFCM:
         """
         estado_actual = np.asarray(estado_actual, dtype=float)
         acciones_actuales = estado_actual[self.indices_accion]
-        inferior, superior = self.limites(acciones_actuales)
+        inferior, superior = self.limites(estado_actual)
 
         ag = AlgoritmoGenetico(self.funcion_costo(estado_actual), inferior, superior, self.config_ag, rng)
         # Las acciones actuales se siembran en la población inicial: con elitismo,

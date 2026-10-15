@@ -25,12 +25,15 @@ RUTA_DATOS = Path(__file__).resolve().parents[1] / "data" / "xAPI-Edu-Data-expan
 sin_datos = pytest.mark.skipif(not RUTA_DATOS.exists(), reason="dataset no disponible")
 
 
-def fcm_pequeno(semilla: int = 0) -> MapaCognitivoDifuso:
+def fcm_pequeno(semilla: int = 0, sesgo: bool = True) -> MapaCognitivoDifuso:
     """FCM de 4 conceptos: C0 y C1 fijos; C2 y C3 dinámicos; C3 es el objetivo."""
     fijos, dinamicos = np.array([0, 1]), np.array([2, 3])
     estructura = construir_estructura(4, fijos, dinamicos, indice_objetivo=3)
-    fcm = MapaCognitivoDifuso(estructura, fijos, ConfigFCM(pasos_entrenamiento=30))
-    fcm.pesos[estructura] = np.random.default_rng(semilla).uniform(-1, 1, estructura.sum())
+    fcm = MapaCognitivoDifuso(estructura, fijos, ConfigFCM(pasos_entrenamiento=30, sesgo=sesgo))
+    rng = np.random.default_rng(semilla)
+    fcm.pesos[estructura] = rng.uniform(-1, 1, estructura.sum())
+    if sesgo:
+        fcm.sesgo[dinamicos] = rng.uniform(-1, 1, 2)
     return fcm
 
 
@@ -56,7 +59,8 @@ def test_un_paso_de_kosko_modificada():
     fcm = fcm_pequeno()
     A0 = np.array([0.2, 0.9, 0.5, 0.1])
     A1 = fcm.inferir(A0, max_iter=1, hasta_convergencia=False).estados
-    esperado = sigmoide(A0 + A0 @ fcm.pesos)  # A(t+1) = f(A(t) + A(t) W)
+    assert fcm.sesgo[2:].all()
+    esperado = sigmoide(A0 + A0 @ fcm.pesos + fcm.sesgo)  # A(t+1) = f(A(t) + A(t) W + b)
     np.testing.assert_allclose(A1[2:], esperado[2:])
     np.testing.assert_allclose(A1[:2], A0[:2])  # Los fijos no cambian.
 
@@ -69,11 +73,13 @@ def test_inferencia_converge_a_un_punto_fijo():
     np.testing.assert_allclose(siguiente, resultado.estados, atol=1e-4)
 
 
-def test_gradiente_bptt_coincide_con_diferencias_finitas():
-    fcm = fcm_pequeno()
+@pytest.mark.parametrize("sesgo", [True, False])
+def test_gradiente_bptt_coincide_con_diferencias_finitas(sesgo):
+    fcm = fcm_pequeno(sesgo=sesgo)
     rng = np.random.default_rng(1)
     A0, Y, c = rng.random((20, 4)), rng.random((20, 2)), np.array([0.5, 0.5])
-    theta = fcm.pesos[fcm.estructura]
+    theta = fcm._empaquetar(fcm.pesos, fcm.sesgo)
+    assert theta.size == fcm.estructura.sum() + (2 if sesgo else 0)  # Un sesgo por concepto que recibe aristas.
     _, gradiente = fcm._perdida_y_gradiente(theta, A0, Y, c)
     eps = 1e-6
     numerico = [
@@ -90,7 +96,7 @@ def test_gradiente_con_pesos_por_registro_coincide_con_diferencias_finitas():
     A0, Y, c = rng.random((20, 4)), rng.random((20, 2)), np.array([0.5, 0.5])
     v = rng.uniform(0.2, 3.0, 20)
     v = v / v.mean()
-    theta = fcm.pesos[fcm.estructura]
+    theta = fcm._empaquetar(fcm.pesos, fcm.sesgo)
     _, gradiente = fcm._perdida_y_gradiente(theta, A0, Y, c, v)
     eps = 1e-6
     numerico = [
@@ -120,11 +126,30 @@ def test_aprendizaje_reproduce_un_fcm_conocido():
     np.testing.assert_allclose(modelo.predecir(A0)[:, 2:], Y[:, 2:], atol=1e-2)
 
 
-def fcm_un_dinamico(pesos_reales: np.ndarray, n: int = 400, semilla: int = 3) -> tuple[np.ndarray, np.ndarray]:
+def test_bptt_aprende_el_sesgo_y_sin_sesgo_lo_deja_en_cero():
+    # Un objetivo que solo depende de una constante: sin sesgo, ningún peso puede reproducirlo.
+    estructura = construir_estructura(3, np.array([0, 1]), np.array([2]), indice_objetivo=2)
+    A0 = np.random.default_rng(5).random((300, 3))
+    A0[:, 2] = 0.5
+    real = MapaCognitivoDifuso(estructura, np.array([0, 1]))
+    real.sesgo[2] = -0.8
+    Y = real.predecir(A0)
+    con = MapaCognitivoDifuso(estructura, np.array([0, 1]), ConfigFCM(alpha_l2=0.0)).ajustar(A0, Y)
+    sin = MapaCognitivoDifuso(estructura, np.array([0, 1]), ConfigFCM(alpha_l2=0.0, sesgo=False)).ajustar(A0, Y)
+    assert con.sesgo[2] == pytest.approx(-0.8, abs=1e-2) and not con.sesgo[:2].any()
+    np.testing.assert_allclose(con.pesos[:2, 2], 0.0, atol=1e-2)
+    assert not sin.sesgo.any()
+    assert np.abs(sin.predecir(A0)[:, 2] - Y[:, 2]).mean() > 10 * np.abs(con.predecir(A0)[:, 2] - Y[:, 2]).mean()
+
+
+def fcm_un_dinamico(
+    pesos_reales: np.ndarray, n: int = 400, semilla: int = 3, sesgo_real: float = 0.0
+) -> tuple[np.ndarray, np.ndarray]:
     """Datos de un FCM con 3 fuentes fijas y un objetivo dinámico: el objetivo es el punto fijo de la regla."""
     estructura = construir_estructura(4, np.array([0, 1, 2]), np.array([3]), indice_objetivo=3)
     real = MapaCognitivoDifuso(estructura, np.array([0, 1, 2]))
     real.pesos[:3, 3] = pesos_reales
+    real.sesgo[3] = sesgo_real
     X = np.random.default_rng(semilla).random((n, 4))
     X[:, 3] = 0.5
     return real.predecir(X), estructura
@@ -135,9 +160,24 @@ def test_regresion_recupera_los_pesos_de_un_punto_fijo():
     pesos_reales = np.array([0.6, -0.4, 0.2])
     X, estructura = fcm_un_dinamico(pesos_reales)
     for metodo in ("ridge", "lasso"):
-        W = pesos_por_regresion(X, estructura, ConfigFCM(metodo_pesos=metodo, alpha_l2=1e-9))
+        W, b = pesos_por_regresion(X, estructura, ConfigFCM(metodo_pesos=metodo, alpha_l2=1e-9))
         np.testing.assert_allclose(np.arctanh(W[:3, 3]), pesos_reales, atol=1e-3)
         assert not W[~estructura].any()  # Solo las aristas permitidas.
+        assert b[3] == pytest.approx(0.0, abs=1e-3) and not b[:3].any()
+
+
+def test_regresion_recupera_el_sesgo_como_intercepto():
+    pesos_reales = np.array([0.6, -0.4, 0.2])
+    X, estructura = fcm_un_dinamico(pesos_reales, sesgo_real=-0.5)
+    W, b = pesos_por_regresion(X, estructura, ConfigFCM(metodo_pesos="ridge", alpha_l2=1e-9))
+    np.testing.assert_allclose(np.arctanh(W[:3, 3]), pesos_reales, atol=1e-3)
+    assert b[3] == pytest.approx(-0.5, abs=1e-3)
+    _, b_sin = pesos_por_regresion(X, estructura, ConfigFCM(metodo_pesos="ridge", alpha_l2=1e-9, sesgo=False))
+    assert not b_sin.any()
+    # Un intercepto fuera de [-1, 1] se recorta y los pesos se reajustan con b fijo.
+    X, estructura = fcm_un_dinamico(pesos_reales, sesgo_real=-2.0)
+    _, b = pesos_por_regresion(X, estructura, ConfigFCM(metodo_pesos="ridge", alpha_l2=1e-9))
+    assert b[3] == -1.0
 
 
 def test_metodos_de_pesos_quedan_en_rango_y_respetan_la_mascara():
@@ -147,6 +187,8 @@ def test_metodos_de_pesos_quedan_en_rango_y_respetan_la_mascara():
     excluir[1, 3] = True  # Máscara causal: sin la arista C1 -> C3.
     for metodo in ("bptt", "ridge", "lasso", "correlacion_parcial"):
         fcm, _ = entrenar_fcm(X, np.array([0, 1, 2]), np.array([3]), 3, ConfigFCM(metodo_pesos=metodo), aristas_excluidas=excluir)
+        assert np.all(np.abs(fcm.sesgo) <= 1) and not fcm.sesgo[:3].any()  # Sesgo solo en el objetivo.
+        assert (fcm.sesgo[3] == 0) == (metodo == "correlacion_parcial")
         assert not fcm.estructura[1, 3] and fcm.pesos[1, 3] == 0.0
         assert np.all(np.abs(fcm.pesos) <= 1.0)
         assert fcm.pesos[0, 3] > 0 and fcm.pesos[2, 3] > 0  # El signo de las fuentes permitidas se conserva.
@@ -214,12 +256,13 @@ def test_ag_encuentra_el_minimo_y_nunca_empeora():
 # ---------------------------------------------------------------------------
 # Prescripción y métricas
 # ---------------------------------------------------------------------------
-def prescriptor_pequeno(**config) -> PrescriptorPRVFCM:
+def prescriptor_pequeno(indice_condicion: int | None = None, **config) -> PrescriptorPRVFCM:
     """C0 inmutable, C1 acción, C2 y C3 dinámicos; C1 favorece al objetivo C3."""
     fcm = fcm_pequeno()
     fcm.pesos[1, 3] = 0.9
     return PrescriptorPRVFCM(
-        fcm, np.array([1]), {3: 1.0}, config_ag=ConfigAG(), config=ConfigPrescripcion(**config)
+        fcm, np.array([1]), {3: 1.0}, config_ag=ConfigAG(), config=ConfigPrescripcion(**config),
+        indice_condicion=indice_condicion,
     )
 
 
@@ -232,6 +275,19 @@ def test_prescripcion_mejora_y_respeta_restricciones():
     assert resultado.error_prescrito <= resultado.error_base
     assert resultado.acciones_recomendadas[0] == pytest.approx(0.5)  # Más acción, mejor: llega al límite.
     np.testing.assert_allclose(resultado.estado_prescrito[0], estado[0])  # Inmutable intacto.
+
+
+def test_tope_condicionado_solo_limita_si_la_condicion_esta_activa():
+    rng = np.random.default_rng(0)
+    prescriptor = prescriptor_pequeno(indice_condicion=0, beta_esfuerzo=0.0, condicion_delta_max=0.1)
+    activo, inactivo = np.array([0.8, 0.2, 0.5, 0.3]), np.array([0.2, 0.2, 0.5, 0.3])
+    assert prescriptor.condicion_activa(activo) and not prescriptor.condicion_activa(inactivo)
+    assert prescriptor.prescribir(activo, rng).acciones_recomendadas[0] == pytest.approx(0.3)  # 0.2 + 0.1.
+    assert prescriptor.prescribir(inactivo, rng).acciones_recomendadas[0] == pytest.approx(1.0)
+    # Sin columna de condición (o sin ese concepto en el esquema) no hay tope.
+    sin_columna = prescriptor_pequeno(indice_condicion=0, beta_esfuerzo=0.0, condicion_columna=None)
+    assert not sin_columna.condicion_activa(activo)
+    assert prescriptor_pequeno(beta_esfuerzo=0.0).limites(activo)[1][0] == 1.0
 
 
 def test_metricas():

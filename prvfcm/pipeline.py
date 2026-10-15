@@ -239,6 +239,12 @@ def tabla_recomendaciones(
     return pd.DataFrame(filas)
 
 
+def indice_condicion(pre: Preprocesador, config: ConfigPrescripcion) -> int | None:
+    """Índice del concepto del tope condicionado; None si no hay columna o el esquema no la tiene."""
+    columna = config.condicion_columna
+    return pre.indice(columna) if columna in pre.columnas else None
+
+
 def matriz_excluidas(pre: Preprocesador, aristas: tuple[tuple[str, str], ...]) -> np.ndarray | None:
     """Máscara booleana (n, n) con True en cada arista excluida; None si no se excluye ninguna."""
     if not aristas:
@@ -342,7 +348,10 @@ def ejecutar(
         raise ValueError("Ningún registro de prueba está por debajo del mejor nivel: no hay a quién prescribir.")
     estado_deseado = {pre.indice(c): v for c, v in config_presc.estado_deseado.items()}
     pesos_objetivo = {pre.indice(c): v for c, v in config_presc.pesos_objetivo.items()}
-    r.prescriptor = PrescriptorPRVFCM(r.fcm, pre.indices_accion, estado_deseado, pesos_objetivo, opciones.config_ag, config_presc)
+    r.prescriptor = PrescriptorPRVFCM(
+        r.fcm, pre.indices_accion, estado_deseado, pesos_objetivo, opciones.config_ag, config_presc,
+        indice_condicion(pre, config_presc),
+    )
     avisar("prescripcion", r)
     r.resultados = r.prescriptor.prescribir_lote(
         r.X_pru[r.seleccion], semilla=opciones.semilla, mostrar_progreso=False, al_avanzar=progreso("prescripcion")

@@ -208,6 +208,9 @@ class ConfigFCM:
     # Pondera cada registro por la inversa de la frecuencia de su nivel del objetivo al aprender W
     # (BPTT, Ridge y Lasso). Útil con objetivos desbalanceados, como la deserción.
     balancear_niveles: bool = False
+    # Sesgo b_i en la regla: A_i(t+1) = f(k2*A_i + k1*(sum_j w_ji*A_j + b_i)). Solo en los conceptos
+    # que reciben aristas; equivale al peso de un concepto constante igual a 1.
+    sesgo: bool = True
 
 
 @dataclass(frozen=True)
@@ -247,11 +250,18 @@ class ConfigPrescripcion:
     # Importancia relativa de cada concepto del estado deseado (por defecto 1).
     pesos_objetivo: dict[str, float] = field(default_factory=dict)
     # Penalización del esfuerzo: beta * media |a - a_actual|. 0 = solo error absoluto.
-    beta_esfuerzo: float = 0.05
+    # Con 0.05 todas las acciones van al máximo; 0.4 personaliza sin bajar el PSR (ver README).
+    beta_esfuerzo: float = 0.4
     # Si es True, las acciones solo pueden mantenerse o aumentar.
     solo_incrementos: bool = True
     # Cambio máximo permitido por acción (en escala normalizada). None = sin límite.
     delta_max: float | None = None
+    # Tope condicionado: si el concepto de esta columna está activo (valor normalizado >= 0.5),
+    # cada acción solo puede subir hasta actual + condicion_delta_max. Con el ausentismo alto,
+    # el FCM promete el mejor nivel que el bosque aleatorio no confirma. None o una columna
+    # que no está en el esquema: sin tope.
+    condicion_columna: str | None = "StudentAbsenceDays"
+    condicion_delta_max: float = 0.15
     # Éxito prescriptivo: |A_i* - D_i| <= tolerancia para todos los conceptos objetivo.
     # Con 0.25 y Class deseada = 1 equivale a alcanzar el nivel H.
     tolerancia_exito: float = 0.25

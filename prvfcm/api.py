@@ -27,13 +27,15 @@ valor: los dinámicos parten de su media de entrenamiento).
 
 Matemática de la inferencia (regla de Kosko modificada, ver :mod:`prvfcm.fcm`):
 
-    A_i(t+1) = f( k2·A_i(t) + k1·Σ_j w_ji·A_j(t) ),   f(x) = 1 / (1 + e^(−λ·x))
+    A_i(t+1) = f( k2·A_i(t) + k1·(Σ_j w_ji·A_j(t) + b_i) ),   f(x) = 1 / (1 + e^(−λ·x))
 
 * A_i(t) ∈ [0, 1] es la activación del concepto i en la iteración t.
 * w_ji ∈ [−1, 1] es la influencia causal de j sobre i: un peso positivo empuja a i
   hacia 1 cuando j está activo; uno negativo, hacia 0.
-* k2·A_i(t) es la memoria (lo que i conserva de su estado anterior) y
-  k1·Σ_j w_ji·A_j(t), la influencia de los demás conceptos.
+* b_i ∈ [−1, 1] es el sesgo de i: la entrada que recibe aunque todos los demás
+  conceptos valgan 0 (0 en los modelos sin sesgo).
+* k2·A_i(t) es la memoria (lo que i conserva de su estado anterior),
+  k1·Σ_j w_ji·A_j(t) la influencia de los demás conceptos y k1·b_i el sesgo.
 * Solo los conceptos dinámicos (el objetivo y los mutables marcados como
   dinámicos) se actualizan; los inmutables, las acciones y los demás mutables
   quedan fijos en su valor. Cambiar una acción cambia la influencia que recibe el
@@ -52,8 +54,9 @@ import pandas as pd
 from .esquema import rol_de
 from .fcm import ResultadoInferencia
 from .modelo import ModeloPRVFCM
+from .pipeline import indice_condicion
 from .prescripcion import PrescriptorPRVFCM
-from .reporte import reporte_individual
+from .reporte import frase_restriccion, reporte_individual
 
 Entrada = pd.DataFrame | Mapping[str, object]
 
@@ -124,25 +127,29 @@ class PredictorFCM:
         * ``series``: activación de cada concepto dinámico en t = 0, 1, ..., T
           (el objetivo primero). Los conceptos fijos no se incluyen: su línea
           sería plana.
-        * ``pasos``: para t = 1..T, los dos sumandos que recibe el objetivo,
+        * ``pasos``: para t = 1..T, los sumandos que recibe el objetivo,
           calculados con el estado anterior A(t−1):
           memoria = k2·A_o(t−1), influencia = k1·Σ_j w_jo·A_j(t−1) (de ella,
           ``influencia_acciones`` es la parte que aportan las acciones),
-          entrada = memoria + influencia y activacion = f(entrada) = A_o(t).
+          sesgo = k1·b_o (constante), entrada = memoria + influencia + sesgo y
+          activacion = f(entrada) = A_o(t).
         """
         m = self.modelo
         fcm, pre = m.fcm, m.pre
         objetivo = pre.indice_objetivo
         # La trayectoria guarda A(0), A(1), ..., A(T), cada uno como matriz de una fila.
         A = np.array([estado[0] for estado in resultado.trayectoria])
-        memoria, influencia = fcm.terminos(A[:-1])
-        _, de_acciones = fcm.terminos(A[:-1], pre.indices_accion)
+        memoria, influencia, sesgo = fcm.terminos(A[:-1])
+        _, de_acciones, _ = fcm.terminos(A[:-1], pre.indices_accion)
         dinamicos = [objetivo] + [i for i in pre.indices_dinamicos if i != objetivo]
         cfg = fcm.config
         return {
             "iteraciones": resultado.iteraciones,
             "convergio": resultado.convergio,
-            "parametros": {"lambda": cfg.lambda_, "k1": cfg.coef_influencia, "k2": cfg.coef_memoria, "tolerancia": cfg.tolerancia},
+            "parametros": {
+                "lambda": cfg.lambda_, "k1": cfg.coef_influencia, "k2": cfg.coef_memoria, "tolerancia": cfg.tolerancia,
+                "sesgo": float(fcm.sesgo[objetivo]),
+            },
             "series": [
                 {
                     "id": m.esquema.conceptos[i].id,
@@ -159,7 +166,8 @@ class PredictorFCM:
                     "memoria": float(memoria[t, objetivo]),
                     "influencia": float(influencia[t, objetivo]),
                     "influencia_acciones": float(de_acciones[t, objetivo]),
-                    "entrada": float(memoria[t, objetivo] + influencia[t, objetivo]),
+                    "sesgo": float(sesgo[t, objetivo]),
+                    "entrada": float(memoria[t, objetivo] + influencia[t, objetivo] + sesgo[t, objetivo]),
                     "activacion": float(A[t + 1, objetivo]),
                 }
                 for t in range(len(A) - 1)
@@ -177,7 +185,9 @@ class PrescriptorAG:
     donde A*(a) es el estado final del FCM con las acciones sustituidas por el
     cromosoma a (ver :mod:`prvfcm.prescripcion`). Las acciones actuales se
     siembran en la población inicial, así que la prescripción nunca es peor
-    que no actuar.
+    que no actuar. Si el concepto de la condición del modelo está activo (en
+    xAPI, más de 7 ausencias), cada acción solo puede subir
+    ``condicion_delta_max``; la salida lo explica en ``restriccion``.
     """
 
     def __init__(self, modelo: ModeloPRVFCM):
@@ -208,7 +218,10 @@ class PrescriptorAG:
         config = replace(m.config_prescripcion, **cambios)
         estado_deseado = {m.pre.indice(c): v for c, v in config.estado_deseado.items()}
         pesos = {m.pre.indice(c): v for c, v in config.pesos_objetivo.items()}
-        return PrescriptorPRVFCM(m.fcm, m.pre.indices_accion, estado_deseado, pesos, m.config_ag, config), meta
+        prescriptor = PrescriptorPRVFCM(
+            m.fcm, m.pre.indices_accion, estado_deseado, pesos, m.config_ag, config, indice_condicion(m.pre, config)
+        )
+        return prescriptor, meta
 
     def prescribir(
         self,
@@ -227,6 +240,11 @@ class PrescriptorAG:
         ``{"generacion", "generaciones_max", "mejor_costo", "costo_medio", "acciones"}``,
         con las mejores acciones hasta ese momento en unidades originales: basta
         para emitir el progreso en vivo (SSE o WebSocket) desde un backend.
+
+        ``aporte_sesgo`` es k1·b_o, en las mismas unidades que los aportes de
+        ``contribuciones`` e igual antes y después. ``restriccion`` es None o
+        ``{"columna", "nombre", "delta_max", "texto"}`` si el tope condicionado
+        limitó la subida de las acciones (``delta_max`` en escala normalizada).
         """
         m = self.modelo
         es_perfil = not isinstance(entrada, pd.DataFrame)
@@ -262,6 +280,16 @@ class PrescriptorAG:
         # inferencia por lotes, para reproducir la evolución en la interfaz.
         mejores = resultado.historial_acciones
         activaciones = m.fcm.inferir(prescriptor.estados_con_acciones(estado, mejores)).estados[:, m.pre.indice_objetivo]
+        restriccion = None
+        if prescriptor.condicion_activa(estado):
+            condicion = m.esquema.conceptos[prescriptor.indice_condicion]
+            delta = prescriptor.config.condicion_delta_max
+            restriccion = {
+                "columna": condicion.columna,
+                "nombre": condicion.nombre,
+                "delta_max": delta,
+                "texto": frase_restriccion(condicion.nombre, delta),
+            }
         salida = {
             "acciones": acciones,
             "base": m.describir_final(resultado.estado_base, meta["valor"]),
@@ -277,10 +305,14 @@ class PrescriptorAG:
                 "acciones": [en_unidades(fila) for fila in mejores],
             },
             "contribuciones": m.contribuciones(resultado.estado_base, resultado.estado_prescrito),
+            "aporte_sesgo": m.fcm.config.coef_influencia * float(m.fcm.sesgo[m.pre.indice_objetivo]),
+            "restriccion": restriccion,
             "configuracion": {
                 "beta": prescriptor.config.beta_esfuerzo,
                 "delta_max": prescriptor.config.delta_max,
                 "solo_incrementos": prescriptor.config.solo_incrementos,
+                "condicion_columna": prescriptor.config.condicion_columna,
+                "condicion_delta_max": prescriptor.config.condicion_delta_max,
                 "poblacion": m.config_ag.tam_poblacion,
                 "generaciones_max": m.config_ag.generaciones,
                 "paciencia": m.config_ag.paciencia,

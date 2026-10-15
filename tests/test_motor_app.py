@@ -12,6 +12,7 @@ import pytest
 from prvfcm.api import PredictorFCM, PrescriptorAG
 from prvfcm.configuracion import ESQUEMA_XAPI, ConfigAG, ConfigFCM, ConfigPrescripcion, ConfigSeleccion
 from prvfcm.esquema import ESQUEMA_XAPI_DICT, ErrorEsquema, esquema_a_dict, esquema_desde_dict, validar_esquema
+from prvfcm.fcm import MapaCognitivoDifuso
 from prvfcm.modelo import ModeloPRVFCM, guardar_modelo
 from prvfcm.perfilado import correlaciones, dispersion, estadistica_variable, estadisticas, filas, normalizados, perfil_base, perfilar
 from prvfcm.pipeline import OpcionesPipeline, Segmento, ejecutar
@@ -197,8 +198,10 @@ def test_inferencia_paso_a_paso_reproduce_la_regla_de_kosko(entrenado):
     assert objetivo["valores"][0] == pytest.approx(estado[modelo.pre.indice_objetivo])
     assert objetivo["valores"][-1] == pytest.approx(prediccion["activacion"])
     p = inferencia["parametros"]
+    assert p["sesgo"] == modelo.fcm.sesgo[modelo.pre.indice_objetivo] != 0
     for paso in inferencia["pasos"]:
-        assert paso["entrada"] == pytest.approx(paso["memoria"] + paso["influencia"])
+        assert paso["sesgo"] == pytest.approx(p["k1"] * p["sesgo"])
+        assert paso["entrada"] == pytest.approx(paso["memoria"] + paso["influencia"] + paso["sesgo"])
         assert paso["activacion"] == pytest.approx(1 / (1 + np.exp(-p["lambda"] * paso["entrada"])))
         assert paso["memoria"] == pytest.approx(p["k2"] * objetivo["valores"][paso["t"] - 1])
     # Las acciones quedan fijas: su aporte a la entrada del objetivo es el mismo en cada iteración.
@@ -207,6 +210,46 @@ def test_inferencia_paso_a_paso_reproduce_la_regla_de_kosko(entrenado):
     tutorias = modelo.pre.indice("tutorias")
     delta = p["k1"] * modelo.fcm.pesos[tutorias, modelo.pre.indice_objetivo] * (estado[tutorias] - modelo.estado(registro)[tutorias])
     assert inferencia["pasos"][0]["influencia_acciones"] - sin_cambio["inferencia"]["pasos"][0]["influencia_acciones"] == pytest.approx(delta)
+
+
+def test_modelo_sin_sesgo_guardado_antes_carga_con_ceros(entrenado, tmp_path):
+    r, modelo, datos = entrenado
+    assert modelo.fcm.config.sesgo and modelo.conceptos()[-1]["sesgo"] == modelo.fcm.sesgo[-1] != 0
+    assert all(c["sesgo"] == 0 for c in modelo.conceptos()[:-1])  # Solo el objetivo recibe aristas.
+    ruta = tmp_path / "modelo.json"
+    guardar_modelo(r, ruta)
+    viejo = json.loads(ruta.read_text(encoding="utf-8"))
+    del viejo["fcm"]["sesgo"], viejo["fcm"]["config"]["sesgo"]
+    cargado = ModeloPRVFCM(viejo)
+    assert not cargado.fcm.config.sesgo and not cargado.fcm.sesgo.any()
+    # Mismos pesos con la regla de antes (b = 0).
+    regla_vieja = MapaCognitivoDifuso(r.fcm.estructura, r.fcm.indices_fijos, replace(r.fcm.config, sesgo=False))
+    regla_vieja.pesos = r.fcm.pesos
+    estado = cargado.estado(datos.iloc[[3]])
+    np.testing.assert_allclose(cargado.fcm.inferir(estado).estados, regla_vieja.inferir(estado).estados)
+    assert not np.allclose(modelo.fcm.inferir(estado).estados, regla_vieja.inferir(estado).estados)
+    prescripcion = PrescriptorAG(cargado).prescribir(datos.iloc[[3]])
+    assert prescripcion["aporte_sesgo"] == 0
+
+
+def test_tope_condicionado_en_la_prescripcion_y_su_reporte(entrenado):
+    _, modelo, datos = entrenado
+    # El esquema de deserción no tiene StudentAbsenceDays: no hay tope.
+    sin_tope = PrescriptorAG(modelo).prescribir(datos.iloc[[3]], beta=0.0)
+    assert sin_tope["restriccion"] is None and sin_tope["configuracion"]["condicion_delta_max"] == 0.15
+    con_condicion = ModeloPRVFCM.__new__(ModeloPRVFCM)
+    con_condicion.__dict__.update(modelo.__dict__)
+    con_condicion.config_prescripcion = replace(modelo.config_prescripcion, condicion_columna="beca", condicion_delta_max=0.1)
+    becado = datos[datos["beca"] == "Sí"].iloc[[0]]
+    prescripcion = PrescriptorAG(con_condicion).prescribir(becado, beta=0.0)
+    restriccion = prescripcion["restriccion"]
+    assert restriccion["columna"] == "beca" and restriccion["delta_max"] == 0.1
+    assert restriccion["texto"] in prescripcion["reporte"]["texto"] and "10 %" in restriccion["texto"]
+    for accion in prescripcion["acciones"]:
+        assert accion["cambio"] <= 0.1 * (accion["max"] - accion["min"]) + 1e-9
+    no_becado = datos[datos["beca"] == "No"].iloc[[0]]
+    assert PrescriptorAG(con_condicion).prescribir(no_becado, beta=0.0)["restriccion"] is None
+    assert prescripcion["aporte_sesgo"] == pytest.approx(modelo.fcm.config.coef_influencia * modelo.fcm.sesgo[-1])
 
 
 def test_prescriptor_ag_avisa_cada_generacion_sin_cambiar_el_resultado(entrenado):

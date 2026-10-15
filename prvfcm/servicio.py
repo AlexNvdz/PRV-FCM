@@ -267,6 +267,7 @@ def m_modelo_info(modelo: str) -> dict:
         "niveles": m.esquema.niveles,
         "mejor_nivel": m.esquema.mejor_nivel,
         "metodo_pesos": m.fcm.config.metodo_pesos,
+        "sesgo": m.fcm.config.sesgo,
         "conceptos": m.conceptos(),
         "aristas": m.aristas(),
         "influencias": m.influencias(),
@@ -275,6 +276,8 @@ def m_modelo_info(modelo: str) -> dict:
             "beta": m.config_prescripcion.beta_esfuerzo,
             "delta_max": m.config_prescripcion.delta_max,
             "solo_incrementos": m.config_prescripcion.solo_incrementos,
+            "condicion_columna": m.config_prescripcion.condicion_columna,
+            "condicion_delta_max": m.config_prescripcion.condicion_delta_max,
         },
     }
 
@@ -377,11 +380,12 @@ def opciones_desde_dict(datos: dict, esquema_dict: dict) -> OpcionesPipeline:
             alpha_l2=float(datos.get("alpha_l2", 1e-3)),
             metodo_pesos=metodo,
             balancear_niveles=bool(datos.get("balancear_niveles", False)),
+            sesgo=bool(datos.get("sesgo", True)),
         ),
         config_seleccion=seleccion,
         config_ag=ag,
         config_prescripcion=ConfigPrescripcion(
-            beta_esfuerzo=float(datos.get("beta", 0.05)),
+            beta_esfuerzo=float(datos.get("beta", ConfigPrescripcion.beta_esfuerzo)),
             solo_incrementos=not bool(datos.get("permitir_reducciones", False)),
             delta_max=float(delta_max) if delta_max else None,
         ),
@@ -465,6 +469,7 @@ def entrenar(datos: Path, esquema: Path, opciones: Path | None, salida: Path) ->
             "niveles": objeto.niveles,
             "mejor_nivel": objeto.mejor_nivel,
             "metodo_pesos": r.config_fcm.metodo_pesos,
+            "sesgo": r.config_fcm.sesgo,
             "aristas_excluidas": [list(a) for a in r.opciones.aristas_excluidas],
             "conceptos": modelo.conceptos(),
             "aristas": modelo.aristas(),
