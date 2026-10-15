@@ -334,3 +334,23 @@ def test_textos_usan_el_sujeto_y_la_coma_decimal(tmp_path):
         {"columna": "desercion", "rol": "objetivo", "codificacion": "numerica"},
     ]}), 9.5)
     assert list(umbral.niveles) == ["<9,5", "≥9,5"]
+
+
+def test_nivel_inexistente_es_un_error_con_los_niveles_validos(tmp_path):
+    from prvfcm.servicio import m_prescribir_perfil, m_resumen_prescripciones
+
+    ruta = tmp_path / "datos.csv"
+    dataset_desercion(400).to_csv(ruta, index=False)
+    esquema = esquema_desde_dict(esquema_desercion())
+    datos = cargar_datos(ruta, esquema)
+    r = ejecutar(datos, esquema, opciones_desde_dict({"validacion_cruzada": False, "ag": {"generaciones": 10}, "reconstruccion": False}))
+    carpeta = tmp_path / "modelo"
+    r.guardar_resultados(carpeta)
+    guardar_modelo(r, carpeta / "modelo.json")
+    mensaje = 'El nivel "response" no existe; los niveles son: Sí, No.'
+    with pytest.raises(ValueError, match=mensaje):
+        m_resumen_prescripciones(str(carpeta), "response")
+    assert m_resumen_prescripciones(str(carpeta), "Sí")["n"] > 0
+    perfil = {c: datos.iloc[0][c] for c in esquema.columnas_origen if c != "desercion"}
+    with pytest.raises(ValueError, match=mensaje):
+        m_prescribir_perfil(str(carpeta / "modelo.json"), perfil, nivel_meta="response")

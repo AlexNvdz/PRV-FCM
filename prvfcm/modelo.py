@@ -195,10 +195,16 @@ class ModeloPRVFCM:
             "dinamicos": {self.pre.columnas[i]: float(final[i]) for i in self.pre.indices_dinamicos},
         }
 
+    def validar_nivel(self, nivel) -> str:
+        """El nivel como texto si es uno de los del objetivo; si no, ValueError con la lista de los válidos."""
+        if str(nivel) not in self.esquema.niveles:
+            raise ValueError(f'El nivel "{nivel}" no existe; los niveles son: {", ".join(self.esquema.niveles)}.')
+        return str(nivel)
+
     def meta(self, nivel: str | None = None) -> dict:
         """Estado deseado del objetivo: el valor normalizado de ``nivel`` (por defecto el mejor, 1)."""
-        if nivel is not None and nivel not in self.esquema.niveles:
-            raise ValueError(f"El nivel {nivel} no existe; use uno de {', '.join(self.esquema.niveles)}.")
+        if nivel is not None:
+            nivel = self.validar_nivel(nivel)
         valor = float(self.esquema.niveles[nivel]) if nivel is not None else 1.0
         return {
             "valor": valor,

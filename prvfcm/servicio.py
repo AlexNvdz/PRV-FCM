@@ -272,6 +272,8 @@ def m_resumen_prescripciones(directorio: str, nivel: str | None = None) -> dict:
     ruta = str(carpeta / "recomendaciones.csv")
     tabla = _cacheado(("recomendaciones", ruta, _marca(ruta)), lambda: pd.read_csv(ruta))
     m = _modelo(str(carpeta / "modelo.json"))
+    if nivel not in (None, ""):
+        nivel = m.validar_nivel(nivel)  # Un nivel que no existe es un error, no un filtro vacío.
     ruta_metricas = carpeta / "metricas.json"
     metricas = json.loads(ruta_metricas.read_text(encoding="utf-8")) if ruta_metricas.exists() else None
     nombre_objetivo = m.esquema.conceptos[m.pre.indice_objetivo].nombre

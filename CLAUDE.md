@@ -21,7 +21,7 @@ Python (el entorno es `.venv`, Python 3.14; `requirements.txt` incluye networkx,
 .venv/Scripts/python.exe main.py --perfil articulo --datos data/xAPI-Edu-Data.csv --binarizar-objetivo M   # protocolo del artículo
 .venv/Scripts/python.exe main.py --esquema data/esquemas/heart.json --datos data/heart.csv
 .venv/Scripts/python.exe experimentos.py          # ablación en resultados_experimentos/ (reanudable; marketing con PSO tarda ~45 min)
-.venv/Scripts/python.exe -m pytest -q             # 80 pruebas (~25 s); tests/test_articulo.py cubre perfiles, PSO, expertos y reconstrucción
+.venv/Scripts/python.exe -m pytest -q             # 81 pruebas (~25 s); tests/test_articulo.py cubre perfiles, PSO, expertos y reconstrucción
 .venv/Scripts/python.exe -m pytest tests/test_motor_app.py::test_worker_responde_una_linea_json_por_peticion -q
 .venv/Scripts/python.exe -m prvfcm.servicio worker | entrenar --datos D --esquema E --opciones O --salida DIR | esquema-xapi
 ```
@@ -31,7 +31,7 @@ App (desde `app/`):
 ```bash
 npm run app            # build + servidor en http://localhost:3001 (solo 127.0.0.1)
 npm run dev            # Vite :5173 (proxy /api) + API :3001 con recarga
-npm test               # node:test, 24 pruebas; una: node --test server/test/agente.test.js
+npm test               # node:test, 25 pruebas; una: node --test server/test/agente.test.js
 npm run typecheck      # TypeScript 7 sobre web/
 npm run build          # web/dist, que sirve Express
 ```
@@ -85,7 +85,7 @@ npm run build          # web/dist, que sirve Express
 - Referencia (semilla 42, «mejorado»): exactitud FCM 78,9 %, bosque 82,9 %, tasa de éxito 7,2 → 46,4 %, clasificados H por el bosque 8,1 → 32,5 %. Con 7 ausencias o menos, el FCM promete H al 98,3 % y el bosque al 68,0 %.
 - Fórmulas del artículo verificadas en el PDF: aptitud de la Tabla 4 = Σ_j |f(paso de la regla sobre v^s) − f(paso sobre v̂)|; en la reescalada la tabla omite el (2v − 1) en un lado (errata: se usa en ambos). PSR ec. 19 = Σ acciones prescritas / Σ reales. Convergencia de la inferencia |Δ| ≤ 1e-4 en «articulo» (1e-5 en «mejorado»).
 - La validación por reconstrucción del artículo no se reproduce: MAE 0,28-0,81 frente a 0,007-0,036, R² negativo en las 27 corridas y `psr_ec19` > 1 en 22. Con β = 0 el problema está subdeterminado y el AG lleva las acciones a los extremos. «articulo» incluso empeora la tasa de éxito en xAPI 480 binarizado (PSO 14,6 → 9,8 %), mientras «mejorado» la sube (12,2 → 34,1 %; bosque 17,1 → 48,8 %).
-- heart: se supone `target = 1` = sin enfermedad (tiene más thalach y menos oldpeak, exang y ca); falta que el usuario lo confirme. Sus acciones (trestbps, chol) son recomendaciones, como la glucosa del artículo.
+- heart: se supone `target = 1` = sin enfermedad (tiene más thalach y menos oldpeak, exang y ca; invertirlo empeora las prescripciones); falta que el usuario lo confirme. Sus acciones (trestbps, chol) son recomendaciones, como la glucosa del artículo. «articulo» con PSO literal aprende chol → target = +1 (signo contrario a los datos, r = −0,085) y, con β = 0 y sin siembra, sube el colesterol al 59,5 % de los pacientes (el 213: 307 → 564); «mejorado» no sube a nadie. Remedios pendientes de decisión del usuario (`resultados_experimentos/analisis_heart_colesterol.md`): dirección y rango por acción (ec. 13) o signo fijado por expertos.
 - Dataset de deserción del usuario (`student dropout.csv`, 649 filas, UCI con columnas renombradas): `Dropped_Out` es exactamente `Final_Grade < 10`, así que se excluye (su esquema original lo tenía como concepto con `Final_Grade` de objetivo: fuga) y 15 % deserta. Sin equilibrar, el FCM casi no detecta desertores (recall 30 %); con niveles equilibrados, 67 %. Con `Grade_1`/`Grade_2` como conceptos, las acciones pesan poco y el AG casi no cambia a nadie; sin ellas, el PSR del FCM pasa de 37 % a 60 %.
 - El README documenta estos resultados (secciones "Perfiles", "Ablación" y "Comparación con los artículos", con las desviaciones respecto al artículo): actualizarlo si cambia el pipeline.
 
