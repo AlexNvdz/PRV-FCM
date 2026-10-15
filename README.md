@@ -55,8 +55,8 @@ modelo-prescriptivo/
 ## Aplicación web (Pizarra)
 
 `app/` contiene una aplicación local con interfaz web sobre este mismo motor,
-organizada en los cinco pasos: subir datasets de rendimiento o deserción (CSV o
-Excel) y leer su reporte inicial; clasificar cada columna como C_T, C_P o C_S
+organizada en los cinco pasos: subir datasets de cualquier tema (rendimiento,
+deserción, salud, mercadeo; CSV o Excel) y leer su reporte inicial; clasificar cada columna como C_T, C_P o C_S
 (arrastrándola en un tablero o desde la tabla) y explorar cómo se relacionan
 las variables entre sí y con el objetivo (mapa de calor de correlaciones,
 dispersión por nivel, perfil medio de cada nivel); entrenar el PRV-FCM
@@ -64,9 +64,12 @@ eligiendo el método de extracción de W y la máscara causal, con la matriz W
 como mapa de calor y el grafo dirigido de pesos; simular acciones por
 estudiante viendo cada iteración de la inferencia y prescribir con el AG,
 cuya evolución se reproduce generación por generación; y leer el informe con
-el grafo NetworkX, la convergencia del AG y el reporte en frases. Un asistente
-(`qwen2.5:7b` en Ollama), limitado al tema del proyecto, consulta los datos y
-las prescripciones y redacta recomendaciones. Instrucciones en
+el grafo NetworkX, la convergencia del AG y el reporte en frases. Aparte,
+`/consulta` es el modo de usuario final: elige un modelo por tema, ingresa los
+datos de un caso y recibe la prescripción, con registro del resultado
+observado. Un asistente (`qwen2.5:7b` en Ollama), limitado al tema del dataset
+activo, consulta los datos y las prescripciones y redacta recomendaciones.
+Instrucciones en
 [app/README.md](app/README.md).
 
 ```powershell

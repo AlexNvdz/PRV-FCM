@@ -44,14 +44,25 @@ anterior (guardar la clasificación, entrenar el modelo).
    concepto prescriptivo C_P, o concepto del sistema C_S (inmutable o mutable).
    El rol se cambia arrastrando la tarjeta de la columna entre los carriles del
    tablero de clasificación (o con las flechas del teclado) o desde la tabla.
-   "Sugerir con IA" pide roles y nombres a qwen2.5. Un resumen muestra los
+   "Sugerir con IA" pide roles y nombres a qwen2.5. Las codificaciones son
+   ordinal, número en texto, nominal (media del objetivo), one-hot, numérica y
+   fecha (días desde la fecha mínima). "Cómo se llama cada registro" fija el
+   sujeto que usan los textos (paciente, cliente; por defecto "registro").
+   Un resumen muestra los
    conceptos numerados tal como los verá el mapa. La pestaña "Relaciones entre
    variables" grafica el objetivo, la correlación de cada variable con él, el
    perfil medio de cada nivel, el mapa de calor de correlaciones (Spearman,
    Pearson o parcial) y la dispersión de dos variables coloreada por nivel.
-3. **Entrenamiento del FCM** (Modelo). Elige cómo se extrae la matriz de pesos
-   W: BPTT (gradiente exacto, recomendado), regresión Ridge o Lasso (con tanh
-   para truncar a [-1, 1]) o correlación parcial. "Equilibrar los niveles del
+3. **Entrenamiento del FCM** (Modelo). Elige el perfil: **Mejorado** (el de
+   trabajo: sesgo, penalización del esfuerzo β = 0,4, tope por ausentismo) o
+   **Artículo** (reproduce a Hoyos, Aguilar y Toro, 2023: PSO, SMOTE, 10
+   pliegues, sin sesgo ni β; solo para comparar). Cada perfil trae sus valores
+   por defecto y se pueden cambiar. Elige cómo se extrae la matriz de pesos
+   W: BPTT (gradiente exacto, recomendado), PSO, regresión Ridge o Lasso,
+   correlación parcial o matriz de expertos (uno o varios CSV
+   `origen,destino,peso`, promediados), la regla de inferencia (Kosko, Kosko
+   modificada, reescalada), la activación (sigmoide o tanh), binarizar el
+   objetivo y SMOTE. "Equilibrar los niveles del
    objetivo" (activada por defecto si un nivel es menos del 25 % de los
    registros, como en la deserción) hace que cada nivel pese lo mismo. La
    máscara de dirección causal opcional elimina aristas lógicamente
@@ -69,7 +80,23 @@ anterior (guardar la clasificación, entrenar el modelo).
 5. **Visualización y recomendaciones** (Informe). Reporte prescriptivo en
    lenguaje natural (por nivel), recomendaciones institucionales redactadas por
    qwen2.5, grafo del mapa generado con NetworkX y matplotlib, convergencia del
-   AG y las demás figuras en PNG; descarga de `recomendaciones.csv`.
+   AG y las demás figuras en PNG; descarga de `recomendaciones.csv`. La sección
+   "Validación según el artículo" muestra sus Tablas 11 y 12 (MAE, MSE, RMSE y
+   R² entre acciones prescritas y reales, pruebas t o Wilcoxon) y la PSR de su
+   ecuación 19, un cociente distinto de nuestra tasa de éxito prescriptivo.
+
+## Consulta (usuario final)
+
+`/consulta` está fuera de la barra de pasos y es para quien solo quiere una
+recomendación: elige un modelo entrenado por tema (el nombre del dataset; los
+del perfil Artículo aparecen aparte como "Solo para experimentos", con un
+aviso), llena el formulario que se arma desde el esquema del modelo (datos que
+no cambian, estado actual, acciones actuales; un campo vacío toma el valor
+típico), fija el nivel deseado y, si quiere, valores deseados de los mutables, y
+recibe la prescripción con su reporte, en CSV o para imprimir. "Registrar
+resultado" guarda las acciones aplicadas y el resultado observado en
+`almacen/modelos/<id>/seguimiento.jsonl` (etapa de seguimiento de García et al.,
+2025); la lista se exporta a CSV. Todavía no se usa para reentrenar.
 
 Cada prescripción individual (estudiante o perfil) muestra los niveles antes y
 después, las acciones con su cambio y el porcentaje de su rango, el reporte en
@@ -83,8 +110,11 @@ frente a las prescritas.
 
 ## Asistente
 
-Chat con qwen2.5 limitado a rendimiento, deserción y este proyecto (filtro de
-tema previo). Consulta los datos y el modelo con 11 herramientas: resumen de
+Chat con qwen2.5 limitado al tema del dataset activo (sus registros, su
+objetivo y sus acciones), a PRV-FCM y a la aplicación (filtro de tema previo).
+Conoce los niveles del modelo y, si una herramienta responde con error (por
+ejemplo, un nivel que no existe), corrige los argumentos y reintenta una vez.
+Consulta los datos y el modelo con 11 herramientas: resumen de
 datos y del modelo, pesos del mapa, estadísticas de una variable,
 correlaciones entre todas las variables, relación entre dos variables,
 búsqueda, análisis y simulación de un estudiante, perfil de riesgo y resumen de
@@ -120,7 +150,9 @@ Además del dataset del proyecto, se probó con
 [Predict Students' Dropout and Academic Success](https://archive.ics.uci.edu/dataset/697)
 de UCI (4424 estudiantes, separador punto y coma, objetivo Dropout < Enrolled <
 Graduate). Allí conviene marcar como acciones, por ejemplo, la beca y la
-matrícula al día.
+matrícula al día. También se probó fuera de la educación con
+`data/heart.csv` (pacientes) y `data/marketing_campaign.csv` (clientes); sus
+esquemas de referencia están en `data/esquemas/`.
 
 ## Pruebas
 
