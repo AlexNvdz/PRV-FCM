@@ -12,7 +12,7 @@ import type { Codificacion, ColumnaEsquema, Dataset, Esquema, PerfilColumna, Rol
 import { clase, colorNivel, DESCRIPCION_ROL, NOMBRE_CODIFICACION, NOMBRE_ROL, rolConNotacion } from '../utilidades';
 
 const ROLES: Rol[] = ['objetivo', 'accion', 'mutable', 'inmutable', 'excluir'];
-const CODIFICACIONES: Codificacion[] = ['numerica', 'ordinal', 'nominal', 'one_hot', 'numero_en_texto'];
+const CODIFICACIONES: Codificacion[] = ['numerica', 'ordinal', 'nominal', 'one_hot', 'numero_en_texto', 'fecha'];
 const MAX_ONE_HOT = 30;
 
 function copia<T>(valor: T): T {
@@ -277,7 +277,7 @@ export function EditorEsquema({ dataset }: { dataset: Dataset }) {
         if (c.columna !== columna) return rol === 'objetivo' && c.rol === 'objetivo' ? { ...c, rol: 'inmutable' as Rol } : c;
         const nueva: ColumnaEsquema = { ...c, rol };
         if (rol !== 'excluir' && !nueva.codificacion && perfil) Object.assign(nueva, copia(perfil.sugerencia));
-        if (rol === 'objetivo' && (nueva.codificacion === 'nominal' || nueva.codificacion === 'numero_en_texto' || nueva.codificacion === 'one_hot')) {
+        if (rol === 'objetivo' && (nueva.codificacion === 'nominal' || nueva.codificacion === 'numero_en_texto' || nueva.codificacion === 'one_hot' || nueva.codificacion === 'fecha')) {
           nueva.codificacion = 'ordinal';
           nueva.orden = categoriasDe(perfil);
           delete nueva.categorias;
@@ -543,10 +543,10 @@ export function EditorEsquema({ dataset }: { dataset: Dataset }) {
                         onChange={(e) => cambiarCodificacion(c.columna, e.target.value as Codificacion)}
                       >
                         {CODIFICACIONES.map((o) => {
-                          // One-hot solo en conceptos del sistema y con una lista de categorías manejable.
-                          const sinOneHot = o === 'one_hot' && (c.rol === 'accion' || c.rol === 'objetivo' || !perfil?.categorias || perfil.unicos > MAX_ONE_HOT);
+                          // One-hot solo en conceptos del sistema y con una lista de categorías manejable; una fecha no puede ser el objetivo.
+                          const deshabilitada = (o === 'one_hot' && (c.rol === 'accion' || c.rol === 'objetivo' || !perfil?.categorias || perfil.unicos > MAX_ONE_HOT)) || (o === 'fecha' && c.rol === 'objetivo');
                           return (
-                            <option key={o} value={o} disabled={sinOneHot}>
+                            <option key={o} value={o} disabled={deshabilitada}>
                               {NOMBRE_CODIFICACION[o]}
                             </option>
                           );

@@ -8,47 +8,75 @@ import { Link } from 'react-router';
 import { api, escucharEntrenamiento } from '../api';
 import { FlujoPasos } from '../componentes/FlujoPasos';
 import { GraficaDivergente, GraficaSeleccion } from '../componentes/graficas';
+import { EditorExpertos } from '../componentes/expertos';
 import { MapaFCM } from '../componentes/MapaFCM';
 import { MatrizConfusion } from '../componentes/MatrizConfusion';
 import { MapaCalor } from '../componentes/relaciones';
 import { Aviso, Barra, Boton, Cargando, Clase, Dato, Encabezado, estiloControl, Formula, Seccion, Vacio } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import { nivelesDe, useDataset, useEstadisticas, useModelo } from '../hooks';
-import type { Dataset, EventoMotor, Graficas, MetodoPesos, ModeloMeta, OpcionesEntrenamiento } from '../tipos';
-import { clase, duracion, entero, fecha, NOMBRE_METODO, NOMBRE_ROL, num, pct, pctDe } from '../utilidades';
+import type { Dataset, DefectosPerfil, EventoMotor, Graficas, MetodoPesos, ModeloMeta, OpcionDePerfil, OpcionesEntrenamiento, PerfilModelo } from '../tipos';
+import { clase, duracion, entero, fecha, NOMBRE_ACTIVACION, NOMBRE_INFERENCIA, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num, pct, pctDe } from '../utilidades';
 
+// Las opciones que dependen del perfil empiezan vacías: el motor usa las del perfil elegido.
 const OPCIONES_INICIALES: OpcionesEntrenamiento = {
-  proporcion_prueba: 0.3,
+  perfil: 'mejorado',
   division: 'agrupada',
   validacion_cruzada: 'completa',
-  metodo_pesos: 'bptt',
   balancear_niveles: false,
   aristas_excluidas: [],
   lambda: 1,
   alpha_l2: 0.001,
-  beta: 0.4,
   delta_max: null,
-  permitir_reducciones: false,
   semilla: 42,
   ag: {},
 };
 
+const OPCIONES_DE_PERFIL: OpcionDePerfil[] = ['proporcion_prueba', 'pliegues', 'metodo_pesos', 'inferencia', 'activacion', 'beta', 'permitir_reducciones', 'smote', 'busqueda_ag', 'binarizar_objetivo'];
+
+/** Quita las opciones explícitas que dependen del perfil: vuelven a seguir al perfil. */
+function sinExplicitas(o: OpcionesEntrenamiento): OpcionesEntrenamiento {
+  const copia = { ...o };
+  for (const k of OPCIONES_DE_PERFIL) delete copia[k];
+  return copia;
+}
+
+/** Valores por defecto de un perfil en una frase, para mostrarlos junto al selector. */
+function resumenPerfil(d: DefectosPerfil) {
+  return [
+    `W por ${NOMBRE_METODO[d.metodo_pesos] ?? d.metodo_pesos}`,
+    `inferencia ${d.inferencia ? NOMBRE_INFERENCIA[d.inferencia] : 'elegida por validación cruzada'}`,
+    `activación ${d.activacion ? NOMBRE_ACTIVACION[d.activacion].toLowerCase() : 'elegida por validación cruzada'}`,
+    d.sesgo ? 'con sesgo' : 'sin sesgo',
+    `β = ${num(d.beta, 2)}`,
+    d.condicion_delta_max ? `tope por ausentismo de ${pctDe(d.condicion_delta_max, 0)}` : 'sin tope por ausentismo',
+    d.permitir_reducciones ? 'permite reducir acciones' : 'solo aumenta acciones',
+    d.mutables_dinamicos ? 'mutables dinámicos' : 'mutables fijos',
+    d.smote ? 'SMOTE al entrenar' : 'sin SMOTE',
+    `${pctDe(d.proporcion_prueba, 0)} de prueba`,
+    `${d.pliegues} pliegues`,
+    d.busqueda_ag ? 'busca los parámetros del AG' : 'AG con parámetros fijos',
+  ].join(', ');
+}
+
 /** Opciones de la interfaz a partir de las que guardó un entrenamiento (formato del motor). */
 function opcionesDesdeModelo(opciones: Record<string, unknown>): OpcionesEntrenamiento {
   const o = opciones as Partial<OpcionesEntrenamiento> & { validacion_cruzada?: boolean; rejilla_lambda?: number[] };
+  // Solo vuelven las opciones que se enviaron explícitas; los 3 pliegues de la CV rápida no cuentan.
+  const explicitas: Record<string, unknown> = {};
+  for (const k of OPCIONES_DE_PERFIL) if (o[k] !== undefined && o[k] !== null && !(k === 'pliegues' && o.rejilla_lambda)) explicitas[k] = o[k];
   return {
     ...OPCIONES_INICIALES,
-    proporcion_prueba: o.proporcion_prueba ?? OPCIONES_INICIALES.proporcion_prueba,
+    ...(explicitas as Partial<OpcionesEntrenamiento>),
+    perfil: o.perfil ?? 'mejorado',
+    matrices_expertos: o.matrices_expertos,
     division: o.division ?? OPCIONES_INICIALES.division,
     validacion_cruzada: o.validacion_cruzada === false ? 'ninguna' : o.rejilla_lambda ? 'rapida' : 'completa',
-    metodo_pesos: o.metodo_pesos ?? 'bptt',
     balancear_niveles: o.balancear_niveles ?? false,
     aristas_excluidas: o.aristas_excluidas ?? [],
     lambda: o.lambda ?? OPCIONES_INICIALES.lambda,
     alpha_l2: o.alpha_l2 ?? OPCIONES_INICIALES.alpha_l2,
-    beta: o.beta ?? OPCIONES_INICIALES.beta,
     delta_max: o.delta_max ?? null,
-    permitir_reducciones: o.permitir_reducciones ?? false,
     semilla: o.semilla ?? OPCIONES_INICIALES.semilla,
     ag: o.ag ?? {},
   };
@@ -65,6 +93,8 @@ const METODOS: { valor: MetodoPesos; texto: string; ayuda: string }[] = [
   { valor: 'ridge', texto: 'Regresión Ridge', ayuda: 'Regresión lineal con penalización L2 por concepto dinámico; tanh trunca a [−1, 1]. Instantánea, 77 % en xAPI.' },
   { valor: 'lasso', texto: 'Regresión Lasso', ayuda: 'Penalización L1: anula los pesos débiles; tanh trunca a [−1, 1]. 77 % en xAPI.' },
   { valor: 'correlacion_parcial', texto: 'Correlación parcial', ayuda: 'w = correlación de cada par dados los demás. Describe la estructura, pero no calibra la inferencia: 48 % en xAPI.' },
+  { valor: 'pso', texto: 'PSO (artículo)', ayuda: 'Enjambre de partículas: cada partícula es una W completa y el enjambre busca la de menor error del estado final. Más lento que BPTT.' },
+  { valor: 'expertos', texto: 'Matriz de expertos', ayuda: 'W es el consenso (media) de las matrices que suban los expertos. No aprende de los datos ni tiene sesgo.' },
 ];
 
 const ETAPAS = [
@@ -193,6 +223,10 @@ function MatrizW({ graficas }: { graficas: Graficas }) {
   );
 }
 
+// Tareas con barra de progreso dentro de cada etapa, en el orden en que corren.
+const TAREAS: Record<string, string[]> = { seleccion: ['validacion_cruzada'], prescripcion: ['busqueda_ag', 'prescripcion'], evaluacion: ['reconstruccion'] };
+const NOMBRE_TAREA: Record<string, string> = { busqueda_ag: 'Buscando los parámetros del AG', reconstruccion: 'Validación según el artículo' };
+
 function Progreso({ eventos, error }: { eventos: EventoMotor[]; error?: string }) {
   const etapas = new Map(eventos.filter((e) => e.evento === 'etapa').map((e) => [e.etapa, e.mensaje]));
   const progreso = Object.fromEntries(
@@ -205,8 +239,8 @@ function Progreso({ eventos, error }: { eventos: EventoMotor[]; error?: string }
       {ETAPAS.map((etapa) => {
         const hecha = etapas.has(etapa.clave) && etapa.clave !== ultima;
         const actual = etapa.clave === ultima && !errorFinal && !eventos.some((e) => e.evento === 'fin');
-        const tarea = etapa.clave === 'seleccion' ? 'validacion_cruzada' : etapa.clave === 'prescripcion' ? 'prescripcion' : null;
-        const enCursoTarea = tarea && progreso[tarea] !== undefined && progreso[tarea] < 100 && !etapas.has(etapa.clave === 'seleccion' ? 'seleccion' : 'evaluacion');
+        const tarea = TAREAS[etapa.clave]?.find((t) => progreso[t] !== undefined && progreso[t] < 100);
+        const enCursoTarea = tarea && !etapas.has(etapa.clave === 'seleccion' ? 'seleccion' : 'evaluacion');
         return (
           <li key={etapa.clave} className="flex gap-3">
             <span className="mt-0.5">
@@ -221,7 +255,12 @@ function Progreso({ eventos, error }: { eventos: EventoMotor[]; error?: string }
             <div className="min-w-0 flex-1 text-sm">
               <p className={clase(etapas.has(etapa.clave) || enCursoTarea ? 'text-tinta' : 'text-tinta-3')}>{etapa.texto}</p>
               {etapas.get(etapa.clave) && <p className="text-xs text-tinta-2">{etapas.get(etapa.clave)}</p>}
-              {enCursoTarea && <Barra valor={progreso[tarea!]} className="mt-1.5 max-w-sm" />}
+              {enCursoTarea && (
+                <>
+                  {NOMBRE_TAREA[tarea!] && <p className="mt-1 text-xs text-tinta-2">{NOMBRE_TAREA[tarea!]}</p>}
+                  <Barra valor={progreso[tarea!]} className="mt-1.5 max-w-sm" />
+                </>
+              )}
             </div>
           </li>
         );
@@ -256,7 +295,19 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
     if (equilibrioElegido || !estadisticas.data) return;
     setOpciones((o) => (o.balancear_niveles === desbalanceado ? o : { ...o, balancear_niveles: desbalanceado }));
   }, [equilibrioElegido, estadisticas.data, desbalanceado]);
-  const entrenar = useMutation({ mutationFn: () => api.entrenar(dataset.id, opciones), onSuccess: alIniciar });
+  const perfiles = useQuery({ queryKey: ['perfiles'], queryFn: api.perfiles, staleTime: Infinity });
+  const defectos = perfiles.data?.[opciones.perfil];
+  /** Valor que usará el motor: el explícito o, si no hay, el del perfil. */
+  const efectivo = <K extends OpcionDePerfil>(k: K) => (opciones[k] ?? defectos?.[k] ?? undefined) as OpcionesEntrenamiento[K];
+  const cambiadas = OPCIONES_DE_PERFIL.filter((k) => opciones[k] !== undefined);
+  const metodo = efectivo('metodo_pesos');
+  const objetivo = dataset.esquema?.columnas.find((c) => c.rol === 'objetivo');
+  const nivelesObjetivo = nivelesDe(dataset.esquema);
+  const faltanExpertos = metodo === 'expertos' && !opciones.matrices_expertos?.length;
+  const entrenar = useMutation({
+    mutationFn: () => api.entrenar(dataset.id, { ...opciones, matrices_expertos: metodo === 'expertos' ? opciones.matrices_expertos : undefined }),
+    onSuccess: alIniciar,
+  });
   const ponerExcluidas = useMemo(() => (aristas: [string, string][]) => setOpciones((o) => ({ ...o, aristas_excluidas: aristas })), []);
   const poner = <K extends keyof OpcionesEntrenamiento>(clave: K, valor: OpcionesEntrenamiento[K]) => setOpciones((o) => ({ ...o, [clave]: valor }));
   const ponerAg = (clave: keyof OpcionesEntrenamiento['ag'], valor: string) =>
@@ -276,11 +327,40 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
       className="space-y-6"
     >
       <fieldset>
+        <legend className="text-sm font-medium text-tinta">Perfil de entrenamiento</legend>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {(['mejorado', 'articulo'] as PerfilModelo[]).map((p) => (
+            <label key={p} className={clase('cursor-pointer rounded-lg border px-3 py-2.5 text-sm', opciones.perfil === p ? 'border-tinta bg-hoja-2' : 'border-linea')}>
+              <input type="radio" name="perfil" className="sr-only" checked={opciones.perfil === p} onChange={() => setOpciones((o) => ({ ...sinExplicitas(o), perfil: p }))} />
+              <span className="font-medium text-tinta">{p === 'mejorado' ? 'Mejorado (recomendado)' : 'Artículo (Hoyos, Aguilar y Toro, 2023)'}</span>
+              <span className="mt-0.5 block text-xs text-tinta-2">
+                {p === 'mejorado' ? 'Lo que este proyecto validó: sesgo, planes moderados y tope por ausentismo.' : 'El protocolo exacto del artículo, para reproducir sus tablas.'}
+              </span>
+              {perfiles.data && <span className="mt-1.5 block text-xs text-tinta-3">Por defecto: {resumenPerfil(perfiles.data[p])}.</span>}
+            </label>
+          ))}
+        </div>
+        {perfiles.isError && (
+          <Aviso tipo="error" className="mt-2">
+            No se pudieron leer los valores de los perfiles: {perfiles.error.message}
+          </Aviso>
+        )}
+        {cambiadas.length > 0 && (
+          <p className="mt-2 text-xs text-tinta-2">
+            Cambió {cambiadas.length === 1 ? 'un valor' : `${cambiadas.length} valores`} del perfil; lo que cambie manda sobre el perfil.{' '}
+            <button type="button" className="underline underline-offset-2 hover:text-tinta" onClick={() => setOpciones(sinExplicitas)}>
+              Volver a los valores del perfil
+            </button>
+          </p>
+        )}
+      </fieldset>
+
+      <fieldset>
         <legend className="text-sm font-medium text-tinta">Método de extracción de la matriz de pesos W</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {METODOS.map((m) => (
-            <label key={m.valor} className={clase('cursor-pointer rounded-lg border px-3 py-2.5 text-sm', opciones.metodo_pesos === m.valor ? 'border-tinta bg-hoja-2' : 'border-linea')}>
-              <input type="radio" name="metodo" className="sr-only" checked={opciones.metodo_pesos === m.valor} onChange={() => poner('metodo_pesos', m.valor)} />
+            <label key={m.valor} className={clase('cursor-pointer rounded-lg border px-3 py-2.5 text-sm', metodo === m.valor ? 'border-tinta bg-hoja-2' : 'border-linea')}>
+              <input type="radio" name="metodo" className="sr-only" checked={metodo === m.valor} onChange={() => poner('metodo_pesos', m.valor)} />
               <span className="font-medium text-tinta">{m.texto}</span>
               <span className="mt-0.5 block text-xs text-tinta-2">{m.ayuda}</span>
             </label>
@@ -288,12 +368,21 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
         </div>
       </fieldset>
 
+      {metodo === 'expertos' && (
+        <section className="rounded-lg border border-linea px-4 py-3 text-sm">
+          <h3 className="font-medium text-tinta">Matrices de los expertos</h3>
+          <div className="mt-2">
+            <EditorExpertos dataset={dataset} matrices={opciones.matrices_expertos ?? []} alCambiar={(m) => setOpciones((o) => ({ ...o, matrices_expertos: m }))} />
+          </div>
+        </section>
+      )}
+
       <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
           className="mt-0.5 size-4 accent-[var(--pizarra)]"
           checked={opciones.balancear_niveles}
-          disabled={opciones.metodo_pesos === 'correlacion_parcial'}
+          disabled={metodo === 'correlacion_parcial' || metodo === 'expertos'}
           onChange={(e) => {
             setEquilibrioElegido(true);
             poner('balancear_niveles', e.target.checked);
@@ -305,7 +394,7 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
             {minoritario
               ? `El nivel ${minoritario.etiqueta} es solo el ${pct(100 * minoritario.proporcion)} de los registros: sin equilibrar, el mapa tiende a predecir el nivel frecuente y no detecta a quienes están en riesgo. `
               : 'Cada registro pesa según la frecuencia de su nivel; útil cuando un nivel es mucho más frecuente. '}
-            λ y α se eligen entonces por exactitud equilibrada. No aplica a la correlación parcial.
+            λ y α se eligen entonces por exactitud equilibrada. No aplica a la correlación parcial ni a los expertos.
           </span>
         </span>
       </label>
@@ -358,6 +447,103 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
         </div>
       </fieldset>
 
+      <fieldset className="space-y-4">
+        <legend className="text-sm font-medium text-tinta">Inferencia, objetivo y evaluación</legend>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="inferencia" className="text-sm font-medium">Regla de inferencia</label>
+            <select
+              id="inferencia"
+              className={estiloControl}
+              value={opciones.inferencia ?? ''}
+              onChange={(e) => poner('inferencia', (e.target.value || undefined) as OpcionesEntrenamiento['inferencia'])}
+            >
+              <option value="">Según el perfil ({defectos?.inferencia ? NOMBRE_INFERENCIA[defectos.inferencia] : 'la elige la validación cruzada'})</option>
+              {Object.entries(NOMBRE_INFERENCIA).map(([v, t]) => (
+                <option key={v} value={v}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="activacion" className="text-sm font-medium">Función de activación</label>
+            <select
+              id="activacion"
+              className={estiloControl}
+              value={opciones.activacion ?? ''}
+              onChange={(e) => poner('activacion', (e.target.value || undefined) as OpcionesEntrenamiento['activacion'])}
+            >
+              <option value="">Según el perfil ({defectos?.activacion ? NOMBRE_ACTIVACION[defectos.activacion].toLowerCase() : 'la elige la validación cruzada'})</option>
+              {Object.entries(NOMBRE_ACTIVACION).map(([v, t]) => (
+                <option key={v} value={v}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="binarizar" className="text-sm font-medium">Binarizar el objetivo</label>
+            {objetivo?.codificacion === 'numerica' ? (
+              <input
+                id="binarizar"
+                type="number"
+                step="any"
+                placeholder="Sin binarizar"
+                className={estiloControl}
+                value={typeof opciones.binarizar_objetivo === 'number' ? opciones.binarizar_objetivo : ''}
+                onChange={(e) => poner('binarizar_objetivo', e.target.value === '' ? undefined : Number(e.target.value))}
+              />
+            ) : (
+              <select id="binarizar" className={estiloControl} value={String(opciones.binarizar_objetivo ?? '')} onChange={(e) => poner('binarizar_objetivo', e.target.value || undefined)}>
+                <option value="">Sin binarizar (todos los niveles)</option>
+                {nivelesObjetivo.slice(1).map((n) => (
+                  <option key={n} value={n}>
+                    Éxito desde {n} (≥{n} frente a {'<'}
+                    {n})
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="text-xs text-tinta-3">
+              {objetivo?.codificacion === 'numerica' ? `Umbral en unidades de ${objetivo.columna}: éxito si lo alcanza.` : 'Dos clases, como el éxito o fracaso del artículo.'}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="pliegues" className="text-sm font-medium">Pliegues de la validación</label>
+            <input
+              id="pliegues"
+              type="number"
+              min={2}
+              max={10}
+              step={1}
+              disabled={opciones.validacion_cruzada === 'ninguna'}
+              placeholder={opciones.validacion_cruzada === 'rapida' ? '3 (CV rápida)' : String(defectos?.pliegues ?? '')}
+              className={estiloControl}
+              value={opciones.pliegues ?? ''}
+              onChange={(e) => poner('pliegues', e.target.value === '' ? undefined : Number(e.target.value))}
+            />
+            <p className="text-xs text-tinta-3">De 2 a 10; vacío, el del perfil.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-x-8 gap-y-3">
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4 accent-[var(--pizarra)]" checked={Boolean(efectivo('smote'))} onChange={(e) => poner('smote', e.target.checked)} />
+            <span>
+              <span className="text-tinta">SMOTE en el entrenamiento</span>
+              <span className="block text-xs text-tinta-3">Crea registros sintéticos de los niveles escasos; nunca toca la prueba.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4 accent-[var(--pizarra)]" checked={Boolean(efectivo('busqueda_ag'))} onChange={(e) => poner('busqueda_ag', e.target.checked)} />
+            <span>
+              <span className="text-tinta">Buscar los parámetros del AG</span>
+              <span className="block text-xs text-tinta-3">Prueba población, cruce y mutación antes de prescribir. Tarda más.</span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="division" className="text-sm font-medium">División</label>
@@ -369,13 +555,13 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="prueba" className="text-sm font-medium">Datos de prueba (%)</label>
-          <input id="prueba" type="number" min={10} max={50} step={5} className={estiloControl} value={Math.round(opciones.proporcion_prueba * 100)} onChange={(e) => poner('proporcion_prueba', Number(e.target.value) / 100)} />
+          <input id="prueba" type="number" min={10} max={50} step={5} className={estiloControl} value={Math.round((efectivo('proporcion_prueba') ?? 0.3) * 100)} onChange={(e) => poner('proporcion_prueba', Number(e.target.value) / 100)} />
           <p className="text-xs text-tinta-3">Los artículos usan 30 %.</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="beta" className="text-sm font-medium">Penalización del esfuerzo (β)</label>
-          <input id="beta" type="number" min={0} max={5} step={0.05} className={estiloControl} value={opciones.beta} onChange={(e) => poner('beta', Number(e.target.value))} />
-          <p className="text-xs text-tinta-3">0.05 busca el máximo efecto; 0.4 da cambios moderados.</p>
+          <input id="beta" type="number" min={0} max={5} step={0.05} className={estiloControl} value={efectivo('beta') ?? ''} onChange={(e) => poner('beta', e.target.value === '' ? undefined : Number(e.target.value))} />
+          <p className="text-xs text-tinta-3">0 solo mira la meta (artículo); 0.05 busca el máximo efecto; 0.4 da cambios moderados.</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="delta" className="text-sm font-medium">Cambio máximo por acción</label>
@@ -395,7 +581,7 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
       </div>
 
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" className="size-4 accent-[var(--pizarra)]" checked={opciones.permitir_reducciones} onChange={(e) => poner('permitir_reducciones', e.target.checked)} />
+        <input type="checkbox" className="size-4 accent-[var(--pizarra)]" checked={Boolean(efectivo('permitir_reducciones'))} onChange={(e) => poner('permitir_reducciones', e.target.checked)} />
         Permitir recomendar valores menores que los actuales
       </label>
 
@@ -428,9 +614,10 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
       </details>
 
       <div className="flex items-center gap-3">
-        <Boton type="submit" variante="principal" icono={<Play className="size-4" aria-hidden />} cargando={entrenar.isPending} disabled={ocupado}>
+        <Boton type="submit" variante="principal" icono={<Play className="size-4" aria-hidden />} cargando={entrenar.isPending} disabled={ocupado || faltanExpertos}>
           {ocupado ? 'Entrenando…' : 'Entrenar modelo'}
         </Boton>
+        {faltanExpertos && <span className="text-xs text-tinta-2">Suba al menos una matriz de expertos.</span>}
         {entrenar.isError && <Aviso tipo="error">{entrenar.error.message}</Aviso>}
       </div>
     </form>
@@ -458,9 +645,10 @@ function Historial({ modelos, visto, alVer }: { modelos: ModeloMeta[]; visto: st
           </button>
           <span className={clase('text-xs', m.estado === 'listo' ? 'text-bien' : m.estado === 'en_curso' ? 'text-tinta-2' : 'text-critico')}>{estado[m.estado]}</span>
           <span className="text-xs text-tinta-3">
-            {NOMBRE_METODO[(m.opciones.metodo_pesos as MetodoPesos | undefined) ?? 'bptt']}
+            Perfil {NOMBRE_PERFIL[(m.opciones.perfil as PerfilModelo | undefined) ?? 'mejorado'].toLowerCase()},{' '}
+            {m.opciones.metodo_pesos ? NOMBRE_METODO[m.opciones.metodo_pesos as MetodoPesos] : 'método del perfil'}
             {m.opciones.balancear_niveles ? ' con niveles equilibrados' : ''},{' '}
-            {m.opciones.validacion_cruzada ? `CV ${m.opciones.rejilla_lambda ? 'rápida' : 'completa'}` : 'sin CV'}, β = {String(m.opciones.beta ?? 0.05)}
+            {m.opciones.validacion_cruzada ? `CV ${m.opciones.rejilla_lambda ? 'rápida' : 'completa'}` : 'sin CV'}, β = {m.opciones.beta === undefined ? 'del perfil' : String(m.opciones.beta)}
             {Array.isArray(m.opciones.aristas_excluidas) && m.opciones.aristas_excluidas.length ? `, ${m.opciones.aristas_excluidas.length} aristas excluidas` : ''}
             {m.duracionMs ? `, ${duracion(m.duracionMs)}` : ''}
           </span>
@@ -524,8 +712,8 @@ export function Modelo() {
   const niveles = nivelesDe(dataset.esquema);
   const m = modelo.data?.metricas;
   const g = modelo.data?.graficas;
-  // Los modelos entrenados antes del sesgo no traen la clave: equivale a sin sesgo.
-  const conSesgo = g?.sesgo ?? m?.configuracion.fcm.sesgo ?? false;
+  // Sin la clave (modelos antiguos) o con b = 0 en el objetivo (expertos, correlación parcial) no hay sesgo.
+  const conSesgo = Boolean(g?.sesgo ?? m?.configuracion.fcm.sesgo) && Boolean(g?.conceptos.find((c) => c.columna === g.objetivo)?.sesgo);
   const ocupado = Boolean(enCurso) || Boolean(trabajo && !trabajo.terminado);
 
   return (
@@ -576,6 +764,10 @@ export function Modelo() {
                 etiqueta="Método de W"
                 valor={NOMBRE_METODO[m.configuracion.fcm.metodo_pesos ?? 'bptt']}
                 detalle={[
+                  `Perfil ${NOMBRE_PERFIL[m.configuracion.perfil ?? 'mejorado'].toLowerCase()}`,
+                  m.configuracion.fcm.inferencia
+                    ? `${NOMBRE_INFERENCIA[m.configuracion.fcm.inferencia]}, ${NOMBRE_ACTIVACION[m.configuracion.fcm.activacion ?? 'sigmoide'].toLowerCase()}`
+                    : null,
                   conSesgo ? 'Con sesgo' : 'Sin sesgo',
                   m.configuracion.fcm.balancear_niveles ? 'Niveles equilibrados' : null,
                   m.configuracion.aristas_excluidas?.length ? `${m.configuracion.aristas_excluidas.length} aristas excluidas` : 'Sin máscara',

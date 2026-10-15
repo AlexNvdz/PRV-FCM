@@ -246,3 +246,10 @@ body {
   border-radius: 4px;
   padding: 0.05em 0.3em;
 }
+
+/* Impresión de una consulta: solo el resultado */
+@media print {
+  .no-imprimir {
+    display: none !important;
+  }
+}

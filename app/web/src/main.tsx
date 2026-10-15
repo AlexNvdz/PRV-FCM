@@ -10,6 +10,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router';
 import { Marco } from './componentes/Marco';
 import { ProveedorDataset } from './contexto';
 import { Asistente } from './vistas/Asistente';
+import { Consulta } from './vistas/Consulta';
 import { Ayuda } from './vistas/Ayuda';
 import { Datos } from './vistas/Datos';
 import { DatasetDetalle } from './vistas/DatasetDetalle';
@@ -34,6 +35,7 @@ const enrutador = createBrowserRouter([
       { path: 'modelo', element: <Modelo /> },
       { path: 'prescripciones', element: <Prescripciones /> },
       { path: 'informe', element: <Informe /> },
+      { path: 'consulta', element: <Consulta /> },
       { path: 'asistente', element: <Asistente /> },
       { path: 'ayuda', element: <Ayuda /> },
       { path: '*', element: <NoEncontrado /> },

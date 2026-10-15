@@ -12,7 +12,7 @@ import { num } from '../utilidades';
 
 type Valores = Record<string, string | number>;
 
-function opcionesDe(columna: ColumnaEsquema, dataset: Dataset | undefined): string[] | null {
+export function opcionesDe(columna: ColumnaEsquema, dataset: Dataset | undefined): string[] | null {
   if (columna.codificacion === 'ordinal') return columna.orden ?? null;
   if (columna.codificacion === 'one_hot') return columna.categorias ?? null;
   if (columna.codificacion === 'nominal' || columna.codificacion === 'numero_en_texto') {
@@ -22,10 +22,24 @@ function opcionesDe(columna: ColumnaEsquema, dataset: Dataset | undefined): stri
   return null;
 }
 
-function Campo({ columna, valor, dataset, alCambiar }: { columna: ColumnaEsquema; valor: string | number | undefined; dataset?: Dataset; alCambiar: (v: string) => void }) {
+/** Campo de una columna del esquema: lista para categorías, texto para fechas y número para el resto. `vacio` es el texto de un valor sin elegir. */
+export function Campo({
+  columna,
+  valor,
+  dataset,
+  alCambiar,
+  vacio,
+}: {
+  columna: ColumnaEsquema;
+  valor: string | number | undefined;
+  dataset?: Dataset;
+  alCambiar: (v: string) => void;
+  vacio?: string;
+}) {
   const opciones = opcionesDe(columna, dataset);
   const perfil = dataset?.perfil?.perfil.find((p) => p.columna === columna.columna);
   const id = `perfil-${columna.columna}`;
+  const marcador = vacio ?? (perfil?.min !== undefined ? `${num(perfil.min)} a ${num(perfil.max)}` : undefined);
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="truncate text-sm text-tinta" title={columna.columna}>
@@ -33,7 +47,7 @@ function Campo({ columna, valor, dataset, alCambiar }: { columna: ColumnaEsquema
       </label>
       {opciones ? (
         <select id={id} className={estiloControl} value={valor === undefined ? '' : String(valor)} onChange={(e) => alCambiar(e.target.value)}>
-          {!opciones.includes(String(valor ?? '')) && <option value={String(valor ?? '')}>{String(valor ?? '') || 'Elija un valor'}</option>}
+          {!opciones.includes(String(valor ?? '')) && <option value={String(valor ?? '')}>{String(valor ?? '') || vacio || 'Elija un valor'}</option>}
           {opciones.map((o) => (
             <option key={o} value={o}>
               {o}
@@ -43,12 +57,12 @@ function Campo({ columna, valor, dataset, alCambiar }: { columna: ColumnaEsquema
       ) : (
         <input
           id={id}
-          type="number"
+          type={columna.codificacion === 'fecha' ? 'text' : 'number'}
           step="any"
           className={estiloControl}
           value={valor === undefined ? '' : String(valor)}
           onChange={(e) => alCambiar(e.target.value)}
-          placeholder={perfil?.min !== undefined ? `${num(perfil.min)} a ${num(perfil.max)}` : undefined}
+          placeholder={columna.codificacion === 'fecha' ? (vacio ?? perfil?.ejemplos?.[0]) : marcador}
         />
       )}
     </div>

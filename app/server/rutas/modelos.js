@@ -1,5 +1,5 @@
-// /api/modelos: progreso del entrenamiento, resultados, simulación, prescripción individual
-// (también de un perfil de riesgo), figuras del informe y recomendaciones redactadas con qwen2.5.
+// /api/modelos: lista de modelos listos, progreso del entrenamiento, resultados, simulación, prescripción individual
+// (también de un perfil de riesgo), seguimiento de /consulta, figuras del informe y recomendaciones redactadas con qwen2.5.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -7,6 +7,7 @@ import express from 'express';
 import { z } from 'zod';
 
 import { redactarRecomendacion } from '../agente.js';
+import { Almacen } from '../almacen.js';
 import { abrirSSE } from '../sse.js';
 
 function error(status, mensaje) {
@@ -41,6 +42,45 @@ const PrescripcionRecibida = z
   })
   .passthrough();
 
+const Valores = z.record(z.string().min(1).max(200), z.union([z.number().finite(), z.string().max(200)]));
+
+// Retroalimentación de /consulta: qué se aplicó, qué se observó y cuándo.
+const CuerpoSeguimiento = z.object({
+  fecha: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener el formato AAAA-MM-DD.')
+    .refine((f) => !Number.isNaN(Date.parse(`${f}T00:00:00Z`)) && new Date(`${f}T00:00:00Z`).toISOString().startsWith(f), 'La fecha no existe.'),
+  acciones_aplicadas: Valores,
+  resultado_observado: z.union([z.number().finite(), z.string().min(1).max(200)]),
+  nivel_base: z.string().max(80).optional(),
+  nivel_prescrito: z.string().max(80).optional(),
+  acciones_recomendadas: Valores.optional(),
+  perfil: Valores.optional(),
+  nota: z.string().max(1000).optional(),
+});
+
+/** Valida un registro de seguimiento contra el esquema con el que se entrenó el modelo. */
+export function validarSeguimiento(datos, esquema) {
+  const cuerpo = CuerpoSeguimiento.parse(datos);
+  const columnas = new Map(esquema.columnas.filter((c) => c.rol !== 'excluir').map((c) => [c.columna, c]));
+  const acciones = Object.keys(cuerpo.acciones_aplicadas);
+  const ajenas = acciones.filter((a) => columnas.get(a)?.rol !== 'accion');
+  if (!acciones.length) throw error(422, 'Indique al menos una acción aplicada.');
+  if (ajenas.length) throw error(422, `No son acciones del modelo: ${ajenas.join(', ')}.`);
+  for (const [nombre, valores] of [['acciones recomendadas', cuerpo.acciones_recomendadas], ['perfil', cuerpo.perfil]]) {
+    const desconocidas = Object.keys(valores ?? {}).filter((c) => !columnas.has(c));
+    if (desconocidas.length) throw error(422, `Columnas desconocidas en ${nombre}: ${desconocidas.join(', ')}.`);
+  }
+  const objetivo = esquema.columnas.find((c) => c.rol === 'objetivo');
+  const resultado = cuerpo.resultado_observado;
+  if (objetivo?.orden?.length) {
+    if (!objetivo.orden.includes(String(resultado))) throw error(422, `El resultado debe ser uno de: ${objetivo.orden.join(', ')}.`);
+  } else if (typeof resultado !== 'number' && !Number.isFinite(Number(resultado))) {
+    throw error(422, 'El resultado observado debe ser un número.');
+  }
+  return cuerpo;
+}
+
 const CuerpoRedactar = z.discriminatedUnion('tipo', [
   z.object({ tipo: z.literal('individual'), sujeto: z.string().max(120).default('este estudiante'), prescripcion: PrescripcionRecibida }),
   z.object({ tipo: z.literal('poblacion'), nivel: z.string().max(80).nullable().optional() }),
@@ -68,6 +108,17 @@ export function rutasModelos({ almacen, motor, trabajos }) {
       base: { ruta: almacen.rutaDatos(dataset.id), esquema, modelo: path.join(almacen.dirModelo(id), 'modelo.json') },
     };
   }
+
+  // Modelos listos de todos los datasets, para /consulta: el nombre del dataset es el tema.
+  router.get('/', async (_req, res) => {
+    const [modelos, datasets] = await Promise.all([almacen.listarModelos(), almacen.listarDatasets()]);
+    const nombres = new Map(datasets.map((d) => [d.id, d.nombre]));
+    res.json(
+      modelos
+        .filter((m) => m.estado === 'listo' && nombres.has(m.datasetId))
+        .map(({ id, datasetId, creado, opciones }) => ({ id, datasetId, tema: nombres.get(datasetId), creado, opciones })),
+    );
+  });
 
   router.get('/:id', async (req, res) => {
     const modelo = await cargar(req.params.id);
@@ -167,9 +218,24 @@ export function rutasModelos({ almacen, motor, trabajos }) {
   router.post('/:id/prescribir-perfil', async (req, res) => {
     const { base } = await cargarListo(req.params.id);
     const cuerpo = z
-      .object({ perfil: z.record(z.string(), z.union([z.string().max(200), z.number()])), ...OpcionesPrescripcion })
+      .object({ perfil: z.record(z.string(), z.union([z.string().max(200), z.number()])), deseados: Valores.optional(), ...OpcionesPrescripcion })
       .parse(req.body);
-    res.json(await motor.llamar('prescribir_perfil', { modelo: base.modelo, perfil: cuerpo.perfil, ...paramsPrescripcion(cuerpo) }));
+    res.json(
+      await motor.llamar('prescribir_perfil', { modelo: base.modelo, perfil: cuerpo.perfil, deseados: cuerpo.deseados ?? null, ...paramsPrescripcion(cuerpo) }),
+    );
+  });
+
+  // --- Seguimiento (/consulta): resultados observados; no reentrena el modelo ------
+  router.get('/:id/seguimiento', async (req, res) => {
+    const { modelo } = await cargarListo(req.params.id);
+    res.json(await almacen.leerSeguimiento(modelo.id));
+  });
+
+  router.post('/:id/seguimiento', async (req, res) => {
+    const { modelo, base } = await cargarListo(req.params.id);
+    const cuerpo = validarSeguimiento(req.body, base.esquema);
+    const registro = { id: Almacen.nuevoId('sg'), registrado: new Date().toISOString(), ...cuerpo };
+    res.status(201).json(await almacen.agregarSeguimiento(modelo.id, registro));
   });
 
   // --- Informe (paso 5) --------------------------------------------------------

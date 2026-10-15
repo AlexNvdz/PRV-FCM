@@ -42,7 +42,7 @@ function TablaMetricas({ m }: { m: Metricas }) {
   const p = m.prescripcion;
   const e = m.validacion_externa;
   const filas: [string, string, string, string][] = [
-    ['Éxito prescriptivo (PSR, FCM)', pct(p.PSR_base), pct(p.PSR), 'Estudiantes que el FCM ubica en el mejor nivel'],
+    ['Tasa de éxito prescriptivo (FCM)', pct(p.PSR_base), pct(p.PSR), 'Estudiantes que el FCM ubica en el mejor nivel'],
     ['En el mejor nivel según el bosque aleatorio', pct(e.PSR_externo_base), pct(e.PSR_externo), 'Modelo independiente: la cifra prudente'],
     ['MAE respecto al estado deseado', num(p.MAE_base, 3), num(p.MAE, 3), 'Menor es mejor'],
     ['MSE', num(p.MSE_base, 3), num(p.MSE, 3), ''],

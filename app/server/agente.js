@@ -122,11 +122,37 @@ export function describirContexto({ dataset, modelo, resultados }) {
     `- Signo de los pesos: positivo = al aumentar la variable el estudiante se acerca a ${graficas.mejor_nivel} (mejor nivel); negativo = se aleja.`,
     `- Peso de cada acción (lo único que el AG cambia): ${formatearPesos(graficas.influencias.filter((i) => i.rol === 'accion'), graficas.mejor_nivel)}.`,
     `- Otras influencias fuertes, no controlables directamente: ${formatearPesos(graficas.influencias.filter((i) => i.rol !== 'accion').slice(0, 4), graficas.mejor_nivel)}.`,
+    describirPerfil(metricas.configuracion),
+    ...describirReconstruccion(metricas.reconstruccion),
     describirSesgo(resultados),
     ...describirRestriccion(metricas.configuracion.prescripcion, esquema),
     '- Las acciones y las variables mutables se pueden interpretar como asociaciones útiles; los pesos de variables inmutables (por ejemplo nacionalidad, género o grado) no son causas.',
   );
   return lineas.join('\n');
+}
+
+const NOMBRE_INFERENCIA = { kosko: 'Kosko', kosko_modificada: 'Kosko modificada', reescalada: 'reescalada' };
+
+/** Perfil de entrenamiento (los modelos anteriores a los perfiles son «mejorado»). */
+export function describirPerfil(configuracion) {
+  const perfil = configuracion.perfil ?? 'mejorado';
+  const { inferencia, activacion } = configuracion.fcm ?? {};
+  const regla = inferencia ? ` Regla de inferencia ${NOMBRE_INFERENCIA[inferencia] ?? inferencia} con activación ${activacion === 'tanh' ? 'tangente hiperbólica' : 'sigmoide'}.` : '';
+  return perfil === 'articulo'
+    ? `- Perfil de entrenamiento «artículo»: reproduce el protocolo de Hoyos, Aguilar y Toro (2023), sin sesgo ni tope por ausentismo.${regla}`
+    : `- Perfil de entrenamiento «mejorado»: el validado en este proyecto, con sesgo, planes moderados (β = 0.4) y tope por ausentismo.${regla}`;
+}
+
+/** Validación del artículo (Tablas 11 y 12): qué tan cerca quedan las acciones prescritas de las reales. */
+export function describirReconstruccion(reconstruccion) {
+  if (!reconstruccion?.por_accion?.length) return [];
+  const { n, global: g, por_accion: acciones } = reconstruccion;
+  const iguales = acciones.filter((a) => typeof a.p === 'number' && a.p > 0.05).map((a) => a.nombre);
+  const distintas = acciones.filter((a) => typeof a.p === 'number' && a.p <= 0.05).map((a) => a.nombre);
+  return [
+    `- Validación según el artículo con ${n} registros de prueba: PSR de la ecuación 19 ${g.psr_ec19.toFixed(3)} (cociente entre lo prescrito y lo real; el artículo espera menos de 1); error de reconstrucción de las acciones MAE ${g.mae.toFixed(3)}, RMSE ${g.rmse.toFixed(3)}${typeof g.r2 === 'number' ? `, R² ${g.r2.toFixed(2)}` : ''}. ` +
+      `Sin diferencia significativa entre lo real y lo prescrito (p > 0.05): ${iguales.join(', ') || 'ninguna acción'}. Con diferencia significativa: ${distintas.join(', ') || 'ninguna acción'}.`,
+  ];
 }
 
 /** Tope de las acciones por ausentismo (lista vacía si está desactivado, si la columna no existe o en métricas antiguas). */
@@ -144,7 +170,7 @@ export function describirRestriccion(prescripcion, esquema) {
 export function describirSesgo({ metricas, graficas }) {
   const conSesgo = graficas.sesgo ?? metricas.configuracion.fcm.sesgo ?? false;
   const b = graficas.conceptos?.find((c) => c.columna === graficas.objetivo)?.sesgo;
-  if (!conSesgo || typeof b !== 'number') {
+  if (!conSesgo || typeof b !== 'number' || b === 0) {
     return '- Este modelo no tiene término de sesgo: los pesos grandes de variables inmutables compensan esa falta, así que no los presentes como causas.';
   }
   return (

@@ -158,6 +158,23 @@ test('el contexto explica el sesgo aparte de los pesos y menciona la restricció
   assert.doesNotMatch(contexto(resultados(true, { condicion_columna: 'absences', condicion_delta_max: 0.15 })), /Restricción/);
 });
 
+test('el contexto menciona el perfil y, si existen, las métricas de reconstrucción', () => {
+  assert.match(agente.describirPerfil({ fcm: {} }), /«mejorado»/); // Modelos anteriores a los perfiles.
+  assert.match(agente.describirPerfil({ perfil: 'articulo', fcm: { inferencia: 'reescalada', activacion: 'tanh' } }), /«artículo».*reescalada con activación tangente hiperbólica/);
+  assert.deepEqual(agente.describirReconstruccion(undefined), []);
+  const [linea] = agente.describirReconstruccion({
+    n: 120,
+    global: { mae: 0.1234, mse: 0.02, rmse: 0.1414, r2: 0.61, psr_ec19: 0.875 },
+    por_accion: [
+      { nombre: 'Manos levantadas', p: 0.31 },
+      { nombre: 'Recursos visitados', p: 0.001 },
+      { nombre: 'Discusión', p: null },
+    ],
+  });
+  assert.match(linea, /120 registros.*ecuación 19 0\.875 \(cociente.*MAE 0\.123, RMSE 0\.141, R² 0\.61/);
+  assert.match(linea, /\(p > 0\.05\): Manos levantadas\. Con diferencia significativa: Recursos visitados\./);
+});
+
 test('todas las llamadas usan el mismo tamaño de contexto (Ollama no recarga el modelo)', () => {
   const contextos = new Set(peticiones.map((p) => p.options.num_ctx));
   assert.equal(contextos.size, 1);

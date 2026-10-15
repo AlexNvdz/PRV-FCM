@@ -4,6 +4,7 @@
 //   almacen/datasets/<id>/dataset.json    nombre, perfil, esquema y validación
 //   almacen/modelos/<id>/modelo_meta.json estado del entrenamiento y opciones
 //   almacen/modelos/<id>/...              salidas del motor (metricas.json, graficas.json, modelo.json, ...)
+//   almacen/modelos/<id>/seguimiento.jsonl resultados observados tras aplicar una prescripción (/consulta)
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -136,6 +137,17 @@ export class Almacen {
   /** Último modelo terminado de un dataset. */
   async modeloActivo(datasetId) {
     return (await this.listarModelos(datasetId)).find((m) => m.estado === 'listo') ?? null;
+  }
+
+  /** Retroalimentación (etapa 4 de García et al., 2025): un registro JSON por línea, solo se agrega. */
+  async agregarSeguimiento(id, registro) {
+    await fs.appendFile(path.join(this.dirModelo(id), 'seguimiento.jsonl'), `${JSON.stringify(registro)}\n`, 'utf8');
+    return registro;
+  }
+
+  async leerSeguimiento(id) {
+    const texto = await fs.readFile(path.join(this.dirModelo(id), 'seguimiento.jsonl'), 'utf8').catch((e) => (e.code === 'ENOENT' ? '' : Promise.reject(e)));
+    return texto.split('\n').filter(Boolean).map((linea) => JSON.parse(linea));
   }
 
   async resultadosModelo(id) {

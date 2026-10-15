@@ -1,5 +1,5 @@
 // Formatos y ayudas compartidas.
-import type { Codificacion, MetodoPesos, Rol } from './tipos';
+import type { Activacion, Codificacion, MetodoPesos, PerfilModelo, ReglaInferencia, Rol } from './tipos';
 
 const numero = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
 
@@ -72,6 +72,7 @@ export const NOMBRE_CODIFICACION: Record<Codificacion, string> = {
   nominal: 'Nominal: media del objetivo',
   one_hot: 'Nominal: one-hot',
   numero_en_texto: 'Número en texto',
+  fecha: 'Fecha',
 };
 
 export const NOMBRE_METODO: Record<MetodoPesos, string> = {
@@ -79,7 +80,28 @@ export const NOMBRE_METODO: Record<MetodoPesos, string> = {
   ridge: 'Ridge',
   lasso: 'Lasso',
   correlacion_parcial: 'Correlación parcial',
+  pso: 'PSO',
+  expertos: 'Expertos',
 };
+
+export const NOMBRE_PERFIL: Record<PerfilModelo, string> = { articulo: 'Artículo', mejorado: 'Mejorado' };
+
+export const NOMBRE_INFERENCIA: Record<ReglaInferencia, string> = { kosko: 'Kosko', kosko_modificada: 'Kosko modificada', reescalada: 'Reescalada' };
+
+export const NOMBRE_ACTIVACION: Record<Activacion, string> = { sigmoide: 'Sigmoide', tanh: 'Tangente hiperbólica' };
+
+/** Descarga filas como CSV (UTF-8 con BOM para que Excel lea las tildes). */
+export function descargarCsv(nombre: string, filas: (string | number | boolean | null | undefined)[][]) {
+  const celda = (v: string | number | boolean | null | undefined) => {
+    const texto = v === null || v === undefined ? '' : String(v);
+    return /[",\n\r]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+  };
+  const csv = `\ufeff${filas.map((f) => f.map(celda).join(',')).join('\r\n')}`;
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const enlace = Object.assign(document.createElement('a'), { href: url, download: nombre });
+  enlace.click();
+  URL.revokeObjectURL(url);
+}
 
 /** Nivel cuyo valor está más cerca de la activación, como `discretizar_rendimiento` del motor. */
 export function nivelCercano(activacion: number, valores: Record<string, number>) {

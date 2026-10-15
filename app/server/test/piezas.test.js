@@ -10,6 +10,7 @@ import { protegerOrigen } from '../app.js';
 import { ejecutarHerramienta, leerCorrelaciones } from '../herramientas.js';
 import { crearBuscadorColumnas } from '../rutas/chat.js';
 import { opcionesMotor, OpcionesEntrenamiento } from '../rutas/datasets.js';
+import { validarSeguimiento } from '../rutas/modelos.js';
 
 function probarOrigen(headers) {
   let status = 200;
@@ -92,15 +93,56 @@ test('la validación cruzada rápida usa una rejilla pequeña', () => {
 });
 
 test('las opciones aceptan el método de pesos y la máscara causal', () => {
+  // Sin opciones explícitas, el perfil decide el método y β: el servidor no pone valores por defecto.
   const porDefecto = OpcionesEntrenamiento.parse({});
-  assert.equal(porDefecto.metodo_pesos, 'bptt');
+  assert.equal(porDefecto.perfil, 'mejorado');
+  assert.equal(porDefecto.metodo_pesos, undefined);
+  assert.equal(porDefecto.beta, undefined);
+  assert.equal('smote' in opcionesMotor(porDefecto), false);
   assert.deepEqual(porDefecto.aristas_excluidas, []);
-  assert.equal(porDefecto.beta, 0.4);
   const ridge = opcionesMotor(OpcionesEntrenamiento.parse({ metodo_pesos: 'ridge', aristas_excluidas: [['gender', 'Class']] }));
   assert.equal(ridge.metodo_pesos, 'ridge');
   assert.deepEqual(ridge.aristas_excluidas, [['gender', 'Class']]);
-  assert.throws(() => OpcionesEntrenamiento.parse({ metodo_pesos: 'pso' }));
+  assert.throws(() => OpcionesEntrenamiento.parse({ metodo_pesos: 'svm' }));
   assert.throws(() => OpcionesEntrenamiento.parse({ aristas_excluidas: [['solo-origen']] }));
+});
+
+test('las opciones del artículo: perfil, expertos, binarización y pliegues explícitos', () => {
+  const articulo = opcionesMotor(OpcionesEntrenamiento.parse({ perfil: 'articulo', smote: true, inferencia: 'reescalada', activacion: 'tanh', binarizar_objetivo: 'M' }));
+  assert.equal(articulo.perfil, 'articulo');
+  assert.equal(articulo.binarizar_objetivo, 'M');
+  assert.equal(OpcionesEntrenamiento.parse({ binarizar_objetivo: 12.5 }).binarizar_objetivo, 12.5);
+  assert.throws(() => OpcionesEntrenamiento.parse({ perfil: 'otro' }));
+  // Expertos: hace falta al menos una matriz y cada peso va en [-1, 1].
+  assert.throws(() => OpcionesEntrenamiento.parse({ metodo_pesos: 'expertos' }), /al menos una matriz/);
+  const matriz = { experto: 'Docente A', aristas: [{ origen: 'raisedhands', destino: 'Class', peso: 0.6 }] };
+  assert.equal(OpcionesEntrenamiento.parse({ metodo_pesos: 'expertos', matrices_expertos: [matriz] }).matrices_expertos.length, 1);
+  assert.throws(() => OpcionesEntrenamiento.parse({ metodo_pesos: 'expertos', matrices_expertos: [{ ...matriz, aristas: [{ ...matriz.aristas[0], peso: 1.5 }] }] }));
+  // La CV rápida usa 3 pliegues salvo que se pidan otros; fuera de rango se rechaza.
+  assert.equal(opcionesMotor(OpcionesEntrenamiento.parse({ validacion_cruzada: 'rapida', pliegues: 10 })).pliegues, 10);
+  assert.throws(() => OpcionesEntrenamiento.parse({ pliegues: 1 }));
+});
+
+test('el seguimiento valida acciones, resultado y fecha contra el esquema del modelo', () => {
+  const esquema = {
+    columnas: [
+      { columna: 'raisedhands', rol: 'accion' },
+      { columna: 'StudentAbsenceDays', rol: 'mutable' },
+      { columna: 'Class', rol: 'objetivo', codificacion: 'ordinal', orden: ['L', 'M', 'H'] },
+      { columna: 'PlaceofBirth', rol: 'excluir' },
+    ],
+  };
+  const valido = { fecha: '2026-10-14', acciones_aplicadas: { raisedhands: 40 }, resultado_observado: 'M', perfil: { StudentAbsenceDays: 'Under-7' } };
+  assert.deepEqual(validarSeguimiento(valido, esquema).acciones_aplicadas, { raisedhands: 40 });
+  assert.throws(() => validarSeguimiento({ ...valido, resultado_observado: 'X' }, esquema), /uno de: L, M, H/);
+  assert.throws(() => validarSeguimiento({ ...valido, acciones_aplicadas: { StudentAbsenceDays: 'Under-7' } }, esquema), /No son acciones/);
+  assert.throws(() => validarSeguimiento({ ...valido, acciones_aplicadas: {} }, esquema), /al menos una acción/);
+  assert.throws(() => validarSeguimiento({ ...valido, perfil: { PlaceofBirth: 'KW' } }, esquema), /desconocidas en perfil/);
+  assert.throws(() => validarSeguimiento({ ...valido, fecha: '2026-02-30' }));
+  // Objetivo numérico: el resultado es un número.
+  const numerico = { columnas: [{ columna: 'horas', rol: 'accion' }, { columna: 'nota', rol: 'objetivo', codificacion: 'numerica' }] };
+  assert.equal(validarSeguimiento({ fecha: '2026-01-05', acciones_aplicadas: { horas: 3 }, resultado_observado: 14.5 }, numerico).resultado_observado, 14.5);
+  assert.throws(() => validarSeguimiento({ fecha: '2026-01-05', acciones_aplicadas: { horas: 3 }, resultado_observado: 'alto' }, numerico), /número/);
 });
 
 test('leerCorrelaciones ordena por fuerza y omite el objetivo e indicadores de una misma columna', () => {

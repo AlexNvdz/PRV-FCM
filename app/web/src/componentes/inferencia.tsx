@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import type { Inferencia } from '../tipos';
-import { colorNivel, firmado, num } from '../utilidades';
+import { colorNivel, firmado, NOMBRE_INFERENCIA, num } from '../utilidades';
 import { EJE, Globo, ItemLeyenda, MarcoGrafica, REJILLA, TICK } from './graficas';
 
 /** Zonas de cada nivel en [0, 1]: los cortes están a medio camino entre los valores de niveles vecinos (como el Medidor). */
@@ -25,7 +25,7 @@ function zonasDeNivel(niveles: string[], valores: Record<string, number>) {
 /** La cuenta de una iteración con sus números: memoria, influencia de las acciones y del resto, sesgo y la sigmoide. */
 function CuentaIteracion({ inferencia, t, objetivo }: { inferencia: Inferencia; t: number; objetivo: string }) {
   const valores = inferencia.series[0]?.valores ?? [];
-  const { lambda, k1, k2, sesgo: b } = inferencia.parametros;
+  const { lambda, k1, k2, sesgo: b, inferencia: regla, activacion } = inferencia.parametros;
   if (t === 0) {
     return (
       <p className="text-sm text-tinta-2">
@@ -64,7 +64,8 @@ function CuentaIteracion({ inferencia, t, objetivo }: { inferencia: Inferencia; 
         </dd>
       </dl>
       <p className="text-xs text-tinta-3">
-        f(x) = 1 / (1 + e^(−λ·x)) con λ = {num(lambda, 2)}; k1 = {num(k1, 2)} y k2 = {num(k2, 2)}
+        {regla ? `Regla ${NOMBRE_INFERENCIA[regla].toLowerCase()}; ` : ''}
+        {activacion === 'tanh' ? 'f(x) = (tanh(λ·x) + 1) / 2' : 'f(x) = 1 / (1 + e^(−λ·x))'} con λ = {num(lambda, 2)}; k1 = {num(k1, 2)} y k2 = {num(k2, 2)}
         {b ? `; sesgo del objetivo b = ${firmado(b, 3)}` : '; este modelo no tiene sesgo'}. Cambio respecto a la iteración anterior:{' '}
         {Math.abs(cambio) < tolerancia ? `menor que ${num(tolerancia, 6)}` : firmado(cambio, 4)}
         {t === inferencia.iteraciones && (inferencia.convergio ? '; la inferencia se detiene: llegó al punto fijo' : '; se alcanzó el máximo de iteraciones')}.

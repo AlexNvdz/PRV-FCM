@@ -210,8 +210,8 @@ function Navegacion() {
             Lista para elegir el <T a="dataset">dataset activo</T>: el que usan Resumen, Modelo, Prescripciones, Informe y el Asistente.
           </Def>
           <Def t="Secciones">
-            Resumen, Datos (pasos 1 y 2), Modelo (paso 3), Prescripciones (paso 4), Informe (paso 5), Asistente y Ayuda. La sección abierta se marca con
-            una línea a la izquierda.
+            Resumen, Datos (pasos 1 y 2), Modelo (paso 3), Prescripciones (paso 4), Informe (paso 5), Consulta, Asistente y Ayuda. La sección abierta se
+            marca con una línea a la izquierda. Consulta queda fuera del flujo de cinco pasos: es para el usuario final (vea <Ir a="consulta">Consulta y seguimiento</Ir>).
           </Def>
           <Def t="Estado de los servicios">
             Se revisa cada 30 segundos. Un punto verde indica que el servicio está disponible y uno naranja, que no; pase el cursor por una línea para
@@ -539,6 +539,28 @@ function Paso3() {
         </p>
       </Bloque>
 
+      <Bloque id="paso-3-perfil" titulo="Perfil de entrenamiento">
+        <p>
+          Lo primero del formulario. Cada tarjeta lista, en gris, los valores que fija su perfil (los lee del motor). Vea <Entradas a={['perfil-entrenamiento']} />.
+        </p>
+        <Defs>
+          <Def t="Mejorado (recomendado)">Lo que este proyecto validó: BPTT, Kosko modificada con sigmoide, sesgo, β = 0,4 y tope por ausentismo.</Def>
+          <Def t="Artículo (Hoyos, Aguilar y Toro, 2023)">
+            El protocolo del artículo: <T a="pso">PSO</T>, sin sesgo, β = 0, <T a="smote">SMOTE</T>, mutables dinámicos, 10 pliegues, aptitud de la
+            Tabla 4, AG sin siembra de las acciones actuales y búsqueda de los parámetros del AG; la validación cruzada elige la regla de inferencia y la
+            activación.
+          </Def>
+        </Defs>
+        <p>
+          La aptitud de la Tabla 4 pide que el estado final se parezca al deseado, no que el objetivo suba; sin la siembra, la{' '}
+          <T a="psr">tasa de éxito prescriptivo</T> puede bajar.
+        </p>
+        <p>
+          Cualquier opción que cambie después manda sobre el perfil. Debajo de las tarjetas, «Volver a los valores del perfil» deshace esos cambios; elegir
+          otro perfil también los deshace.
+        </p>
+      </Bloque>
+
       <Bloque id="paso-3-metodo" titulo="Método de extracción de la matriz de pesos W">
         <p>
           Elige cómo se aprende <T a="w">W</T>, la influencia de cada concepto sobre los demás:
@@ -552,10 +574,19 @@ function Paso3() {
             <T a="ridge">Regresión lineal con penalización L2</T> por concepto dinámico; <T a="tanh">tanh</T> trunca los pesos a (−1, 1). Instantánea; 77 %.
           </Def>
           <Def t="Regresión Lasso">
-            <T a="lasso">Penalización L1</T>: anula los pesos débiles y deja un mapa más simple. Instantánea; 77 %.
+            <T a="lasso">Penalización L1</T>: anula los pesos débiles y deja un mapa más simple. Instantánea; 76 %.
           </Def>
           <Def t="Correlación parcial">
             Cada peso es la <T a="correlacion-parcial">correlación parcial</T> del par, dados los demás. Describe la estructura, pero no calibra la inferencia: 48 %.
+          </Def>
+          <Def t="PSO (artículo)">
+            <T a="pso">Enjambre de partículas</T>: cada partícula es una W completa. No usa el gradiente; es más lento que BPTT. Con el perfil
+            «Artículo» usa la ecuación 4 literal, que tiende a estancarse; con «Mejorado», los coeficientes de Clerc.
+          </Def>
+          <Def t="Matriz de expertos">
+            W es el <T a="consenso">consenso</T> de las matrices que suban los expertos. «Subir matrices (CSV)» acepta uno o varios archivos con las columnas
+            origen, destino y peso, uno por experto. Cada archivo se valida (pesos entre −1 y 1, aristas de la estructura, sin repetidas) y los errores se
+            muestran con su línea. Debajo aparece la «Matriz de consenso». Vea <Entradas a={['expertos']} />.
           </Def>
         </Defs>
         <p>El apartado plegable «Cómo se construye y se usa W» muestra sus fórmulas; también están en <Ir a="formulas">Fórmulas</Ir>.</p>
@@ -597,28 +628,49 @@ function Paso3() {
         </Defs>
       </Bloque>
 
+      <Bloque id="paso-3-inferencia" titulo="Inferencia, objetivo y evaluación">
+        <Defs>
+          <Def t="Regla de inferencia">
+            Kosko, Kosko modificada o reescalada. «Según el perfil» deja la del perfil o, si este no fija una, la que elija la validación cruzada. Vea{' '}
+            <Entradas a={['regla-inferencia']} />.
+          </Def>
+          <Def t="Función de activación">
+            Sigmoide o <T a="tanh">tangente hiperbólica</T> reescalada a (0, 1).
+          </Def>
+          <Def t="Binarizar el objetivo">
+            Éxito desde un nivel (≥N frente a {'<'}N) o, con un objetivo numérico, desde un umbral. Vea <Entradas a={['binarizacion']} />.
+          </Def>
+          <Def t="Pliegues de la validación">De 2 a 10. Vacío: los del perfil (3 con la validación rápida). No aplica sin validación.</Def>
+          <Def t="SMOTE en el entrenamiento">
+            Registros sintéticos de los niveles escasos, solo en el entrenamiento. Vea <Entradas a={['smote']} />.
+          </Def>
+          <Def t="Buscar los parámetros del AG">Prueba población, cruce y mutación antes de prescribir; tarda más.</Def>
+        </Defs>
+      </Bloque>
+
       <Bloque id="paso-3-opciones" titulo="Otras opciones">
         <Defs>
           <Def t="División">
             <T a="division-agrupada">Agrupada por perfil</T> (recomendada) o <T a="division-aleatoria">aleatoria</T>.
           </Def>
           <Def t="Datos de prueba (%)">
-            Proporción de registros que se reserva para la <T a="entrenamiento-prueba">prueba</T>: de 10 a 50, de 5 en 5; 30 por defecto, como en los
-            artículos.
+            Proporción de registros que se reserva para la <T a="entrenamiento-prueba">prueba</T>: de 10 a 50, de 5 en 5; 30 en los dos perfiles, como en
+            los artículos.
           </Def>
           <Def t="Penalización del esfuerzo (β)">
-            De 0 a 5; 0,4 por defecto, que da cambios moderados y distintos para cada estudiante. 0,05 busca el máximo efecto. Vea <Entradas a={['beta']} />.
+            De 0 a 5. El perfil mejorado usa 0,4, que da cambios moderados y distintos para cada estudiante; el del artículo, 0, que solo mira la meta.
+            0,05 busca el máximo efecto. Vea <Entradas a={['beta']} />.
           </Def>
           <Def t="Cambio máximo por acción">
             Fracción del rango de cada acción, de 0 a 1. Vacío: sin límite. Vea <Entradas a={['cambio-maximo']} />.
           </Def>
           <Def t="Permitir recomendar valores menores que los actuales">
-            Sin marcar, el AG solo mantiene o aumenta las acciones. Vea <Entradas a={['permitir-reducciones']} />.
+            Sin marcar, el AG solo mantiene o aumenta las acciones. Marcada por defecto en el perfil del artículo. Vea <Entradas a={['permitir-reducciones']} />.
           </Def>
           <Def t="Algoritmo genético y semilla">
             Apartado plegable. <T a="poblacion">Población</T> (50), <T a="generacion">Generaciones</T> (100), <T a="cruce">Tasa de cruce</T> (0,9),{' '}
-            <T a="mutacion">Tasa de mutación</T> (0,25), tipo de cruce (Uniforme o Un punto) y <T a="semilla" /> (42). Un campo vacío usa el valor por
-            defecto, que se ve en gris.
+            <T a="mutacion">Tasa de mutación</T> (0,25), tipo de cruce (Uniforme o Un punto) y <T a="semilla" /> (42); son los valores del perfil mejorado.
+            Un campo vacío usa el del perfil.
           </Def>
         </Defs>
       </Bloque>
@@ -722,7 +774,7 @@ function Paso4() {
           el FCM en el mejor nivel con las acciones prescritas y con las actuales, y cuántos confirma el <T a="bosque">bosque aleatorio</T>.
         </p>
         <Defs>
-          <Def t="Éxito prescriptivo (PSR, FCM)">
+          <Def t="Tasa de éxito prescriptivo (FCM)">
             <T a="psr" /> con las acciones actuales y con las prescritas.
           </Def>
           <Def t="En el mejor nivel según el bosque aleatorio">
@@ -894,6 +946,28 @@ function Paso5() {
         </Lista>
       </Bloque>
 
+      <Bloque id="paso-5-validacion" titulo="Validación según el artículo">
+        <p>
+          El protocolo de <T a="reconstruccion">reconstrucción</T> de Hoyos, Aguilar y Toro (2023): qué tan cerca quedan las acciones prescritas de las
+          reales en los registros de prueba. La descripción da la <T a="psr-ec19">PSR de la ecuación 19</T>, un cociente que el artículo espera menor que 1;
+          si sale mayor, un aviso lo señala.
+        </p>
+        <Defs>
+          <Def t="Tabla 11">
+            MAE, MSE, RMSE y <T a="r2">R²</T> por acción y en total («Global»).
+          </Def>
+          <Def t="Tabla 12">
+            Media ± desviación real y prescrita y el valor p. † es Wilcoxon y ⋆ es t de Student; la prueba se elige con <T a="lilliefors" />. Con p mayor que
+            0,05 se lee «sin diferencia significativa». Vea <Entradas a={['prueba-t-wilcoxon']} />.
+          </Def>
+        </Defs>
+        <p>
+          Un R² negativo o una PSR mayor que 1 no indican un error de la aplicación: muchas combinaciones de acciones llevan al mismo estado, así que la
+          prescripción no tiene por qué parecerse a las acciones observadas.
+        </p>
+        <p>Los modelos entrenados antes de esta versión no traen la validación; vuelva a entrenarlos para verla.</p>
+      </Bloque>
+
       <Bloque id="paso-5-figuras" titulo="Figuras del informe">
         <Lista>
           <li>«Grafo del mapa cognitivo»: el mapa como <T a="grafo">grafo dirigido</T>, dibujado con NetworkX y matplotlib.</li>
@@ -907,6 +981,56 @@ function Paso5() {
           Cada <T a="figuras">figura</T> tiene un botón «PNG» para descargarla. Si un modelo se entrenó antes de que existieran las figuras, un aviso pide
           volver a entrenarlo.
         </p>
+      </Bloque>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Consulta y seguimiento
+// ---------------------------------------------------------------------------
+function Consulta() {
+  return (
+    <>
+      <Bloque id="consulta-elegir" titulo="Elegir el tema y el modelo">
+        <p>
+          <T a="consulta">Consulta</T> es para quien recibe las recomendaciones, no para quien entrena el modelo. «Modelo» lista los modelos listos de todos
+          los datasets: el nombre del dataset es el tema, seguido de la fecha, el perfil y el método. Al elegir uno se muestran el objetivo con sus niveles y
+          las acciones que puede prescribir. Funciona con cualquier dataset, no solo con el de estudiantes.
+        </p>
+      </Bloque>
+
+      <Bloque id="consulta-caso" titulo="Describir el caso y el estado deseado">
+        <Lista>
+          <li>«Datos que no cambian» (inmutables), «Estado actual» (mutables) y «Acciones actuales (opcionales)».</li>
+          <li>Un campo vacío toma el valor típico del dataset, que se ve en gris; junto al botón se indica cuántos datos quedaron vacíos.</li>
+          <li>«Nivel deseado del objetivo»: el mejor nivel por defecto.</li>
+          <li>
+            «Valores deseados del estado (opcional)»: un escenario para los mutables, por ejemplo menos ausencias. Un concepto que el modelo recalcula entra en
+            la meta del AG; uno fijo se toma como punto de partida.
+          </li>
+          <li>«Obtener la prescripción» calcula el plan.</li>
+        </Lista>
+      </Bloque>
+
+      <Bloque id="consulta-resultado" titulo="Leer, descargar e imprimir">
+        <p>
+          El resultado es el mismo de una prescripción individual (vea <Ir a="paso-4">Paso 4</Ir>): medidores, tabla de acciones, reporte, evolución del AG,
+          aportes y redacción con IA. «Descargar CSV» guarda los datos del caso, las acciones actual y recomendada, los niveles y el reporte. «Imprimir» oculta
+          el menú y los formularios.
+        </p>
+      </Bloque>
+
+      <Bloque id="consulta-seguimiento" titulo="Registrar el resultado">
+        <Pasos>
+          <li>Tras aplicar el plan, abra la misma consulta: «Acciones aplicadas» parte de las recomendadas; corríjalas si se aplicó otra cosa.</li>
+          <li>Elija el «Resultado observado», la «Fecha del resultado» y, si quiere, una nota.</li>
+          <li>Pulse «Registrar resultado». La lista de abajo muestra los registros del modelo; «Exportar CSV» los descarga.</li>
+        </Pasos>
+        <Aviso tipo="info">
+          Es la etapa de retroalimentación de García et al. (2025). Por ahora los registros no reentrenan el modelo: quedan para revisar si las
+          prescripciones funcionan. Vea <Entradas a={['seguimiento']} />.
+        </Aviso>
       </Bloque>
     </>
   );
@@ -943,7 +1067,7 @@ function Resumen() {
 // ---------------------------------------------------------------------------
 const HERRAMIENTAS: [string, string][] = [
   ['Resumen de los datos', 'Registros, objetivo con sus niveles y variables por rol.'],
-  ['Métricas del modelo', 'Exactitud, λ, PSR antes y después, bosque aleatorio, segmentos y cambio medio de cada acción.'],
+  ['Métricas del modelo', 'Exactitud, λ, tasa de éxito prescriptivo antes y después, bosque aleatorio, segmentos y cambio medio de cada acción.'],
   ['Pesos del mapa cognitivo', 'Influencias hacia el objetivo, de la más fuerte a la más débil, con una gráfica.'],
   ['Estadísticas de una variable', 'Distribución por nivel y correlación con el objetivo, con una gráfica.'],
   ['Búsqueda de estudiantes', 'Estudiantes de un nivel o que cumplen condiciones (=, !=, <, <=, >, >= o contiene).'],
@@ -1141,7 +1265,11 @@ function Formulas() {
         <Formula lectura="Regla de Kosko modificada: solo los conceptos dinámicos se actualizan; los demás quedan fijos. k1 = k2 = 1. b_i es el sesgo, en [−1, 1]; vale 0 en los modelos sin sesgo.">
           A_i(t+1) = f( k2·A_i(t) + k1·(Σ_j w_ji·A_j(t) + b_i) )
         </Formula>
+        <Formula lectura="Las tres reglas que se pueden elegir (sin sesgo ni coeficientes, como en el artículo): Kosko, Kosko modificada y reescalada.">
+          Kosko: f(Σ_j≠i w_ji·v_j)     modificada: f(v_i + Σ_j w_ji·v_j)     reescalada: f((2v_i − 1) + Σ_j w_ji·(2v_j − 1))
+        </Formula>
         <Formula lectura="Sigmoide con pendiente λ.">f(x) = 1 / (1 + e^(−λx))</Formula>
+        <Formula lectura="Tangente hiperbólica reescalada a (0, 1), para que la activación siga entre 0 y 1.">f(x) = (tanh(λx) + 1) / 2</Formula>
         <Formula lectura="Convergencia: se detiene cuando ningún cambio supera 0,00001, o a las 100 iteraciones.">máx_i |A_i(t+1) − A_i(t)| {'<'} 0,00001</Formula>
         <Formula lectura="Nivel predicho: el nivel cuyo valor normalizado está más cerca de la activación final.">nivel = argmin_nivel |A*_T − valor(nivel)|</Formula>
         <Formula lectura="Cuenta de «Inferencia paso a paso»: la entrada del objetivo en cada iteración se separa en memoria, influencia de las acciones (constante, porque las acciones quedan fijas), influencia del resto de conceptos y sesgo (constante).">
@@ -1184,7 +1312,8 @@ function Formulas() {
         <Formula lectura="Errores respecto a la meta, entre los N estudiantes prescritos.">
           MAE = media |A*_T − D_T|     MSE = media (A*_T − D_T)²     RMSE = √MSE
         </Formula>
-        <Formula lectura="Tasa de éxito prescriptivo.">PSR = 100 · (estudiantes con éxito) / N</Formula>
+        <Formula lectura="Tasa de éxito prescriptivo (PSR en las métricas del motor). La PSR de la ecuación 19 del artículo es otra cifra.">tasa de éxito = 100 · (estudiantes con éxito) / N</Formula>
+        <Formula lectura="Coeficiente de determinación de una acción en la validación del artículo: y real, ŷ prescrito.">R² = 1 − Σ (y − ŷ)² / Σ (y − ȳ)²</Formula>
         <Formula lectura="Exactitud: niveles acertados sobre registros de prueba.">exactitud = aciertos / registros</Formula>
         <Formula lectura="Precisión y recall de un nivel.">
           precisión = aciertos del nivel / predichos en el nivel     recall = aciertos del nivel / reales del nivel
@@ -1336,6 +1465,7 @@ export const CAPITULOS: CapituloGuia[] = [
   { id: 'paso-3', titulo: 'Paso 3: entrenamiento del FCM', Contenido: Paso3 },
   { id: 'paso-4', titulo: 'Paso 4: motor prescriptivo', Contenido: Paso4 },
   { id: 'paso-5', titulo: 'Paso 5: visualización y recomendaciones', Contenido: Paso5 },
+  { id: 'consulta', titulo: 'Consulta y seguimiento', Contenido: Consulta },
   { id: 'resumen', titulo: 'Resumen', Contenido: Resumen },
   { id: 'asistente', titulo: 'Asistente', Contenido: Asistente },
   { id: 'graficas', titulo: 'Cómo leer las gráficas', Contenido: Graficas },

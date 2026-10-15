@@ -221,6 +221,14 @@ export const GLOSARIO = {
     donde: 'Informe, tabla «Qué cambia en cada acción».',
     ver: ['del-rango'],
   },
+  binarizacion: {
+    termino: 'Binarización del objetivo',
+    definicion:
+      'Convierte un objetivo de varios niveles en dos: éxito desde el nivel elegido (≥N) y el resto (<N). En un objetivo numérico, éxito es alcanzar un umbral en sus unidades (o no superarlo, si el objetivo está invertido). Reproduce los artículos, que miden éxito o fracaso. No se ofrece el peor nivel: todos serían éxito.',
+    donde: 'Paso 3, «Binarizar el objetivo».',
+    ver: ['nivel', 'objetivo', 'perfil-entrenamiento'],
+    claves: 'binario dos clases umbral exito fracaso',
+  },
   bosque: {
     termino: 'Bosque aleatorio',
     expansion: 'Random forest',
@@ -298,9 +306,9 @@ export const GLOSARIO = {
   codificacion: {
     termino: 'Codificación',
     definicion:
-      'Cómo se convierte una columna en números antes de normalizarla: numérica, ordinal (label encoding), nominal con media del objetivo (target encoding), one-hot o número en texto. La aplicación sugiere una por columna y usted puede cambiarla en el paso 2.',
+      'Cómo se convierte una columna en números antes de normalizarla: numérica, ordinal (label encoding), nominal con media del objetivo (target encoding), one-hot, número en texto o fecha. La aplicación sugiere una por columna y usted puede cambiarla en el paso 2.',
     donde: 'Paso 2 (columna «Codificación») y paso 1 (tabla de conceptos normalizados).',
-    ver: ['numerica', 'ordinal', 'nominal', 'one-hot', 'numero-en-texto'],
+    ver: ['numerica', 'ordinal', 'nominal', 'one-hot', 'numero-en-texto', 'fecha'],
     claves: 'encoding',
   },
   concepto: {
@@ -310,6 +318,23 @@ export const GLOSARIO = {
       'Cada variable del mapa cognitivo: un nodo con una activación entre 0 y 1. Sale de una columna del archivo, o de una categoría si la columna es one-hot.',
     ver: ['c-n', 'c-t', 'c-p', 'c-s', 'activacion'],
     claves: 'nodo variable',
+  },
+  consenso: {
+    termino: 'Matriz de consenso',
+    definicion:
+      'Media de las matrices de los expertos, arista por arista. Si un experto no dio una arista, cuenta 0 para él. Es la W que usa el método de expertos.',
+    formula: 'w_ji = (1/E) · Σ_e w_ji(e)',
+    donde: 'Paso 3, método «Matriz de expertos».',
+    ver: ['expertos', 'w'],
+    claves: 'media expertos',
+  },
+  consulta: {
+    termino: 'Consulta',
+    definicion:
+      'Vista para el usuario final, fuera de la barra de cinco pasos: elige un modelo listo de cualquier dataset (el nombre del dataset es el tema), describe el caso, fija el estado deseado y recibe la prescripción, que puede descargar en CSV o imprimir. Un dato vacío toma el valor típico del dataset.',
+    donde: 'Barra lateral, «Consulta».',
+    ver: ['seguimiento', 'perfil-tipico', 'prescripcion'],
+    claves: 'usuario final consultar tema formulario imprimir',
   },
   dinamico: {
     termino: 'Concepto dinámico y concepto fijo',
@@ -545,6 +570,14 @@ export const GLOSARIO = {
     ver: ['rol', 'fuga'],
     claves: 'excluir',
   },
+  expertos: {
+    termino: 'Matriz de expertos',
+    definicion:
+      'Método de W de García et al. (2025): cada experto da, en un CSV, el peso que cree que tiene cada arista (columnas origen, destino y peso, de −1 a 1). El FCM usa el consenso. No aprende de los datos ni tiene sesgo. Los nombres son los de las columnas (en una columna one-hot, «columna=categoría») y solo valen las aristas de la estructura.',
+    donde: 'Paso 3, método «Matriz de expertos».',
+    ver: ['consenso', 'estructura', 'w'],
+    claves: 'experto csv conocimiento',
+  },
   f1: {
     termino: 'F1 y F1 macro',
     definicion:
@@ -569,6 +602,14 @@ export const GLOSARIO = {
     donde: 'Toda la aplicación; el mapa interactivo está en el paso 3 y en el Resumen.',
     ver: ['kosko', 'w', 'concepto', 'prv-fcm'],
     claves: 'mapa cognitivo difuso fuzzy',
+  },
+  fecha: {
+    termino: 'Fecha',
+    expansion: 'Codificación',
+    definicion:
+      'Columna con fechas, como la fecha de alta de un cliente. El motor la convierte en un número que respeta el orden en el tiempo para poder normalizarla. No puede ser el objetivo.',
+    donde: 'Paso 2, codificación «Fecha».',
+    ver: ['codificacion'],
   },
   figuras: {
     termino: 'Figuras PNG',
@@ -733,7 +774,7 @@ export const GLOSARIO = {
     termino: 'Lasso',
     expansion: 'Regresión con penalización L1',
     definicion:
-      'Método de W: una regresión lineal por concepto dinámico que explica el valor z con el que el dato observado del objetivo sería un punto fijo de la regla; su intercepto es el sesgo. La penalización L1 anula los pesos débiles y deja un mapa más simple. Los coeficientes se truncan a (−1, 1) con tanh. Es casi instantáneo; 77 % de exactitud en el dataset del proyecto.',
+      'Método de W: una regresión lineal por concepto dinámico que explica el valor z con el que el dato observado del objetivo sería un punto fijo de la regla; su intercepto es el sesgo. La penalización L1 anula los pesos débiles y deja un mapa más simple. Los coeficientes se truncan a (−1, 1) con tanh. Es casi instantáneo; 76 % de exactitud en el dataset del proyecto.',
     formula: 'min ‖z − X·w − c‖² / (2n) + α·‖w‖₁,   w_ji = tanh(β_j),   b_i = tanh(c)',
     donde: 'Paso 3, método «Regresión Lasso».',
     ver: ['ridge', 'l1-l2', 'tanh', 'logit'],
@@ -746,6 +787,14 @@ export const GLOSARIO = {
       'Técnica que estabiliza la matriz de covarianzas mezclándola con una matriz más simple, para que su inversa no sea errática cuando hay variables muy correlacionadas o pocos datos. La usa la correlación parcial.',
     ver: ['correlacion-parcial', 'covarianza'],
     claves: 'contraccion shrinkage',
+  },
+  lilliefors: {
+    termino: 'Prueba de Lilliefors',
+    definicion:
+      'Prueba de normalidad: una variante de Kolmogórov-Smirnov que estima la media y la desviación de los datos. En la validación del artículo decide qué prueba compara lo real con lo prescrito: si los dos grupos son normales, t de Student; si no, Wilcoxon.',
+    donde: 'Informe, «Validación según el artículo» (Tabla 12).',
+    ver: ['prueba-t-wilcoxon', 'reconstruccion'],
+    claves: 'normalidad kolmogorov',
   },
   logit: {
     termino: 'Logit',
@@ -991,6 +1040,14 @@ export const GLOSARIO = {
     donde: 'Datos, mapa de calor de correlaciones (método «Pearson»).',
     ver: ['correlacion', 'spearman', 'monotona'],
   },
+  'perfil-entrenamiento': {
+    termino: 'Perfil de entrenamiento',
+    definicion:
+      '«Artículo» reproduce el protocolo de Hoyos, Aguilar y Toro (2023): PSO, sin sesgo, β = 0, sin tope por ausentismo, SMOTE, mutables dinámicos, 10 pliegues, aptitud de la Tabla 4, AG sin siembra de las acciones actuales y búsqueda de los parámetros del AG; la validación cruzada elige la regla de inferencia y la activación. «Mejorado» es lo que este proyecto validó: BPTT, Kosko modificada con sigmoide, sesgo, β = 0,4 y tope por ausentismo. Cada opción que usted cambie manda sobre el perfil; los valores exactos se leen del motor y se muestran junto al selector.',
+    donde: 'Paso 3, «Perfil de entrenamiento».',
+    ver: ['pso', 'regla-inferencia', 'smote', 'beta', 'sesgo', 'tope-ausentismo'],
+    claves: 'articulo mejorado protocolo',
+  },
   'perfil-inmutable': {
     termino: 'Perfil inmutable',
     definicion:
@@ -1096,15 +1153,41 @@ export const GLOSARIO = {
     ver: ['fcm', 'ag'],
     claves: 'prescriptivo metodo',
   },
+  'prueba-t-wilcoxon': {
+    termino: 'Pruebas t y de Wilcoxon',
+    definicion:
+      'Comparan, acción por acción, los valores reales con los prescritos en los mismos registros. La t de Student (⋆) supone que los datos son normales; la de Wilcoxon (†) no, porque usa rangos. Con p mayor que 0,05 no hay diferencia significativa: el modelo reproduce bien esa acción.',
+    donde: 'Informe, Tabla 12.',
+    ver: ['lilliefors', 'reconstruccion'],
+    claves: 'p valor significancia student pareada rangos',
+  },
+  pso: {
+    termino: 'PSO',
+    expansion: 'Particle Swarm Optimization (optimización por enjambre de partículas)',
+    definicion:
+      'Método de W del artículo. Cada partícula es una matriz W completa; el enjambre se mueve hacia las mejores matrices que encontró cada partícula y todo el grupo, buscando el menor error entre el estado final del FCM y los datos. No usa el gradiente y es más lento que BPTT. El perfil «artículo» usa la ecuación 4 literal (ω = c1 = c2 = 1), que tiende a estancarse; con el perfil «mejorado» usa los coeficientes de Clerc.',
+    donde: 'Paso 3, método «PSO (artículo)».',
+    ver: ['bptt', 'perfil-entrenamiento', 'w'],
+    claves: 'enjambre particulas swarm',
+  },
   psr: {
-    termino: 'PSR',
-    expansion: 'Prescriptive Success Rate (tasa de éxito prescriptivo)',
+    termino: 'Tasa de éxito prescriptivo',
+    expansion: 'PSR en las métricas del motor',
     definicion:
       'Porcentaje de estudiantes prescritos cuya activación final del objetivo queda dentro de la tolerancia de la meta: los que el FCM ubica en el mejor nivel. Se calcula con las acciones actuales y con las prescritas; la diferencia es la mejora que el FCM atribuye a la prescripción. La cifra equivalente del bosque aleatorio es la estimación prudente.',
-    formula: 'PSR = % de estudiantes con |A*_T − D_T| ≤ tolerancia',
-    donde: 'Resumen, paso 4 («Éxito prescriptivo (PSR, FCM)»), Informe y asistente.',
-    ver: ['tolerancia', 'bosque', 'mae'],
+    formula: 'tasa de éxito = % de estudiantes con |A*_T − D_T| ≤ tolerancia',
+    donde: 'Resumen, paso 4 («Tasa de éxito prescriptivo (FCM)»), Informe y asistente.',
+    ver: ['tolerancia', 'bosque', 'mae', 'psr-ec19'],
     claves: 'exito prescriptivo tasa llega al mejor nivel',
+  },
+  'psr-ec19': {
+    termino: 'PSR (ecuación 19)',
+    expansion: 'Prescriptive Success Rate del artículo',
+    definicion:
+      'La PSR tal como la define la ecuación 19 de Hoyos, Aguilar y Toro (2023): un cociente entre lo que suman las acciones prescritas y lo que suman las reales en el conjunto de prueba. El artículo espera un valor menor que 1; si sale mayor, el Informe lo avisa y no lo recorta. No es la tasa de éxito prescriptivo de la aplicación, que cuenta cuántos estudiantes llegan a la meta según el FCM.',
+    donde: 'Informe, «Validación según el artículo».',
+    ver: ['psr', 'reconstruccion'],
+    claves: 'ecuacion 19 articulo',
   },
   'punto-fijo': {
     termino: 'Punto fijo',
@@ -1119,6 +1202,16 @@ export const GLOSARIO = {
     donde: 'Asistente, «Sugerir con IA» y «Redactar con qwen2.5».',
     ver: ['ollama', 'ia', 'asistente'],
     claves: 'modelo de lenguaje llm',
+  },
+  r2: {
+    termino: 'R²',
+    expansion: 'Coeficiente de determinación',
+    definicion:
+      'Qué parte de la variación de los valores reales explica lo prescrito: 1 es perfecto, 0 equivale a decir siempre la media, y es negativo si lo hace peor que la media.',
+    formula: 'R² = 1 − Σ (y − ŷ)² / Σ (y − ȳ)²',
+    donde: 'Informe, Tabla 11.',
+    ver: ['mae', 'rmse', 'reconstruccion'],
+    claves: 'r cuadrado determinacion',
   },
   rango: {
     termino: 'Rango',
@@ -1135,6 +1228,15 @@ export const GLOSARIO = {
     donde: 'Paso 3, tabla «Por nivel».',
     ver: ['precision', 'exactitud-equilibrada', 'equilibrar'],
     claves: 'sensibilidad exhaustividad',
+  },
+  reconstruccion: {
+    termino: 'Reconstrucción',
+    expansion: 'Validación según el artículo',
+    definicion:
+      'Protocolo de evaluación del artículo: en el conjunto de prueba compara las acciones que prescribe el AG con las que había en los datos. Tabla 11: MAE, MSE, RMSE y R² por acción. Tabla 12: media ± DE real frente a prescrita y una prueba t o de Wilcoxon, según Lilliefors. Sin diferencia significativa, el modelo reproduce lo observado. Mide otra cosa que la tasa de éxito, que cuenta quién llega a la meta. Muchas combinaciones de acciones llevan al mismo estado, así que la prescripción no tiene por qué parecerse a lo observado.',
+    donde: 'Informe, «Validación según el artículo». Falta en los modelos entrenados antes de esta versión.',
+    ver: ['r2', 'prueba-t-wilcoxon', 'lilliefors', 'psr-ec19'],
+    claves: 'tabla 11 tabla 12 real prescrito',
   },
   'recomendaciones-csv': {
     termino: 'Recomendaciones (CSV)',
@@ -1159,13 +1261,30 @@ export const GLOSARIO = {
     ver: ['id-estudiante'],
     claves: 'fila',
   },
+  'regla-inferencia': {
+    termino: 'Reglas de inferencia',
+    definicion:
+      'Cómo se actualiza cada concepto dinámico en cada iteración. Kosko: solo la suma ponderada de los demás. Kosko modificada: suma además su propia activación previa (memoria). Reescalada: pasa las activaciones a [−1, 1] con 2v − 1 antes de sumar, para que un concepto en 0 reste en lugar de no aportar. El perfil «mejorado» usa la modificada; el del artículo deja que la validación cruzada elija.',
+    formula: 'Kosko: f(Σ_j≠i w_ji·v_j)   modificada: f(v_i + Σ w_ji·v_j)   reescalada: f((2v_i − 1) + Σ w_ji·(2v_j − 1))',
+    donde: 'Paso 3, «Regla de inferencia».',
+    ver: ['kosko', 'reescalada', 'activacion', 'tanh'],
+    claves: 'kosko clasica modificada reescalada regla',
+  },
+  reescalada: {
+    termino: 'Regla reescalada',
+    definicion:
+      'Regla de inferencia que usa 2v − 1 en lugar de v, de modo que las activaciones entran en la suma entre −1 y 1. Evita que los conceptos en 0 dejen de influir.',
+    formula: 'A_i(t+1) = f( (2A_i(t) − 1) + Σ_j w_ji·(2A_j(t) − 1) )',
+    donde: 'Paso 3, «Regla de inferencia».',
+    ver: ['regla-inferencia', 'kosko'],
+  },
   kosko: {
     termino: 'Regla de Kosko modificada',
     definicion:
       'Regla de inferencia del FCM, con memoria (Stylios y Groumpos, 2004): la nueva activación de cada concepto dinámico es la sigmoide de su activación previa (por k2) más la suma ponderada de las activaciones de los demás y el sesgo b_i del concepto (ambos por k1).',
     formula: 'A_i(t+1) = f( k2·A_i(t) + k1·(Σ_j w_ji·A_j(t) + b_i) )',
     donde: 'Paso 3, «Cómo se construye y se usa W».',
-    ver: ['sigmoide', 'k1-k2', 'inferencia', 'sesgo'],
+    ver: ['sigmoide', 'k1-k2', 'inferencia', 'sesgo', 'regla-inferencia'],
     claves: 'regla de inferencia',
   },
   regularizacion: {
@@ -1222,6 +1341,14 @@ export const GLOSARIO = {
     ver: ['psr', 'bosque'],
     claves: 'grupo comparar',
   },
+  seguimiento: {
+    termino: 'Seguimiento',
+    definicion:
+      'Etapa 4, de retroalimentación, de García et al. (2025): tras aplicar un plan se registran las acciones aplicadas, el resultado observado y la fecha. Se guarda junto al modelo (seguimiento.jsonl) y se exporta a CSV. Por ahora no reentrena el modelo: queda pendiente.',
+    donde: 'Consulta, «4. Seguimiento».',
+    ver: ['consulta', 'prescripcion'],
+    claves: 'retroalimentacion resultado observado registrar',
+  },
   semilla: {
     termino: 'Semilla',
     definicion:
@@ -1256,6 +1383,15 @@ export const GLOSARIO = {
     ver: ['inferencia', 'inferencia-paso-a-paso', 'prescripcion'],
     claves: 'simular escenario que pasaria si',
   },
+  smote: {
+    termino: 'SMOTE',
+    expansion: 'Synthetic Minority Oversampling Technique',
+    definicion:
+      'Crea registros sintéticos de los niveles escasos interpolando entre vecinos cercanos del mismo nivel. Solo se aplica al conjunto de entrenamiento, después de dividir: si tocara la prueba, la evaluación mediría también registros inventados y la exactitud saldría inflada. Es una alternativa a equilibrar los niveles con pesos.',
+    donde: 'Paso 3, «SMOTE en el entrenamiento».',
+    ver: ['equilibrar', 'entrenamiento-prueba', 'fuga'],
+    claves: 'sobremuestreo sinteticos desbalance',
+  },
   sobreajuste: {
     termino: 'Sobreajuste',
     definicion:
@@ -1289,9 +1425,10 @@ export const GLOSARIO = {
   tanh: {
     termino: 'Tanh',
     expansion: 'Tangente hiperbólica',
-    definicion: 'Función que lleva cualquier número al intervalo (−1, 1). Trunca los coeficientes de Ridge y Lasso al rango de un peso.',
-    formula: 'w_ji = tanh(β_j) ∈ (−1, 1)',
-    ver: ['ridge', 'lasso', 'intervalos'],
+    definicion:
+      'Función que lleva cualquier número al intervalo (−1, 1). Trunca los coeficientes de Ridge y Lasso al rango de un peso y, como función de activación, se reescala a (0, 1) para que la activación siga entre 0 y 1.',
+    formula: 'w_ji = tanh(β_j) ∈ (−1, 1);   activación: f(x) = (tanh(λx) + 1) / 2',
+    ver: ['ridge', 'lasso', 'intervalos', 'regla-inferencia'],
     claves: 'tangente hiperbolica truncamiento',
   },
   'tipo-pandas': {

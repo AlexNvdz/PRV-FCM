@@ -15,13 +15,16 @@ import type {
   EventoRedaccion,
   MetodoCorrelacion,
   ModeloDetalle,
+  ModeloListo,
   ModeloMeta,
   Normalizados,
   OpcionesEntrenamiento,
   PaginaFilas,
   PedidoRedaccion,
   PerfilBase,
+  Perfiles,
   Prescripcion,
+  RegistroSeguimiento,
   ResumenPrescripciones,
   Simulacion,
   Validacion,
@@ -73,6 +76,7 @@ const cuerpo = (datos: unknown) => JSON.stringify(datos);
 
 export const api = {
   estado: () => pedir<EstadoServicios>('/api/estado'),
+  perfiles: () => pedir<Perfiles>('/api/perfiles'),
 
   datasets: () => pedir<DatasetResumen[]>('/api/datasets'),
   dataset: (id: string) => pedir<Dataset>(`/api/datasets/${id}`),
@@ -105,6 +109,7 @@ export const api = {
   entrenar: (id: string, opciones: Partial<OpcionesEntrenamiento>) =>
     pedir<ModeloMeta>(`/api/datasets/${id}/entrenar`, { method: 'POST', body: cuerpo({ opciones }) }),
 
+  modelos: () => pedir<ModeloListo[]>('/api/modelos'),
   modelo: (id: string) => pedir<ModeloDetalle>(`/api/modelos/${id}`),
   eliminarModelo: (id: string) => pedir<void>(`/api/modelos/${id}`, { method: 'DELETE' }),
   recomendaciones: (id: string, params: { desde?: number; cantidad?: number; orden?: string; desc?: boolean; clase?: string; exito?: boolean | null }) =>
@@ -116,10 +121,13 @@ export const api = {
     pedir<Prescripcion>(`/api/modelos/${modeloId}/prescribir`, { method: 'POST', body: cuerpo(datos) }),
   perfilBase: (modeloId: string, estudiante?: number | null) =>
     pedir<PerfilBase>(`/api/modelos/${modeloId}/perfil-base?${consulta({ estudiante })}`),
-  prescribirPerfil: (modeloId: string, datos: { perfil: Record<string, string | number> } & OpcionesPrescripcion) =>
+  prescribirPerfil: (modeloId: string, datos: { perfil: Record<string, string | number>; deseados?: Record<string, string | number> } & OpcionesPrescripcion) =>
     pedir<Prescripcion>(`/api/modelos/${modeloId}/prescribir-perfil`, { method: 'POST', body: cuerpo(datos) }),
   resumenPrescripciones: (modeloId: string, nivel?: string | null) =>
     pedir<ResumenPrescripciones>(`/api/modelos/${modeloId}/resumen-prescripciones?${consulta({ nivel })}`),
+  seguimiento: (modeloId: string) => pedir<RegistroSeguimiento[]>(`/api/modelos/${modeloId}/seguimiento`),
+  registrarSeguimiento: (modeloId: string, registro: Omit<RegistroSeguimiento, 'id' | 'registrado'>) =>
+    pedir<RegistroSeguimiento>(`/api/modelos/${modeloId}/seguimiento`, { method: 'POST', body: cuerpo(registro) }),
   urlFigura: (modeloId: string, nombre: string) => `/api/modelos/${modeloId}/figuras/${nombre}`,
   urlRecomendacionesCsv: (modeloId: string) => `/api/modelos/${modeloId}/recomendaciones.csv`,
 };

@@ -281,7 +281,7 @@ export function Ayuda() {
             value={consulta}
             onChange={(e) => setConsulta(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && setConsulta('')}
-            placeholder="Buscar: BPTT, PSR, λ, máscara, perfil de riesgo…"
+            placeholder="Buscar: BPTT, tasa de éxito, λ, máscara, consulta…"
             autoComplete="off"
             className={clase(estiloControl, 'h-11! pl-9! pr-10 text-[0.95rem] [&::-webkit-search-cancel-button]:hidden')}
           />

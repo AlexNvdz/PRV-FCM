@@ -1,6 +1,6 @@
 // Estructura de la aplicación: barra lateral de pizarra y área de contenido.
 import { useQuery } from '@tanstack/react-query';
-import { BookOpen, Database, FileText, LayoutDashboard, Menu, MessagesSquare, Moon, Network, Sun, Target, X } from 'lucide-react';
+import { BookOpen, ClipboardCheck, Database, FileText, LayoutDashboard, Menu, MessagesSquare, Moon, Network, Sun, Target, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 
@@ -15,6 +15,7 @@ const NAVEGACION = [
   { a: '/modelo', texto: 'Modelo', icono: Network, pasos: '3' },
   { a: '/prescripciones', texto: 'Prescripciones', icono: Target, pasos: '4' },
   { a: '/informe', texto: 'Informe', icono: FileText, pasos: '5' },
+  { a: '/consulta', texto: 'Consulta', icono: ClipboardCheck, pasos: '' },
   { a: '/asistente', texto: 'Asistente', icono: MessagesSquare, pasos: '' },
   { a: '/ayuda', texto: 'Ayuda', icono: BookOpen, pasos: '' },
 ];
@@ -121,7 +122,7 @@ export function Marco() {
 
   return (
     <div className="flex min-h-full">
-      <aside className="hidden w-[248px] shrink-0 lg:block">
+      <aside className="no-imprimir hidden w-[248px] shrink-0 lg:block">
         <div className="sticky top-0 h-screen">
           <BarraLateral />
         </div>
@@ -137,7 +138,7 @@ export function Marco() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between bg-pizarra px-4 py-3 text-tiza lg:hidden">
+        <div className="no-imprimir flex items-center justify-between bg-pizarra px-4 py-3 text-tiza lg:hidden">
           <span className="font-serif text-lg font-semibold">Pizarra</span>
           <button type="button" onClick={() => setAbierto((v) => !v)} aria-label={abierto ? 'Cerrar menú' : 'Abrir menú'} className="rounded-md p-1.5 hover:bg-pizarra-2">
             {abierto ? <X className="size-5" /> : <Menu className="size-5" />}
