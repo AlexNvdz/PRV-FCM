@@ -1,0 +1,267 @@
+{
+  "nombre": "Student dropout (UCI)",
+  "objetivo": "Final_Grade",
+  "invertir_objetivo": false,
+  "columnas": [
+    {
+      "columna": "School",
+      "rol": "excluir",
+      "nombre": "Escuela"
+    },
+    {
+      "columna": "Gender",
+      "rol": "excluir",
+      "codificacion": "ordinal",
+      "orden": [
+        "F",
+        "M"
+      ],
+      "nombre": "Género"
+    },
+    {
+      "columna": "Age",
+      "rol": "excluir",
+      "codificacion": "numerica",
+      "nombre": "Edad"
+    },
+    {
+      "columna": "Address",
+      "rol": "excluir",
+      "codificacion": "ordinal",
+      "orden": [
+        "R",
+        "U"
+      ],
+      "nombre": "Dirección"
+    },
+    {
+      "columna": "Family_Size",
+      "rol": "excluir",
+      "codificacion": "ordinal",
+      "orden": [
+        "GT3",
+        "LE3"
+      ],
+      "nombre": "Tamaño de la Familia"
+    },
+    {
+      "columna": "Parental_Status",
+      "rol": "inmutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "A",
+        "T"
+      ],
+      "nombre": "Estado Parental"
+    },
+    {
+      "columna": "Mother_Education",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "nombre": "Educación de la Madre"
+    },
+    {
+      "columna": "Father_Education",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "nombre": "Educación del Padre"
+    },
+    {
+      "columna": "Mother_Job",
+      "rol": "inmutable",
+      "codificacion": "nominal",
+      "nombre": "Trabajo de la Madre"
+    },
+    {
+      "columna": "Father_Job",
+      "rol": "inmutable",
+      "codificacion": "nominal",
+      "nombre": "Trabajo del Padre"
+    },
+    {
+      "columna": "Reason_for_Choosing_School",
+      "rol": "inmutable",
+      "codificacion": "nominal",
+      "nombre": "Razón de Elección de la Escuela"
+    },
+    {
+      "columna": "Guardian",
+      "rol": "inmutable",
+      "codificacion": "nominal",
+      "nombre": "Tutor"
+    },
+    {
+      "columna": "Travel_Time",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "nombre": "Tiempo de Viaje"
+    },
+    {
+      "columna": "Study_Time",
+      "rol": "accion",
+      "codificacion": "numerica",
+      "nombre": "Tiempo de Estudio"
+    },
+    {
+      "columna": "Number_of_Failures",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Número de Materias Reprobadas"
+    },
+    {
+      "columna": "School_Support",
+      "rol": "mutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "no",
+        "yes"
+      ],
+      "nombre": "Soporte Escolar"
+    },
+    {
+      "columna": "Family_Support",
+      "rol": "mutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "no",
+        "yes"
+      ],
+      "dinamico": false,
+      "nombre": "Soporte Familiar"
+    },
+    {
+      "columna": "Extra_Paid_Class",
+      "rol": "mutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "no",
+        "yes"
+      ],
+      "nombre": "Clases Extraordinarias Pagadas"
+    },
+    {
+      "columna": "Extra_Curricular_Activities",
+      "rol": "mutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "no",
+        "yes"
+      ],
+      "nombre": "Actividades Extracurriculares"
+    },
+    {
+      "columna": "Attended_Nursery",
+      "rol": "inmutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "no",
+        "yes"
+      ],
+      "nombre": "Attended nursery"
+    },
+    {
+      "columna": "Wants_Higher_Education",
+      "rol": "inmutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "no",
+        "yes"
+      ],
+      "nombre": "Wants higher education"
+    },
+    {
+      "columna": "Internet_Access",
+      "rol": "inmutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "no",
+        "yes"
+      ],
+      "dinamico": false,
+      "nombre": "Acceso a Internet"
+    },
+    {
+      "columna": "In_Relationship",
+      "rol": "inmutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "no",
+        "yes"
+      ],
+      "dinamico": false,
+      "nombre": "En Relación"
+    },
+    {
+      "columna": "Family_Relationship",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Relación Familiar"
+    },
+    {
+      "columna": "Free_Time",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Tiempo Libre"
+    },
+    {
+      "columna": "Going_Out",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Salidas"
+    },
+    {
+      "columna": "Weekend_Alcohol_Consumption",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Consumo de Alcohol en Fin de Semana"
+    },
+    {
+      "columna": "Weekday_Alcohol_Consumption",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Consumo de Alcohol en Semana"
+    },
+    {
+      "columna": "Health_Status",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Estado de Salud"
+    },
+    {
+      "columna": "Number_of_Absences",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Número de Ausencias"
+    },
+    {
+      "columna": "Grade_1",
+      "rol": "inmutable",
+      "nombre": "Nota 1",
+      "codificacion": "numerica"
+    },
+    {
+      "columna": "Grade_2",
+      "rol": "inmutable",
+      "nombre": "Nota 2",
+      "codificacion": "numerica"
+    },
+    {
+      "columna": "Final_Grade",
+      "rol": "objetivo",
+      "nombre": "Nota Final",
+      "codificacion": "numerica"
+    },
+    {
+      "columna": "Dropped_Out",
+      "rol": "excluir"
+    }
+  ]
+}

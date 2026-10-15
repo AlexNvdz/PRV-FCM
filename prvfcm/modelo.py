@@ -21,7 +21,7 @@ from .esquema import codificacion_de, esquema_a_dict, esquema_desde_dict, rol_de
 from .evaluacion import discretizar_rendimiento
 from .fcm import MapaCognitivoDifuso
 from .pipeline import ResultadoPipeline
-from .preprocesamiento import Preprocesador, como_texto
+from .preprocesamiento import Preprocesador, como_texto, objetivo_numerico
 
 VERSION = 1
 
@@ -37,11 +37,13 @@ def guardar_modelo(r: ResultadoPipeline, ruta: Path) -> None:
             "estructura": r.fcm.estructura.astype(int).tolist(),
             "pesos": r.fcm.pesos.tolist(),
             "sesgo": r.fcm.sesgo.tolist(),
+            "expertos": [str(m.get("experto", "")) for m in r.opciones.matrices_expertos] if r.config_fcm.metodo_pesos == "expertos" else [],
             "indices_fijos": r.fcm.indices_fijos.tolist(),
             "config": dataclasses.asdict(r.config_fcm),
         },
         "medias_dinamicos": r.medias_dinamicos.tolist(),
-        "config_ag": dataclasses.asdict(r.opciones.config_ag),
+        "config_ag": dataclasses.asdict(r.config_ag),
+        "perfil": r.opciones.perfil,
         "config_prescripcion": dataclasses.asdict(r.config_prescripcion),
         "ids_prueba": [int(i) for i in r.prueba.index],
         "semilla": r.opciones.semilla,
@@ -67,6 +69,8 @@ class ModeloPRVFCM:
         self.fcm.pesos = np.array(f["pesos"], dtype=float)
         if "sesgo" in f:
             self.fcm.sesgo = np.array(f["sesgo"], dtype=float)
+        self.expertos = list(f.get("expertos", []))
+        self.perfil = str(datos.get("perfil", "mejorado"))
         self.medias_dinamicos = np.array(datos["medias_dinamicos"], dtype=float)
         self.config_ag = ConfigAG(**datos["config_ag"])
         presc = dict(datos["config_prescripcion"])
@@ -142,7 +146,19 @@ class ModeloPRVFCM:
         return self.pre.transformar(registro)[0]
 
     def valor_normalizado(self, columna: str, valor) -> float:
-        """Lleva un valor en unidades originales (o una categoría ordinal) a [0, 1]."""
+        """Lleva un valor en unidades originales (o una categoría ordinal) a [0, 1].
+
+        Para el objetivo también acepta un nombre de nivel ("H", o "≥M" si se binarizó).
+        """
+        if columna == self.esquema.objetivo:
+            if str(valor) in self.esquema.niveles:
+                return float(self.esquema.niveles[str(valor)])
+            if columna not in self.esquema.codificacion_ordinal:
+                try:
+                    codificado = objetivo_numerico(pd.Series([float(valor)]), self.esquema).iloc[0]
+                except (TypeError, ValueError):
+                    raise ValueError(f"{columna}: el valor «{valor}» no es un número ni un nivel.") from None
+                return float(self.pre.normalizar(codificado, columna))
         mapa = self.esquema.codificacion_ordinal.get(columna)
         if mapa is not None and not isinstance(valor, (int, float)):
             texto = como_texto(pd.Series([valor])).iloc[0]
@@ -191,9 +207,13 @@ class ModeloPRVFCM:
         }
 
     def contribuciones(self, estado_base: np.ndarray, estado_prescrito: np.ndarray) -> list[dict]:
-        """Aporte k1 * w_jo * A_j de cada concepto a la entrada del objetivo, antes y después de prescribir."""
+        """Aporte k1 * w_jo * u_j de cada concepto a la entrada del objetivo, antes y después de prescribir.
+
+        u_j = A_j, o 2A_j - 1 en la regla reescalada y con tanh (``MapaCognitivoDifuso.entrada``).
+        """
         objetivo = self.pre.indice_objetivo
         k1 = self.fcm.config.coef_influencia
+        u_base, u_prescrito = self.fcm.entrada(np.asarray(estado_base)), self.fcm.entrada(np.asarray(estado_prescrito))
         filas = []
         for j in np.flatnonzero(self.fcm.estructura[:, objetivo]):
             c = self.esquema.conceptos[j]
@@ -207,8 +227,8 @@ class ModeloPRVFCM:
                     "peso": peso,
                     "activacion_base": float(estado_base[j]),
                     "activacion_prescrita": float(estado_prescrito[j]),
-                    "aporte_base": k1 * peso * float(estado_base[j]),
-                    "aporte_prescrito": k1 * peso * float(estado_prescrito[j]),
+                    "aporte_base": k1 * peso * float(u_base[j]),
+                    "aporte_prescrito": k1 * peso * float(u_prescrito[j]),
                 }
             )
         return sorted(filas, key=lambda f: -abs(f["aporte_prescrito"]))

@@ -11,7 +11,11 @@ Etapa 1: Preprocesamiento de datos.
     - números dentro de texto ("G-07" -> 7);
     - nominales (nacionalidad, sección, asignatura) con la media suavizada del
       objetivo por categoría, ajustada solo con datos de entrenamiento, o
-      one-hot: un concepto 0/1 por categoría.
+      one-hot: un concepto 0/1 por categoría;
+    - fechas: días desde la fecha mínima de entrenamiento.
+* Los vacíos de las columnas numéricas y de fecha se imputan con la mediana de
+  entrenamiento; las filas con vacíos en otras columnas se descartan.
+* SMOTE (opcional) para equilibrar los niveles, solo en el entrenamiento.
 * Normalización Min-Max al rango [0, 1] (mínimos y máximos de entrenamiento):
   la "fuzzificación" de cada variable, x' = (x - min) / (max - min).
 * Segmentación de conceptos en sistema (inmutables y mutables) y acción.
@@ -24,6 +28,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold, train_test_split
+from sklearn.neighbors import NearestNeighbors
 
 from .configuracion import ACCION, ESQUEMA_XAPI, INMUTABLE, MUTABLE, Esquema
 from .evaluacion import discretizar_rendimiento
@@ -88,6 +93,18 @@ def leer_tabla(ruta: str | Path) -> pd.DataFrame:
     return leer_csv(ruta)
 
 
+def fechas(serie: pd.Series) -> pd.Series:
+    """Fechas de una columna: año primero si empieza por él (2012-09-04), si no, día primero ("04-09-2012" = 4 de septiembre).
+
+    Las ilegibles quedan vacías. (pandas con ``dayfirst=True`` invierte día y mes también en las ISO.)
+    """
+    texto = serie.astype(str).str.strip()
+    iso = texto.str.match(r"\d{4}[-/.]")
+    return pd.concat(
+        [pd.to_datetime(texto[iso], errors="coerce"), pd.to_datetime(texto[~iso], dayfirst=True, errors="coerce")]
+    ).reindex(serie.index)
+
+
 def como_texto(serie: pd.Series) -> pd.Series:
     """Valores como texto sin espacios; los números enteros sin decimales (1.0 -> "1").
 
@@ -102,8 +119,21 @@ def como_texto(serie: pd.Series) -> pd.Series:
     return serie.astype(str).str.strip()
 
 
+def columnas_imputables(esquema: Esquema) -> list[str]:
+    """Columnas numéricas y de fecha, salvo el objetivo: sus vacíos se imputan con la mediana de entrenamiento."""
+    otras = (
+        set(esquema.codificacion_ordinal) | set(esquema.columnas_nominales)
+        | set(esquema.columnas_numero_en_texto) | set(esquema.one_hot) | {esquema.objetivo}
+    )
+    return [c for c in esquema.columnas if c not in otras]
+
+
 def cargar_datos(ruta: str | Path, esquema: Esquema = ESQUEMA_XAPI) -> pd.DataFrame:
-    """Carga el CSV (o Excel), limpia espacios y valida que existan las columnas del esquema."""
+    """Carga el CSV (o Excel), limpia espacios y valida que existan las columnas del esquema.
+
+    Descarta las filas con vacíos en columnas categóricas o en el objetivo; los
+    vacíos numéricos y de fecha los imputa el ``Preprocesador``.
+    """
     df = leer_tabla(ruta)
     faltantes = set(esquema.columnas_origen) - set(df.columns)
     if faltantes:
@@ -111,7 +141,9 @@ def cargar_datos(ruta: str | Path, esquema: Esquema = ESQUEMA_XAPI) -> pd.DataFr
 
     n_original = len(df)
     df = df.drop(columns=[c for c in esquema.columnas_excluidas if c in df.columns])
-    df = df.dropna(subset=esquema.columnas_origen)  # Se conserva el índice: identifica la fila original del CSV.
+    imputables = set(columnas_imputables(esquema))
+    # Se conserva el índice: identifica la fila original del CSV.
+    df = df.dropna(subset=[c for c in esquema.columnas_origen if c not in imputables])
     if len(df) < n_original:
         print(f"Aviso: se descartaron {n_original - len(df)} filas con valores faltantes.")
 
@@ -121,15 +153,22 @@ def cargar_datos(ruta: str | Path, esquema: Esquema = ESQUEMA_XAPI) -> pd.DataFr
     return df
 
 
+def objetivo_numerico(serie: pd.Series, esquema: Esquema) -> pd.Series:
+    """Objetivo numérico codificado: negado si menos es mejor, o 0/1 si se binarizó con un umbral."""
+    valores = pd.to_numeric(serie).astype(float)
+    if esquema.umbral_objetivo is not None:
+        exito = valores <= esquema.umbral_objetivo if esquema.invertir_objetivo else valores >= esquema.umbral_objetivo
+        return exito.astype(float)
+    return -valores if esquema.invertir_objetivo else valores
+
+
 def objetivo_normalizado(df: pd.DataFrame, esquema: Esquema) -> pd.Series:
     """Objetivo en [0, 1] (1 = mejor nivel) con el mínimo y el máximo de ``df``."""
     serie = df[esquema.objetivo]
     if esquema.objetivo in esquema.codificacion_ordinal:
         mapa = esquema.codificacion_ordinal[esquema.objetivo]
         return como_texto(serie).map(mapa) / max(mapa.values())
-    valores = pd.to_numeric(serie).astype(float)
-    if esquema.invertir_objetivo:
-        valores = -valores
+    valores = objetivo_numerico(serie, esquema)
     rango = valores.max() - valores.min()
     return (valores - valores.min()) / (rango if rango > 0 else 1.0)
 
@@ -138,11 +177,48 @@ def etiquetas_objetivo(df: pd.DataFrame, esquema: Esquema = ESQUEMA_XAPI) -> np.
     """Nivel del objetivo de cada registro: su categoría o, si es numérico, el nivel más cercano.
 
     Para un objetivo numérico usa el mínimo y el máximo de ``df``; sirve para
-    estratificar. Después de ajustar, use ``Preprocesador.etiquetas``.
+    estratificar. Después de ajustar, use ``Preprocesador.etiquetas``. Si el
+    objetivo ordinal se binarizó, cada categoría pasa a su nivel ("<M", "≥M").
     """
     if esquema.objetivo in esquema.codificacion_ordinal:
-        return como_texto(df[esquema.objetivo]).to_numpy()
+        return niveles_de_categorias(df[esquema.objetivo], esquema)
     return discretizar_rendimiento(objetivo_normalizado(df, esquema).to_numpy(), esquema.niveles)
+
+
+def niveles_de_categorias(serie: pd.Series, esquema: Esquema) -> np.ndarray:
+    """Nivel de cada categoría de un objetivo ordinal (la categoría misma, salvo si se binarizó)."""
+    mapa = esquema.nivel_de_categoria
+    return como_texto(serie).map(lambda t: mapa.get(t, t)).to_numpy()
+
+
+def smote(X: np.ndarray, etiquetas: np.ndarray, k: int = 5, semilla: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """SMOTE (Chawla et al., 2002): registros sintéticos de cada nivel minoritario hasta igualar al mayoritario.
+
+    Cada sintético está en el segmento entre un registro del nivel y uno de sus
+    ``k`` vecinos más cercanos del mismo nivel, en la escala normalizada.
+    Aplíquelo solo al entrenamiento (de cada pliegue): PRV-FCM lo aplicó antes de
+    dividir, así que la prueba tenía variantes de registros de entrenamiento.
+    """
+    rng = np.random.default_rng(semilla)
+    etiquetas = np.asarray(etiquetas)
+    niveles, conteos = np.unique(etiquetas, return_counts=True)
+    X_nuevos, etiquetas_nuevas = [X], [etiquetas]
+    for nivel, n in zip(niveles, conteos):
+        faltan = int(conteos.max() - n)
+        if faltan == 0:
+            continue
+        grupo = X[etiquetas == nivel]
+        if len(grupo) == 1:
+            sinteticos = np.repeat(grupo, faltan, axis=0)
+        else:
+            k_nivel = min(k, len(grupo) - 1)
+            vecinos = NearestNeighbors(n_neighbors=k_nivel + 1).fit(grupo).kneighbors(grupo, return_distance=False)[:, 1:]
+            base = rng.integers(0, len(grupo), faltan)
+            vecino = vecinos[base, rng.integers(0, k_nivel, faltan)]
+            sinteticos = grupo[base] + rng.random((faltan, 1)) * (grupo[vecino] - grupo[base])
+        X_nuevos.append(sinteticos)
+        etiquetas_nuevas.append(np.full(faltan, nivel, dtype=etiquetas.dtype))
+    return np.vstack(X_nuevos), np.concatenate(etiquetas_nuevas)
 
 
 def grupos_por_perfil(df: pd.DataFrame, esquema: Esquema = ESQUEMA_XAPI) -> np.ndarray:
@@ -215,6 +291,8 @@ class Preprocesador:
         self.columnas = [c.columna for c in self.conceptos]
         self.mapas_nominales: dict[str, dict[str, float]] = {}
         self.media_global: float = 0.0
+        self.medianas: dict[str, float] = {}
+        self.fechas_minimas: dict[str, str] = {}
         self.minimos: pd.Series | None = None
         self.maximos: pd.Series | None = None
 
@@ -280,11 +358,14 @@ class Preprocesador:
             elif columna in esquema.columnas_nominales:
                 mapa = self.mapas_nominales[columna]
                 codificado[columna] = como_texto(serie).map(mapa).fillna(self.media_global).astype(float)
+            elif columna in esquema.columnas_fecha:
+                dias = fechas(serie) - pd.Timestamp(self.fechas_minimas[columna])
+                codificado[columna] = dias.dt.days.astype(float)
+            elif columna == esquema.objetivo:
+                codificado[columna] = objetivo_numerico(serie, esquema)
             else:
                 codificado[columna] = pd.to_numeric(serie).astype(float)
-                if columna == esquema.objetivo and esquema.invertir_objetivo:
-                    codificado[columna] = -codificado[columna]
-        return codificado
+        return codificado.fillna(self.medianas) if self.medianas else codificado
 
     def ajustar(self, df: pd.DataFrame) -> "Preprocesador":
         """Estima la codificación nominal y los parámetros Min-Max."""
@@ -299,8 +380,13 @@ class Preprocesador:
                 estadisticos["count"] + m
             )
             self.mapas_nominales[columna] = suavizada.to_dict()
+        self.fechas_minimas = {c: fechas(df[c]).min().isoformat() for c in self.esquema.columnas_fecha if c in self.columnas}
 
+        self.medianas = {}
         codificado = self._codificar(df)
+        imputables = columnas_imputables(self.esquema)
+        self.medianas = {c: float(v) for c, v in codificado[imputables].median().items()}
+        codificado = codificado.fillna(self.medianas)
         self.minimos = codificado.min()
         self.maximos = codificado.max()
         return self
@@ -331,7 +417,7 @@ class Preprocesador:
     def etiquetas(self, df: pd.DataFrame) -> np.ndarray:
         """Nivel observado del objetivo con la normalización de entrenamiento."""
         if self.esquema.objetivo in self.esquema.codificacion_ordinal:
-            return como_texto(df[self.esquema.objetivo]).to_numpy()
+            return niveles_de_categorias(df[self.esquema.objetivo], self.esquema)
         return discretizar_rendimiento(self.transformar(df)[:, self.indice_objetivo], self.esquema.niveles)
 
     def resumen_conceptos(self) -> pd.DataFrame:
@@ -360,6 +446,8 @@ class Preprocesador:
             "suavizado": self.suavizado,
             "mapas_nominales": self.mapas_nominales,
             "media_global": self.media_global,
+            "medianas": self.medianas,
+            "fechas_minimas": self.fechas_minimas,
             "minimos": {c: float(v) for c, v in self.minimos.items()},
             "maximos": {c: float(v) for c, v in self.maximos.items()},
         }
@@ -369,6 +457,8 @@ class Preprocesador:
         pre = cls(esquema, datos["suavizado"])
         pre.mapas_nominales = {c: {str(k): float(v) for k, v in m.items()} for c, m in datos["mapas_nominales"].items()}
         pre.media_global = float(datos["media_global"])
+        pre.medianas = {c: float(v) for c, v in datos.get("medianas", {}).items()}
+        pre.fechas_minimas = dict(datos.get("fechas_minimas", {}))
         pre.minimos = pd.Series(datos["minimos"], dtype=float)[pre.columnas]
         pre.maximos = pd.Series(datos["maximos"], dtype=float)[pre.columnas]
         return pre

@@ -16,7 +16,8 @@ Esquema de un dataset en JSON: el formato que usa la aplicación web.
         {"columna": "PlaceofBirth", "rol": "excluir"}
       ],
       "segmento": {"columna": "StudentAbsenceDays", "valor": "Above-7",
-                   "nombre_si": "ausencias > 7", "nombre_no": "ausencias <= 7"}
+                   "nombre_si": "ausencias > 7", "nombre_no": "ausencias <= 7"},
+      "binarizar_objetivo": "M"                # opcional: objetivo de dos niveles (ver configuracion.binarizar)
     }
 
 Roles (notación PRV-FCM): ``objetivo`` (C_T, concepto objetivo), ``accion``
@@ -25,9 +26,10 @@ sistema) y ``excluir``.
 Codificaciones: ``numerica``; ``ordinal`` (label encoding) con ``orden`` de
 menor a mayor (en el objetivo, del peor al mejor nivel); ``nominal`` (media
 suavizada del objetivo por categoría); ``one_hot`` con ``categorias`` (un
-concepto 0/1 por categoría, solo en conceptos del sistema) y
-``numero_en_texto`` ("G-07" -> 7). Si el objetivo es ordinal, sus niveles se
-reparten en [0, 1] según ese orden.
+concepto 0/1 por categoría, solo en conceptos del sistema),
+``numero_en_texto`` ("G-07" -> 7) y ``fecha`` (días desde la fecha mínima de
+entrenamiento). Si el objetivo es ordinal, sus niveles se reparten en [0, 1]
+según ese orden.
 """
 from __future__ import annotations
 
@@ -35,12 +37,12 @@ import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 
-from .configuracion import ACCION, ESQUEMA_XAPI, INMUTABLE, MUTABLE, Concepto, Esquema
+from .configuracion import ACCION, ESQUEMA_XAPI, INMUTABLE, MUTABLE, Concepto, Esquema, binarizar
 from .pipeline import SEGMENTO_AUSENTISMO, Segmento
-from .preprocesamiento import como_texto, etiquetas_objetivo
+from .preprocesamiento import columnas_imputables, como_texto, etiquetas_objetivo, fechas
 
 ROLES = ("inmutable", "accion", "mutable", "objetivo", "excluir")
-CODIFICACIONES = ("numerica", "ordinal", "nominal", "one_hot", "numero_en_texto")
+CODIFICACIONES = ("numerica", "ordinal", "nominal", "one_hot", "numero_en_texto", "fecha")
 NIVELES_NUMERICOS = {"Bajo": 0.0, "Medio": 0.5, "Alto": 1.0}
 TIPO_DE_ROL = {"inmutable": INMUTABLE, "accion": ACCION, "mutable": MUTABLE, "objetivo": MUTABLE}
 MIN_FILAS = 30
@@ -113,6 +115,8 @@ def codificacion_de(esquema: Esquema, columna: str) -> str:
         return "numero_en_texto"
     if columna in esquema.columnas_nominales:
         return "nominal"
+    if columna in esquema.columnas_fecha:
+        return "fecha"
     return "numerica"
 
 
@@ -173,6 +177,8 @@ def esquema_a_dict(esquema: Esquema, segmento: Segmento | None = None) -> dict:
     }
     if segmento is not None:
         resultado["segmento"] = segmento_a_dict(segmento)
+    if esquema.binarizar_objetivo is not None:
+        resultado["binarizar_objetivo"] = esquema.binarizar_objetivo
     return resultado
 
 
@@ -229,7 +235,7 @@ def _errores_de_estructura(datos: dict) -> list[str]:
                     f"{nombre}: tiene {len(distintas)} categorías y one-hot admite hasta {MAX_CATEGORIAS_ONE_HOT}. "
                     "Use la codificación nominal (media del objetivo)."
                 )
-        if rol == "accion" and codificacion in ("nominal", "one_hot"):
+        if rol == "accion" and codificacion in ("nominal", "one_hot", "fecha"):
             errores.append(f"{nombre}: una acción debe ser numérica u ordinal; con codificación {codificacion} no se puede aumentar.")
         if rol == "objetivo" and codificacion not in ("ordinal", "numerica"):
             errores.append(f"{nombre}: el objetivo debe ser ordinal (del peor al mejor nivel) o numérico.")
@@ -263,7 +269,7 @@ def esquema_desde_dict(datos: dict) -> Esquema:
         and not any(e.get("codificacion") == "one_hot" for e in usadas)
     )
 
-    conceptos, ordinal, en_texto, nominales, one_hot = [], {}, [], [], {}
+    conceptos, ordinal, en_texto, nominales, one_hot, de_fecha = [], {}, [], [], {}, []
     objetivo = next(e["columna"] for e in usadas if e["rol"] == "objetivo")
     for e in usadas:
         columna, rol = e["columna"], e["rol"]
@@ -290,6 +296,8 @@ def esquema_desde_dict(datos: dict) -> Esquema:
             en_texto.append(columna)
         elif codificacion == "nominal":
             nominales.append(columna)
+        elif codificacion == "fecha":
+            de_fecha.append(columna)
 
     repetidas = sorted({c.columna for c in conceptos if [x.columna for x in conceptos].count(c.columna) > 1})
     if repetidas:
@@ -299,7 +307,7 @@ def esquema_desde_dict(datos: dict) -> Esquema:
         niveles = {etiqueta: i / (len(orden) - 1) for i, etiqueta in enumerate(orden)}
     else:
         niveles = {str(k): float(v) for k, v in (datos.get("niveles") or NIVELES_NUMERICOS).items()}
-    return Esquema(
+    esquema = Esquema(
         conceptos=tuple(conceptos),
         objetivo=objetivo,
         codificacion_ordinal=ordinal,
@@ -310,7 +318,14 @@ def esquema_desde_dict(datos: dict) -> Esquema:
         invertir_objetivo=bool(datos.get("invertir_objetivo", False)) and objetivo not in ordinal,
         nombre=str(datos.get("nombre", "")),
         one_hot=one_hot,
+        columnas_fecha=tuple(de_fecha),
     )
+    if datos.get("binarizar_objetivo") is not None:
+        try:
+            esquema = binarizar(esquema, datos["binarizar_objetivo"])
+        except ValueError as error:
+            raise ErrorEsquema([str(error)]) from None
+    return esquema
 
 
 def validar_esquema(datos: dict, df: pd.DataFrame) -> dict:
@@ -330,9 +345,13 @@ def validar_esquema(datos: dict, df: pd.DataFrame) -> dict:
         return {"ok": False, "errores": [f"El archivo no tiene las columnas: {', '.join(faltantes)}."], "avisos": [], "filas_utiles": 0}
 
     usadas = df[esquema.columnas_origen]
-    completas = usadas.dropna()
+    imputables = set(columnas_imputables(esquema))
+    completas = usadas.dropna(subset=[c for c in esquema.columnas_origen if c not in imputables])
     if len(completas) < len(df):
-        avisos.append(f"Se descartarán {len(df) - len(completas)} filas con valores faltantes en las columnas usadas.")
+        avisos.append(f"Se descartarán {len(df) - len(completas)} filas con valores faltantes en columnas categóricas o en el objetivo.")
+    vacias = [c for c in esquema.columnas_origen if c in imputables and completas[c].isna().any()]
+    if vacias:
+        avisos.append(f"Los vacíos de {', '.join(vacias)} se completarán con la mediana del entrenamiento.")
     if len(completas) < MIN_FILAS:
         errores.append(f"Quedan {len(completas)} filas completas; se necesitan al menos {MIN_FILAS}.")
 
@@ -351,10 +370,14 @@ def validar_esquema(datos: dict, df: pd.DataFrame) -> dict:
             continue
         serie = completas[c.columna]
         codificacion = codificacion_de(esquema, c.columna)
-        if codificacion == "numerica":
+        if codificacion == "fecha":
+            ilegibles = serie.notna() & fechas(serie).isna()
+            if ilegibles.any():
+                errores.append(f"{c.columna}: hay valores que no son fechas ({', '.join(serie[ilegibles].astype(str).unique()[:3])}).")
+        elif codificacion == "numerica":
             convertida = pd.to_numeric(serie, errors="coerce")
-            if convertida.isna().any():
-                ejemplos = ", ".join(serie[convertida.isna()].astype(str).unique()[:3])
+            if (convertida.isna() & serie.notna()).any():
+                ejemplos = ", ".join(serie[convertida.isna() & serie.notna()].astype(str).unique()[:3])
                 errores.append(f"{c.columna}: hay valores no numéricos ({ejemplos}). Use codificación ordinal o nominal.")
             elif convertida.nunique() < 2:
                 avisos.append(f"{c.columna}: tiene un solo valor; no aportará información.")

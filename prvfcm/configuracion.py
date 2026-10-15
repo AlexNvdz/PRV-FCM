@@ -133,6 +133,9 @@ class Esquema:
     invertir_objetivo: bool = False                  # Objetivo numérico en el que menos es mejor.
     nombre: str = ""
     one_hot: dict[str, tuple[str, str]] = field(default_factory=dict)  # Concepto -> (columna origen, categoría).
+    columnas_fecha: tuple[str, ...] = ()             # Fecha -> días desde la fecha mínima de entrenamiento.
+    umbral_objetivo: float | None = None             # Objetivo numérico binarizado: éxito si >= umbral (<= si se invierte).
+    binarizar_objetivo: str | float | None = None    # Nivel o umbral con el que se binarizó (ver ``binarizar``).
 
     @property
     def columnas(self) -> list[str]:
@@ -163,6 +166,15 @@ class Esquema:
         valores = sorted(set(self.niveles.values()))
         return (valores[-1] - valores[-2]) / 2 if len(valores) > 1 else 0.5
 
+    @property
+    def nivel_de_categoria(self) -> dict[str, str]:
+        """Nivel de cada categoría de un objetivo ordinal: la misma categoría, salvo si se binarizó."""
+        mapa = self.codificacion_ordinal.get(self.objetivo)
+        if mapa is None:
+            return {}
+        maximo = max(mapa.values()) or 1
+        return {c: min(self.niveles, key=lambda n: abs(self.niveles[n] - v / maximo)) for c, v in mapa.items()}
+
 
 ESQUEMA_XAPI = Esquema(
     conceptos=CONCEPTOS,
@@ -183,8 +195,41 @@ def con_mutables_dinamicos(esquema: Esquema = ESQUEMA_XAPI) -> Esquema:
     valores observados. Por ejemplo, un estudiante con más de 7 ausencias pasa a
     tener el ausentismo que el modelo infiere de su participación.
     """
-    conceptos = tuple(replace(c, dinamico=True) if c.tipo == MUTABLE else c for c in esquema.conceptos)
+    conceptos = tuple(
+        replace(c, dinamico=True) if c.tipo == MUTABLE and c.columna not in esquema.one_hot else c for c in esquema.conceptos
+    )
     return replace(esquema, conceptos=conceptos)
+
+
+def binarizar(esquema: Esquema, valor: str | float) -> Esquema:
+    """Objetivo de dos niveles, como en PRV-FCM (nota < 70 frente a >= 70).
+
+    Ordinal: ``valor`` es el nivel mínimo que cuenta como éxito; los niveles
+    desde él valen 1 y los anteriores 0 ("<M" y "≥M"). Numérico: ``valor`` es un
+    umbral en unidades originales; éxito si el valor es >= umbral (<= si el
+    objetivo se invierte).
+    """
+    objetivo = esquema.objetivo
+    mapa = esquema.codificacion_ordinal.get(objetivo)
+    if mapa is not None:
+        nivel, orden = str(valor), sorted(mapa, key=mapa.get)
+        if nivel not in orden[1:]:
+            raise ValueError(f"Para binarizar {objetivo} use uno de sus niveles salvo el peor: {', '.join(orden[1:])}.")
+        corte = orden.index(nivel)
+        binario = {categoria: int(i >= corte) for i, categoria in enumerate(orden)}
+        return replace(
+            esquema,
+            codificacion_ordinal={**esquema.codificacion_ordinal, objetivo: binario},
+            niveles={f"<{nivel}": 0.0, f"≥{nivel}": 1.0},
+            binarizar_objetivo=nivel,
+        )
+    try:
+        umbral = float(valor)
+    except (TypeError, ValueError):
+        raise ValueError(f"{objetivo} es numérico: para binarizarlo use un umbral numérico, no «{valor}».") from None
+    texto = f"{umbral:g}"
+    niveles = {f">{texto}": 0.0, f"≤{texto}": 1.0} if esquema.invertir_objetivo else {f"<{texto}": 0.0, f"≥{texto}": 1.0}
+    return replace(esquema, umbral_objetivo=umbral, niveles=niveles, binarizar_objetivo=umbral)
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +256,20 @@ class ConfigFCM:
     # Sesgo b_i en la regla: A_i(t+1) = f(k2*A_i + k1*(sum_j w_ji*A_j + b_i)). Solo en los conceptos
     # que reciben aristas; equivale al peso de un concepto constante igual a 1.
     sesgo: bool = True
+    # Regla de inferencia (Tabla 2 de PRV-FCM): "kosko" (sin memoria), "kosko_modificada" (con memoria k2)
+    # o "reescalada" (entradas 2A - 1). Activación "sigmoide" o "tanh": con tanh el estado vive en [-1, 1]
+    # (2A - 1) y vuelve a [0, 1] para el resto del pipeline (ver fcm.MapaCognitivoDifuso).
+    inferencia: str = "kosko_modificada"
+    activacion: str = "sigmoide"
+    # PSO (metodo_pesos = "pso", ec. 4-5 de PRV-FCM): v <- w*v + c1*r1*(pbest - W) + c2*r2*(gbest - W),
+    # |v| <= vmax (el rango de los pesos). El perfil "articulo" usa la ecuación literal (w = c1 = c2 = 1).
+    pso_particulas: int = 30
+    pso_iteraciones: int = 200
+    pso_inercia: float = 0.7298
+    pso_c1: float = 1.496
+    pso_c2: float = 1.496
+    pso_vmax: float = 2.0
+    pso_paciencia: int = 30       # Iteraciones sin mejora (> 1e-7) antes de detener el PSO.
 
 
 @dataclass(frozen=True)
@@ -224,6 +283,12 @@ class ConfigSeleccion:
     pliegues: int = 5
     rejilla_lambda: tuple[float, ...] = (0.5, 1.0, 2.0, 3.0, 5.0, 10.0)
     rejilla_alpha: tuple[float, ...] = (1e-4, 1e-3, 1e-2)
+    rejilla_inferencia: tuple[str, ...] = ("kosko_modificada",)
+    rejilla_activacion: tuple[str, ...] = ("sigmoide",)
+    trabajos: int = -1  # Procesos de la validación cruzada (joblib); -1 = todos los núcleos. No cambia el resultado.
+    # Iteraciones del PSO dentro de la validación cruzada (None = las del modelo final): con 10 pliegues y la
+    # grilla de reglas, el PSO completo tarda demasiado en datasets grandes. El modelo final usa el PSO completo.
+    pso_iteraciones: int | None = None
 
 
 @dataclass(frozen=True)
@@ -262,8 +327,54 @@ class ConfigPrescripcion:
     # que no está en el esquema: sin tope.
     condicion_columna: str | None = "StudentAbsenceDays"
     condicion_delta_max: float = 0.15
+    # Las acciones actuales entran en la población inicial del AG (la prescripción nunca empeora).
+    sembrar: bool = True
+    # Aptitud: "error" (error absoluto ponderado al estado deseado) o "tabla4" (PRV-FCM, Tabla 4:
+    # suma de |f(un paso de inferencia sobre el estado final) - deseado|; ver prescripcion.aptitud_tabla4).
+    aptitud: str = "error"
     # Éxito prescriptivo: |A_i* - D_i| <= tolerancia para todos los conceptos objetivo.
     # Con 0.25 y Class deseada = 1 equivale a alcanzar el nivel H.
     tolerancia_exito: float = 0.25
     # Clases observadas de los estudiantes que reciben prescripción.
     clases_a_prescribir: tuple[str, ...] = ("L", "M")
+
+
+# ---------------------------------------------------------------------------
+# Perfiles de configuración
+# ---------------------------------------------------------------------------
+# Valores de las opciones de entrenamiento (las claves de pipeline.opciones_desde_dict) que cada
+# perfil cambia respecto a los valores por defecto. "mejorado" es la configuración de este proyecto;
+# "articulo" sigue a PRV-FCM (Hoyos, Aguilar y Toro, 2023): sin sesgo, PSO, mutables dinámicos,
+# aptitud de la Tabla 4, AG sin siembra ni penalización del esfuerzo, SMOTE y 10 pliegues. Las
+# opciones explícitas mandan sobre el perfil.
+PERFILES: dict[str, dict] = {
+    "mejorado": {},
+    "articulo": {
+        "metodo_pesos": "pso",
+        "sesgo": False,
+        # Ec. 4 literal con el límite de velocidad del PSO original (Vmax = 2, el rango de los pesos).
+        "pso": {"inercia": 1.0, "c1": 1.0, "c2": 1.0},
+        # Desviación por tiempo: la validación cruzada elige los hiperparámetros con 40 iteraciones de PSO.
+        "pso_iteraciones_cv": 40,
+        "tolerancia": 1e-4,
+        "mutables_dinamicos": True,
+        "smote": True,
+        "pliegues": 10,
+        # inferencia y activacion en None: las elige la validación cruzada en su grilla. Con tanh la
+        # reescalada coincide con Kosko modificada, así que ese par no se evalúa. La grilla ya
+        # multiplica por 5 las combinaciones: un solo alpha.
+        "inferencia": None,
+        "activacion": None,
+        "rejilla_inferencia": ["kosko", "kosko_modificada", "reescalada"],
+        "rejilla_activacion": ["sigmoide", "tanh"],
+        "rejilla_alpha": [1e-3],
+        "beta": 0.0,
+        "condicion_delta_max": None,
+        "sembrar": False,
+        "permitir_reducciones": True,
+        "aptitud": "tabla4",
+        "busqueda_ag": True,
+        # Configuración del AG que el artículo reporta para el rendimiento académico, sin parada temprana.
+        "ag": {"tam_poblacion": 200, "generaciones": 50, "tasa_cruce": 0.2, "tasa_mutacion": 0.3, "paciencia": 50},
+    },
+}

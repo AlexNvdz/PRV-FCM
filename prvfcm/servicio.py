@@ -27,7 +27,6 @@ import math
 import os
 import sys
 import traceback
-from dataclasses import fields, replace
 from pathlib import Path
 from typing import Callable
 
@@ -35,9 +34,9 @@ import numpy as np
 import pandas as pd
 
 from .api import PredictorFCM, PrescriptorAG
-from .configuracion import ConfigAG, ConfigFCM, ConfigPrescripcion, ConfigSeleccion
+from .configuracion import PERFILES
 from .esquema import ESQUEMA_XAPI_DICT, ErrorEsquema, esquema_desde_dict, rol_de, segmento_desde_dict, validar_esquema
-from .fcm import METODOS_PESOS, construir_estructura
+from .fcm import construir_estructura
 from .modelo import ModeloPRVFCM, guardar_modelo
 from .perfilado import (
     correlaciones,
@@ -49,12 +48,15 @@ from .perfilado import (
     perfil_base,
     perfilar,
 )
-from .pipeline import OpcionesPipeline, ResultadoPipeline, ejecutar
+from .pipeline import OpcionesPipeline, ResultadoPipeline, ejecutar, opciones_desde_dict as _opciones_pipeline, valores_de_perfil
 from .preprocesamiento import Preprocesador, cargar_datos, etiquetas_objetivo, leer_csv, leer_excel
 from .reporte import resumen_prescripciones
 
-VERSION_MOTOR = "1.1"
-NOMBRE_METODO = {"bptt": "BPTT", "ridge": "Ridge", "lasso": "Lasso", "correlacion_parcial": "correlación parcial"}
+VERSION_MOTOR = "1.2"
+NOMBRE_METODO = {
+    "bptt": "BPTT", "ridge": "Ridge", "lasso": "Lasso", "correlacion_parcial": "correlación parcial",
+    "pso": "PSO", "expertos": "la matriz de expertos",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +125,7 @@ def _registro(df: pd.DataFrame, id_estudiante) -> pd.DataFrame:
     try:
         return df.loc[[int(id_estudiante)]]
     except (KeyError, ValueError):
-        raise ValueError(f"No existe el estudiante {id_estudiante} (debe ser una fila con datos completos).") from None
+        raise ValueError(f"No existe el registro {id_estudiante} (debe ser una fila con datos completos).") from None
 
 
 # ---------------------------------------------------------------------------
@@ -236,16 +238,23 @@ def m_simular(modelo: str, ruta: str, esquema: dict, id: int, acciones: dict) ->
 
 def m_prescribir(modelo: str, ruta: str, esquema: dict, id: int, beta: float | None = None,
                  delta_max: float | None = None, permitir_reducciones: bool | None = None,
-                 nivel_meta: str | None = None) -> dict:
+                 nivel_meta: str | None = None, deseados: dict | None = None) -> dict:
     df, _ = _datos(ruta, esquema)
     return PrescriptorAG(_modelo(modelo)).prescribir(
-        _registro(df, id), nivel_meta, beta, delta_max, permitir_reducciones, semilla=int(id), sujeto=f"el estudiante {int(id)}"
+        _registro(df, id), nivel_meta, beta, delta_max, permitir_reducciones, semilla=int(id), sujeto=f"el registro {int(id)}",
+        deseados=deseados,
     )
 
 
 def m_prescribir_perfil(modelo: str, perfil: dict, beta: float | None = None, delta_max: float | None = None,
-                        permitir_reducciones: bool | None = None, nivel_meta: str | None = None) -> dict:
-    return PrescriptorAG(_modelo(modelo)).prescribir(perfil, nivel_meta, beta, delta_max, permitir_reducciones)
+                        permitir_reducciones: bool | None = None, nivel_meta: str | None = None,
+                        deseados: dict | None = None) -> dict:
+    return PrescriptorAG(_modelo(modelo)).prescribir(perfil, nivel_meta, beta, delta_max, permitir_reducciones, deseados=deseados)
+
+
+def m_perfiles() -> dict:
+    """Opciones de entrenamiento resueltas de cada perfil (inferencia y activación en None: las elige la grilla)."""
+    return {perfil: valores_de_perfil(perfil) for perfil in PERFILES}
 
 
 def m_resumen_prescripciones(directorio: str, nivel: str | None = None) -> dict:
@@ -268,6 +277,11 @@ def m_modelo_info(modelo: str) -> dict:
         "mejor_nivel": m.esquema.mejor_nivel,
         "metodo_pesos": m.fcm.config.metodo_pesos,
         "sesgo": m.fcm.config.sesgo,
+        "perfil": m.perfil,
+        "inferencia": m.fcm.config.inferencia,
+        "activacion": m.fcm.config.activacion,
+        "expertos": m.expertos,
+        "binarizar_objetivo": m.esquema.binarizar_objetivo,
         "conceptos": m.conceptos(),
         "aristas": m.aristas(),
         "influencias": m.influencias(),
@@ -278,6 +292,8 @@ def m_modelo_info(modelo: str) -> dict:
             "solo_incrementos": m.config_prescripcion.solo_incrementos,
             "condicion_columna": m.config_prescripcion.condicion_columna,
             "condicion_delta_max": m.config_prescripcion.condicion_delta_max,
+            "sembrar": m.config_prescripcion.sembrar,
+            "aptitud": m.config_prescripcion.aptitud,
         },
     }
 
@@ -307,6 +323,7 @@ METODOS: dict[str, Callable[..., dict]] = {
     "prescribir": m_prescribir,
     "prescribir_perfil": m_prescribir_perfil,
     "modelo_info": m_modelo_info,
+    "perfiles": m_perfiles,
     "recomendaciones": m_recomendaciones,
     "resumen_prescripciones": m_resumen_prescripciones,
 }
@@ -346,57 +363,15 @@ def worker() -> None:
 # Entrenamiento
 # ---------------------------------------------------------------------------
 def opciones_desde_dict(datos: dict, esquema_dict: dict) -> OpcionesPipeline:
-    """Opciones de la aplicación (JSON) -> ``OpcionesPipeline``, con límites razonables."""
-    proporcion = float(datos.get("proporcion_prueba", 0.3))
-    if not 0.1 <= proporcion <= 0.5:
-        raise ValueError("La proporción de prueba debe estar entre 0.1 y 0.5.")
-    division = datos.get("division", "agrupada")
-    if division not in ("agrupada", "aleatoria"):
-        raise ValueError("La división debe ser 'agrupada' o 'aleatoria'.")
-    base_sel = ConfigSeleccion()
-    seleccion = ConfigSeleccion(
-        pliegues=int(datos.get("pliegues", base_sel.pliegues)),
-        rejilla_lambda=tuple(float(v) for v in datos.get("rejilla_lambda", base_sel.rejilla_lambda)),
-        rejilla_alpha=tuple(float(v) for v in datos.get("rejilla_alpha", base_sel.rejilla_alpha)),
-    )
-    if not 2 <= seleccion.pliegues <= 10:
-        raise ValueError("Los pliegues de la validación cruzada deben estar entre 2 y 10.")
-    permitidos = {f.name for f in fields(ConfigAG)}
-    ag = replace(ConfigAG(), **{k: v for k, v in (datos.get("ag") or {}).items() if k in permitidos})
-    delta_max = datos.get("delta_max")
-    metodo = datos.get("metodo_pesos", "bptt")
-    if metodo not in METODOS_PESOS:
-        raise ValueError(f"El método de pesos debe ser uno de {', '.join(METODOS_PESOS)}.")
-    excluidas = datos.get("aristas_excluidas") or []
-    if not all(isinstance(a, (list, tuple)) and len(a) == 2 for a in excluidas):
-        raise ValueError("La máscara causal debe ser una lista de pares [origen, destino].")
-    return OpcionesPipeline(
-        proporcion_prueba=proporcion,
-        semilla=int(datos.get("semilla", 42)),
-        division=division,
-        validacion_cruzada=bool(datos.get("validacion_cruzada", True)),
-        config_fcm=ConfigFCM(
-            lambda_=float(datos.get("lambda", 1.0)),
-            alpha_l2=float(datos.get("alpha_l2", 1e-3)),
-            metodo_pesos=metodo,
-            balancear_niveles=bool(datos.get("balancear_niveles", False)),
-            sesgo=bool(datos.get("sesgo", True)),
-        ),
-        config_seleccion=seleccion,
-        config_ag=ag,
-        config_prescripcion=ConfigPrescripcion(
-            beta_esfuerzo=float(datos.get("beta", ConfigPrescripcion.beta_esfuerzo)),
-            solo_incrementos=not bool(datos.get("permitir_reducciones", False)),
-            delta_max=float(delta_max) if delta_max else None,
-        ),
-        segmento=segmento_desde_dict(esquema_dict.get("segmento")),
-        aristas_excluidas=tuple((str(o), str(d)) for o, d in excluidas),
-    )
+    """Opciones de la aplicación (JSON) -> ``OpcionesPipeline``: perfil, opciones explícitas y segmento del esquema."""
+    return _opciones_pipeline(datos, segmento_desde_dict(esquema_dict.get("segmento")))
 
 
 def _mensaje_etapa(etapa: str, r: ResultadoPipeline) -> str:
     if etapa == "preprocesamiento":
         mensaje = f"Datos divididos: {len(r.entrenamiento)} registros para entrenar y {len(r.prueba)} para probar."
+        if r.n_sinteticos:
+            mensaje += f" SMOTE agregó {r.n_sinteticos} registros sintéticos al entrenamiento."
         if r.opciones.division == "agrupada" and r.division != "agrupada":
             mensaje += f" Solo hay {r.grupos.nunique()} perfiles inmutables distintos: la división es aleatoria, no agrupada."
         return mensaje
@@ -407,7 +382,8 @@ def _mensaje_etapa(etapa: str, r: ResultadoPipeline) -> str:
                 f"Validación cruzada: λ = {mejor['lambda']:g}, α = {mejor['alpha_l2']:g} "
                 f"({100 * mejor['exactitud_equilibrada']:.1f} % de exactitud equilibrada)."
             )
-        return f"Validación cruzada: λ = {mejor['lambda']:g}, α = {mejor['alpha_l2']:g} ({100 * mejor['exactitud']:.1f} % de exactitud)."
+        regla = f"{mejor['inferencia']} con {mejor['activacion']}, " if "inferencia" in mejor else ""
+        return f"Validación cruzada: {regla}λ = {mejor['lambda']:g}, α = {mejor['alpha_l2']:g} ({100 * mejor['exactitud']:.1f} % de exactitud)."
     if etapa == "fcm":
         metodo = NOMBRE_METODO.get(r.config_fcm.metodo_pesos, r.config_fcm.metodo_pesos)
         excluidas = len(r.opciones.aristas_excluidas)
@@ -416,7 +392,7 @@ def _mensaje_etapa(etapa: str, r: ResultadoPipeline) -> str:
             f"{100 * r.prediccion['exactitud_rendimiento']:.1f} % de exactitud en prueba."
         )
     if etapa == "prescripcion":
-        return f"Buscando acciones para {int(r.seleccion.sum())} estudiantes con el algoritmo genético."
+        return f"Buscando acciones para {int(r.seleccion.sum())} registros con el algoritmo genético."
     return f"Éxito prescriptivo: {r.metricas['PSR_base']:.1f} % con las acciones actuales y {r.metricas['PSR']:.1f} % con las prescritas."
 
 
@@ -465,11 +441,14 @@ def entrenar(datos: Path, esquema: Path, opciones: Path | None, salida: Path) ->
             traceback.print_exc(file=sys.stderr)
         graficas = {
             **r.datos_graficas(),
-            "objetivo": objeto.objetivo,
-            "niveles": objeto.niveles,
-            "mejor_nivel": objeto.mejor_nivel,
+            "objetivo": r.esquema.objetivo,
+            "niveles": r.esquema.niveles,
+            "mejor_nivel": r.esquema.mejor_nivel,
             "metodo_pesos": r.config_fcm.metodo_pesos,
             "sesgo": r.config_fcm.sesgo,
+            "perfil": r.opciones.perfil,
+            "inferencia": r.config_fcm.inferencia,
+            "activacion": r.config_fcm.activacion,
             "aristas_excluidas": [list(a) for a in r.opciones.aristas_excluidas],
             "conceptos": modelo.conceptos(),
             "aristas": modelo.aristas(),

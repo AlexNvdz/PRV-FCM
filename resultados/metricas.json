@@ -21,7 +21,16 @@
       "max_iter_optimizador": 500,
       "metodo_pesos": "bptt",
       "balancear_niveles": false,
-      "sesgo": true
+      "sesgo": true,
+      "inferencia": "kosko_modificada",
+      "activacion": "sigmoide",
+      "pso_particulas": 30,
+      "pso_iteraciones": 200,
+      "pso_inercia": 0.7298,
+      "pso_c1": 1.496,
+      "pso_c2": 1.496,
+      "pso_vmax": 2.0,
+      "pso_paciencia": 30
     },
     "seleccion": {
       "pliegues": 5,
@@ -37,7 +46,15 @@
         0.0001,
         0.001,
         0.01
-      ]
+      ],
+      "rejilla_inferencia": [
+        "kosko_modificada"
+      ],
+      "rejilla_activacion": [
+        "sigmoide"
+      ],
+      "trabajos": -1,
+      "pso_iteraciones": null
     },
     "ag": {
       "tam_poblacion": 50,
@@ -60,6 +77,8 @@
       "delta_max": null,
       "condicion_columna": "StudentAbsenceDays",
       "condicion_delta_max": 0.15,
+      "sembrar": true,
+      "aptitud": "error",
       "tolerancia_exito": 0.25,
       "clases_a_prescribir": [
         "L",
@@ -69,7 +88,13 @@
     "mutables_dinamicos": [
       "Class"
     ],
-    "aristas_excluidas": []
+    "aristas_excluidas": [],
+    "perfil": "mejorado",
+    "binarizar_objetivo": null,
+    "smote": false,
+    "n_sinteticos": 0,
+    "busqueda_ag": false,
+    "expertos": []
   },
   "seleccion_hiperparametros": [
     {
@@ -199,6 +224,86 @@
       "MAE": 0.4892756942180535
     }
   ],
+  "busqueda_ag": null,
+  "reconstruccion": {
+    "n": 429,
+    "global": {
+      "mae": 0.36083499473109865,
+      "mse": 0.17569480846730362,
+      "rmse": 0.41915964556157315,
+      "r2": -3.878074699198754,
+      "psr_ec19": 1.5645412244985044
+    },
+    "por_accion": [
+      {
+        "columna": "raisedhands",
+        "nombre": "Manos levantadas",
+        "mae": 0.2809324009324009,
+        "mse": 0.1042088578088578,
+        "rmse": 0.32281396780321914,
+        "r2": -3.1212331357528917,
+        "media_real": 0.7190675990675991,
+        "de_real": 0.15920088878452532,
+        "media_prescrita": 1.0,
+        "de_prescrita": 0.0,
+        "normal_real": false,
+        "normal_prescrita": false,
+        "prueba": "wilcoxon",
+        "p": 3.19304252964535e-71
+      },
+      {
+        "columna": "VisITedResources",
+        "nombre": "Recursos visitados",
+        "mae": 0.2283440465258647,
+        "mse": 0.07834175143633361,
+        "rmse": 0.2798959653805921,
+        "r2": -1.9900578364131185,
+        "media_real": 0.7716559534741353,
+        "de_real": 0.16205543666633765,
+        "media_prescrita": 1.0,
+        "de_prescrita": 0.0,
+        "normal_real": false,
+        "normal_prescrita": false,
+        "prueba": "wilcoxon",
+        "p": 7.034785258212954e-72
+      },
+      {
+        "columna": "AnnouncementsView",
+        "nombre": "Anuncios consultados",
+        "mae": 0.46063460349174634,
+        "mse": 0.2528292892724379,
+        "rmse": 0.5028213293730069,
+        "r2": -5.22041997603107,
+        "media_real": 0.5393653965082537,
+        "de_real": 0.20184156264669634,
+        "media_prescrita": 1.0,
+        "de_prescrita": 0.0,
+        "normal_real": false,
+        "normal_prescrita": false,
+        "prueba": "wilcoxon",
+        "p": 4.929228589695706e-72
+      },
+      {
+        "columna": "Discussion",
+        "nombre": "Grupos de discusión",
+        "mae": 0.4734289279743825,
+        "mse": 0.2673993353515851,
+        "rmse": 0.5171066962935068,
+        "r2": -5.1805878485979555,
+        "media_real": 0.5265710720256175,
+        "de_real": 0.2082437766692744,
+        "media_prescrita": 1.0,
+        "de_prescrita": 0.0,
+        "normal_real": false,
+        "normal_prescrita": false,
+        "prueba": "wilcoxon",
+        "p": 4.927555075668219e-72
+      }
+    ],
+    "avisos": [
+      "PSR de la ec. 19 = 1.565 > 1: las acciones prescritas suman más que las reales (el artículo espera un cociente menor que 1; no se recorta)."
+    ]
+  },
   "prediccion_fcm": {
     "por_concepto": {
       "C16": {

@@ -26,7 +26,7 @@ from .configuracion import Esquema
 from .esquema import NIVELES_NUMERICOS, categorias_one_hot, codificacion_de, columnas_que_determinan, rol_de
 from .evaluacion import discretizar_rendimiento
 from .fcm import correlaciones_parciales
-from .preprocesamiento import Preprocesador, como_texto, etiquetas_objetivo
+from .preprocesamiento import Preprocesador, como_texto, etiquetas_objetivo, fechas
 
 # Palabras (sin tildes, en minúsculas) que sugieren el rol de una columna.
 PALABRAS_OBJETIVO = (
@@ -168,7 +168,17 @@ def _sugerir_codificacion(serie: pd.Series) -> dict:
         return {"codificacion": "ordinal", "orden": sorted(valores)}
     if len(valores) >= 3 and como_texto(no_nulos).str.fullmatch(r"\D*\d+\D*").all():
         return {"codificacion": "numero_en_texto"}
+    if es_fecha(no_nulos):
+        return {"codificacion": "fecha"}
     return {"codificacion": "nominal"}
+
+
+def es_fecha(serie: pd.Series) -> bool:
+    """Texto con forma de fecha (04-09-2012, 2012/09/04) que se lee como fecha en al menos el 95 % de los valores."""
+    texto = como_texto(serie)
+    if texto.empty or not texto.str.fullmatch(r"\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}( .*)?").mean() >= 0.95:
+        return False
+    return bool(fechas(texto).notna().mean() >= 0.95)
 
 
 def _excluir_si_determinan(df: pd.DataFrame, objetivo: dict, columnas: list[dict], avisos: list[str]) -> None:
@@ -291,6 +301,9 @@ def perfilar(df: pd.DataFrame, nombre: str = "") -> dict:
 def _valores_numericos(serie: pd.Series, codificacion: str) -> pd.Series:
     if codificacion == "numero_en_texto":
         return como_texto(serie).str.extract(r"(\d+)", expand=False).astype(float)
+    if codificacion == "fecha":
+        dias = fechas(serie)
+        return (dias - dias.min()).dt.days.astype(float)
     return pd.to_numeric(serie, errors="coerce").astype(float)
 
 
@@ -325,7 +338,7 @@ def estadistica_variable(df: pd.DataFrame, esquema: Esquema, columna: str, etiqu
             categorias = ["Sí", "No"]
         salida["categorias"] = _por_categoria(texto, categorias, etiquetas, niveles)
         return salida
-    if codificacion in ("numerica", "numero_en_texto"):
+    if codificacion in ("numerica", "numero_en_texto", "fecha"):
         valores = _valores_numericos(df[columna], codificacion)
         salida["resumen"] = {"media": valores.mean(), "mediana": valores.median(), "min": valores.min(), "max": valores.max()}
         por_nivel = []
@@ -474,8 +487,8 @@ def _eje(df: pd.DataFrame, esquema: Esquema, columna: str, X: pd.DataFrame) -> d
     eje = {"columna": columna, "nombre": concepto.nombre, "id": concepto.id, "codificacion": codificacion}
     if codificacion == "numerica":
         eje.update(tipo="numerico", valores=pd.to_numeric(df[columna]).astype(float))
-    elif codificacion == "numero_en_texto":
-        eje.update(tipo="numerico", valores=como_texto(df[columna]).str.extract(r"(\d+)", expand=False).astype(float))
+    elif codificacion in ("numero_en_texto", "fecha"):
+        eje.update(tipo="numerico", valores=_valores_numericos(df[columna], codificacion))
     elif codificacion == "one_hot":
         eje.update(tipo="categorico", categorias=["No", "Sí"], valores=X[columna].astype(float))
     else:

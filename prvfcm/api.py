@@ -52,6 +52,7 @@ import numpy as np
 import pandas as pd
 
 from .esquema import rol_de
+from .evaluacion import discretizar_rendimiento
 from .fcm import ResultadoInferencia
 from .modelo import ModeloPRVFCM
 from .pipeline import indice_condicion
@@ -132,7 +133,9 @@ class PredictorFCM:
           memoria = k2·A_o(t−1), influencia = k1·Σ_j w_jo·A_j(t−1) (de ella,
           ``influencia_acciones`` es la parte que aportan las acciones),
           sesgo = k1·b_o (constante), entrada = memoria + influencia + sesgo y
-          activacion = f(entrada) = A_o(t).
+          activacion = f(entrada) = A_o(t). En la reescalada y con tanh, la
+          memoria y la influencia usan u = 2A − 1; con tanh,
+          f(x) = (tanh(λ·x) + 1) / 2 (``parametros`` dice cuál se usa).
         """
         m = self.modelo
         fcm, pre = m.fcm, m.pre
@@ -148,7 +151,7 @@ class PredictorFCM:
             "convergio": resultado.convergio,
             "parametros": {
                 "lambda": cfg.lambda_, "k1": cfg.coef_influencia, "k2": cfg.coef_memoria, "tolerancia": cfg.tolerancia,
-                "sesgo": float(fcm.sesgo[objetivo]),
+                "sesgo": float(fcm.sesgo[objetivo]), "inferencia": cfg.inferencia, "activacion": cfg.activacion,
             },
             "series": [
                 {
@@ -204,11 +207,20 @@ class PrescriptorAG:
         beta: float | None = None,
         delta_max: float | None = None,
         permitir_reducciones: bool | None = None,
+        deseados: Mapping[str, float] | None = None,
     ) -> tuple[PrescriptorPRVFCM, dict]:
-        """``PrescriptorPRVFCM`` (escala normalizada) con la configuración del modelo y los cambios pedidos, y la meta."""
+        """``PrescriptorPRVFCM`` (escala normalizada) con la configuración del modelo y los cambios pedidos, y la meta.
+
+        ``deseados`` ({columna: valor normalizado}) agrega conceptos dinámicos al
+        estado deseado; si trae el objetivo, reemplaza a ``nivel_meta``.
+        """
         m = self.modelo
+        deseados = dict(deseados or {})
         meta = m.meta(nivel_meta)
-        cambios = {"estado_deseado": {m.esquema.objetivo: meta["valor"]}}
+        if m.esquema.objetivo in deseados:
+            valor = float(deseados[m.esquema.objetivo])
+            meta = {**meta, "valor": valor, "nivel": discretizar_rendimiento(valor, m.esquema.niveles).item()}
+        cambios = {"estado_deseado": {**deseados, m.esquema.objetivo: meta["valor"]}}
         if beta is not None:
             cambios["beta_esfuerzo"] = float(beta)
         if delta_max is not None:
@@ -223,6 +235,33 @@ class PrescriptorAG:
         )
         return prescriptor, meta
 
+    def deseados(self, deseados: Mapping[str, object] | None) -> list[dict]:
+        """Valores deseados del sistema v_s(0) (PRV-FCM, sección 4.2), en unidades originales -> normalizados.
+
+        Valen para el objetivo (una categoría, un nivel o un número) y los
+        mutables del sistema; un inmutable o una acción es un error.
+        """
+        m = self.modelo
+        salida = []
+        for columna, valor in (deseados or {}).items():
+            if columna not in m.pre.columnas:
+                raise ValueError(f"{columna} no es un concepto del modelo.")
+            concepto = m.esquema.conceptos[m.pre.indice(columna)]
+            rol = rol_de(m.esquema, concepto)
+            if rol in ("inmutable", "accion"):
+                tipo = "un concepto inmutable" if rol == "inmutable" else "una acción"
+                raise ValueError(f"{columna} es {tipo}: solo el objetivo y los mutables del sistema admiten un valor deseado.")
+            salida.append(
+                {
+                    "columna": columna,
+                    "nombre": concepto.nombre,
+                    "valor": valor,
+                    "normalizado": m.valor_normalizado(columna, valor),
+                    "dinamico": bool(concepto.dinamico),
+                }
+            )
+        return salida
+
     def prescribir(
         self,
         entrada: Entrada,
@@ -233,8 +272,15 @@ class PrescriptorAG:
         semilla: int = 0,
         sujeto: str | None = None,
         al_progresar: Callable[[dict], None] | None = None,
+        deseados: Mapping[str, object] | None = None,
     ) -> dict:
         """Prescripción individual en unidades originales.
+
+        ``deseados`` ({columna: valor en unidades originales}) es el estado
+        deseado del sistema: cada valor se instancia en el estado inicial y,
+        si el concepto es dinámico (el objetivo, o un mutable dinámico), el AG
+        lo persigue. Un mutable fijo solo plantea el escenario (por ejemplo,
+        ausencias Under-7). Con el objetivo en ``deseados``, ``nivel_meta`` no se usa.
 
         ``al_progresar(evento)`` recibe al final de cada generación
         ``{"generacion", "generaciones_max", "mejor_costo", "costo_medio", "acciones"}``,
@@ -249,7 +295,11 @@ class PrescriptorAG:
         m = self.modelo
         es_perfil = not isinstance(entrada, pd.DataFrame)
         estado = self.predictor.estado_inicial(entrada)
-        prescriptor, meta = self.motor(nivel_meta, beta, delta_max, permitir_reducciones)
+        deseados_info = self.deseados(deseados)
+        for d in deseados_info:
+            estado[m.pre.indice(d["columna"])] = d["normalizado"]
+        dinamicos = {d["columna"]: d["normalizado"] for d in deseados_info if d["dinamico"]}
+        prescriptor, meta = self.motor(nivel_meta, beta, delta_max, permitir_reducciones, dinamicos)
         columnas = [m.pre.columnas[i] for i in m.pre.indices_accion]
 
         def en_unidades(acciones: np.ndarray) -> list[float]:
@@ -307,19 +357,22 @@ class PrescriptorAG:
             "contribuciones": m.contribuciones(resultado.estado_base, resultado.estado_prescrito),
             "aporte_sesgo": m.fcm.config.coef_influencia * float(m.fcm.sesgo[m.pre.indice_objetivo]),
             "restriccion": restriccion,
+            "deseados": deseados_info,
             "configuracion": {
                 "beta": prescriptor.config.beta_esfuerzo,
                 "delta_max": prescriptor.config.delta_max,
                 "solo_incrementos": prescriptor.config.solo_incrementos,
                 "condicion_columna": prescriptor.config.condicion_columna,
                 "condicion_delta_max": prescriptor.config.condicion_delta_max,
+                "sembrar": prescriptor.config.sembrar,
+                "aptitud": prescriptor.config.aptitud,
                 "poblacion": m.config_ag.tam_poblacion,
                 "generaciones_max": m.config_ag.generaciones,
                 "paciencia": m.config_ag.paciencia,
             },
         }
         nombre_objetivo = m.esquema.conceptos[m.pre.indice_objetivo].nombre
-        salida["reporte"] = reporte_individual(salida, nombre_objetivo, sujeto or ("este perfil" if es_perfil else "este estudiante"))
+        salida["reporte"] = reporte_individual(salida, nombre_objetivo, sujeto or ("este perfil" if es_perfil else "este registro"))
         if es_perfil:
             salida["perfil"] = {c: entrada.get(c) for c in m.esquema.columnas_origen if c != m.esquema.objetivo}
         return salida

@@ -406,8 +406,11 @@ def generar_figuras(r: "ResultadoPipeline", salida: Path, lambda_articulo: float
 
     if r.seleccion_cv is not None:
         sel = r.opciones.config_seleccion
+        tabla = r.seleccion_cv
+        if "inferencia" in tabla:  # Con la grilla de reglas, la curva de la regla elegida.
+            tabla = tabla[(tabla["inferencia"] == r.config_fcm.inferencia) & (tabla["activacion"] == r.config_fcm.activacion)]
         grafica_seleccion(
-            r.seleccion_cv,
+            tabla,
             r.config_fcm.lambda_,
             r.config_fcm.alpha_l2,
             salida / "seleccion_hiperparametros.png",

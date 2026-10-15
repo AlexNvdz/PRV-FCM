@@ -23,16 +23,20 @@ NetworkX, convergencia del AG) y reporte prescriptivo en lenguaje natural.
 ```
 modelo-prescriptivo/
 ├── main.py                    Pipeline completo (etapas 1-4) y línea de comandos
+├── experimentos.py            Ablación de perfiles y métodos de W en varios datasets
 ├── data/
-│   └── xAPI-Edu-Data-expanded-4800.csv   Dataset expandido (4800 registros, 17 columnas)
+│   ├── xAPI-Edu-Data-expanded-4800.csv   Dataset expandido (4800 registros, 17 columnas)
+│   ├── xAPI-Edu-Data.csv      Dataset original (480 registros)
+│   ├── marketing_campaign.csv, heart.csv  Datasets de los experimentos
+│   └── esquemas/              Esquemas JSON de marketing, heart y deserción
 ├── prvfcm/
 │   ├── configuracion.py       Conceptos C1-C16, codificación e hiperparámetros
 │   ├── preprocesamiento.py    Etapa 1: carga (CSV o Excel), división agrupada, codificación, Min-Max, segmentación
-│   ├── fcm.py                 Etapa 2: sigmoide, Kosko modificada con sesgo, extracción de W (BPTT, Ridge, Lasso, correlación parcial)
-│   ├── seleccion.py           Etapa 2: validación cruzada agrupada de lambda y alpha_l2
+│   ├── fcm.py                 Etapa 2: reglas de la Tabla 2 (Kosko, Kosko modificada, reescalada; sigmoide o tanh) con sesgo; W por BPTT, Ridge, Lasso, correlación parcial, PSO o expertos
+│   ├── seleccion.py           Etapa 2: validación cruzada agrupada (en paralelo) de lambda, alpha_l2, regla y activación
 │   ├── genetico.py            Etapa 3: AG (torneo, cruce uniforme/un punto, mutación)
-│   ├── prescripcion.py        Etapa 3: cromosoma, función de costo, límites (tope por ausentismo), prescripción
-│   ├── evaluacion.py          Etapa 4: MAE, MSE, RMSE, PSR y validación externa
+│   ├── prescripcion.py        Etapa 3: cromosoma, aptitudes (error, Tabla 4, García 2025), límites (tope por ausentismo), prescripción
+│   ├── evaluacion.py          Etapa 4: MAE, MSE, RMSE, tasa de éxito, validación externa y reconstrucción (Tablas 11-12, ec. 19)
 │   ├── reporte.py             Reporte prescriptivo en lenguaje natural
 │   ├── visualizacion.py       Gráficas PNG y grafo del mapa con NetworkX
 │   ├── pipeline.py            Las cuatro etapas en una función (consola y aplicación)
@@ -44,6 +48,7 @@ modelo-prescriptivo/
 ├── app/                       Aplicación web local (Node.js + React), ver app/README.md
 ├── tests/                     Pruebas unitarias (pytest)
 ├── resultados/                Salidas de la última ejecución (dataset expandido)
+├── resultados_experimentos/   Ablación: resumen.csv, acciones.csv y resumen.md
 └── resultados_480/            Salidas anteriores con el dataset original (480), como referencia
 ```
 
@@ -88,21 +93,30 @@ python main.py --mutables-dinamicos                   # C13-C15 también evoluci
 python main.py --metodo-pesos ridge                   # W por regresión Ridge (también lasso, correlacion_parcial)
 python main.py --excluir gender Class                 # máscara causal: elimina la arista gender -> Class
 python main.py --equilibrar-niveles                   # cada nivel del objetivo pesa lo mismo (objetivos desbalanceados)
+python main.py --perfil articulo --datos data/xAPI-Edu-Data.csv --binarizar-objetivo M   # como PRV-FCM (2023)
+python main.py --metodo-pesos pso                     # W por enjambre de partículas (también: expertos con --expertos m.json)
+python main.py --esquema data/esquemas/heart.json --datos data/heart.csv --permitir-reducciones   # otro dataset
+python experimentos.py                                # ablación de perfiles y métodos (resultados_experimentos/)
 python main.py --help                                 # todas las opciones
 python -m pytest                                      # pruebas
 ```
 
-La ejecución por defecto tarda cerca de un minuto y medio; casi todo es la
-validación cruzada. Con `--sin-cv` tarda unos 10 segundos.
+La ejecución por defecto tarda cerca de un minuto; casi todo es la validación
+cruzada, que reparte pliegues y combinaciones entre los núcleos (joblib). Con
+`--sin-cv` tarda unos 10 segundos.
 
-Opciones principales: `--metodo-pesos`, `--excluir`, `--equilibrar-niveles`, `--sin-sesgo`, `--lambda`, `--alpha-l2`, `--tolerancia` (FCM);
-`--sin-cv`, `--pliegues`, `--rejilla-lambda`, `--rejilla-alpha` (validación
-cruzada); `--poblacion`, `--generaciones`, `--torneo`,
-`--cruce {uniforme,un_punto}`, `--tasa-cruce`, `--tasa-mutacion`,
-`--sigma-mutacion`, `--elitismo` (AG); `--beta`, `--delta-max`,
-`--permitir-reducciones`, `--tope-ausentismo`, `--sin-tope-ausentismo`
-(prescripción); `--semilla`, `--prueba`, `--division`.
-El resto de parámetros está en `prvfcm/configuracion.py`.
+Opciones principales: `--perfil {mejorado,articulo}` (ver Perfiles);
+`--metodo-pesos`, `--expertos`, `--inferencia`, `--activacion`, `--excluir`,
+`--equilibrar-niveles`, `--sin-sesgo`, `--mutables-dinamicos`, `--lambda`,
+`--alpha-l2`, `--tolerancia` (FCM); `--sin-cv`, `--pliegues`,
+`--rejilla-lambda`, `--rejilla-alpha` (validación cruzada); `--poblacion`,
+`--generaciones`, `--torneo`, `--cruce {uniforme,un_punto}`, `--tasa-cruce`,
+`--tasa-mutacion`, `--sigma-mutacion`, `--elitismo`, `--busqueda-ag` (AG);
+`--beta`, `--delta-max`, `--permitir-reducciones`, `--tope-ausentismo`,
+`--sin-tope-ausentismo`, `--aptitud` (prescripción); `--esquema`,
+`--binarizar-objetivo`, `--smote`, `--semilla`, `--prueba`, `--division`
+(datos). Las opciones que no se dan las pone el perfil. El resto de
+parámetros está en `prvfcm/configuracion.py`.
 
 ## API de Python: `PredictorFCM` y `PrescriptorAG`
 
@@ -135,6 +149,9 @@ resultado = prescriptor.prescribir(perfil, nivel_meta="H", beta=0.4, al_progresa
 resultado["acciones"]                              # actual, recomendada y cambio de cada acción
 resultado["historial"]                             # mejor costo, costo medio, activación y acciones por generación
 resultado["restriccion"]                           # None, o el tope por ausentismo que limitó las acciones
+
+# Valores deseados del sistema v_s(0) (PRV-FCM, sección 4.2): el objetivo y los mutables
+prescriptor.prescribir(perfil, deseados={"Class": "H", "StudentAbsenceDays": "Under-7"})
 ```
 
 La entrada es un perfil (`dict` columna → valor; los conceptos dinámicos parten
@@ -206,6 +223,23 @@ con solo 15 pesos y un sesgo, gana menos con la fuga: 1.2 puntos, frente a 11.3 
   validación lo advierte si se vuelven a incluir. Con menos de 40 perfiles
   inmutables distintos, la división agrupada no es posible y se divide al azar
   (estratificado), con un aviso.
+* **Fechas** (codificación `fecha`, por ejemplo `Dt_Customer`): días desde la
+  fecha mínima de entrenamiento; la sugerencia de esquema la propone para
+  columnas con forma de fecha. Año primero si empieza por él (2012-09-04), si
+  no, día primero (04-09-2012).
+* **Vacíos.** Los de columnas numéricas y de fecha (por ejemplo, `Income`) se
+  imputan con la mediana de entrenamiento; las filas con vacíos en columnas
+  categóricas o en el objetivo se descartan.
+* **Objetivo binario** (`--binarizar-objetivo`, opción `binarizar_objetivo`).
+  Como en PRV-FCM (nota < 70 frente a ≥ 70), el objetivo pasa a dos niveles:
+  desde el nivel dado es éxito (en xAPI, `M`: L frente a M+H, niveles «<M» y
+  «≥M»); en un objetivo numérico, desde un umbral.
+* **SMOTE** (`--smote`, en el perfil «articulo»): registros sintéticos de los
+  niveles minoritarios hasta igualar al mayoritario, cada uno entre un registro
+  y uno de sus 5 vecinos del mismo nivel (implementación propia con
+  `NearestNeighbors`). Se aplica solo al entrenamiento (y al de cada pliegue):
+  el artículo lo aplicó antes de dividir, así que su prueba tenía variantes
+  sintéticas de registros de entrenamiento.
 * **`PlaceofBirth` se excluye:** coincide con `NationalITy` en el 89 % de los
   registros.
 
@@ -230,6 +264,23 @@ conceptos fijos conservan su valor. Los dinámicos se actualizan hasta que
 entrada que recibe un concepto aunque los demás valgan 0; solo existe en los
 conceptos que reciben aristas (aquí, C16) y equivale al peso de un concepto
 constante igual a 1. `--sin-sesgo` usa la regla del artículo, con `b = 0`.
+
+**Reglas de la Tabla 2 de PRV-FCM** (`--inferencia`, `--activacion`). Todas
+tienen la forma `A_i(t+1) = f(m·u_i + k1·(Σ_j w_ji·u_j + b_i))`:
+
+| Regla | m | u | Activación |
+|---|---|---|---|
+| `kosko` | 0 (sin memoria) | A | sigmoide `1/(1+e^(−λx))` o tanh |
+| `kosko_modificada` (defecto) | k2 | A | ídem |
+| `reescalada` | k2 | 2A − 1 | ídem |
+
+Con tanh el estado vive en [−1, 1] (v = 2A − 1) y vuelve a [0, 1] para el
+resto del pipeline: `A = (tanh(λx) + 1)/2`. Así, con tanh la entrada ya es
+2A − 1 y la reescalada coincide con Kosko modificada; la grilla no evalúa ese
+par. Es nuestra interpretación de la Tabla 2, que no dice cómo combinar tanh y
+reescalada. El gradiente exacto (BPTT) y la inversión del punto fijo de Ridge y
+Lasso valen en las seis combinaciones; las pruebas comparan el gradiente con
+diferencias finitas en todas.
 
 **Estructura.** Hay aristas desde todos los conceptos fijos hacia los dinámicos, y
 entre dinámicos (sin autoconexión, porque la memoria ya está en la regla). C16
@@ -257,13 +308,25 @@ el gradiente con diferencias finitas.
   a los demás conceptos: `−P_ji/√(P_jj·P_ii)`, con P la inversa de la
   covarianza estimada con contracción de Ledoit-Wolf. Describe asociaciones
   directas, pero no calibra la inferencia. No tiene sesgo (`b = 0`).
+* **PSO** (`pso`, ec. 4-5 de PRV-FCM). Cada partícula es una W candidata (y
+  b, con sesgo) en [−1, 1], con la misma pérdida que BPTT, evaluada para todo
+  el enjambre a la vez. `v ← ω·v + c1·r1·(mejor_i − W) + c2·r2·(mejor − W)`,
+  `W ← W + v`, con |v| ≤ Vmax = 2 (el rango de los pesos, como en el PSO
+  original de 1995). El perfil «articulo» usa la ec. 4 literal (ω = c1 = c2 = 1);
+  el resto, Clerc (ω = 0.7298, c1 = c2 = 1.496). 30 partículas, hasta 200
+  iteraciones; para tras 30 sin mejora. Semilla reproducible.
+* **Expertos** (`expertos`, García et al., 2025). W es la media aritmética de
+  las matrices de varios expertos (`--expertos m.json`: `[{"experto",
+  "aristas": [{"origen", "destino", "peso"}]}]`); una arista que un experto no
+  da cuenta 0 para él. Cada arista debe estar en la estructura (ninguna entra a
+  un concepto fijo) y su peso en [−1, 1]. Sin sesgo.
 
 | Semilla 42, CV completa | BPTT (defecto) | Ridge | Lasso | Correlación parcial |
 |---|---|---|---|---|
 | λ y α elegidos | 1 y 0.001 | 1 y 0.01 | 1 y 0.01 | 1 y 0.0001 |
 | Exactitud del FCM | 78.9 % | 76.6 % | 76.2 % | 48.3 % |
 | F1 macro | 79.4 % | 77.0 % | 76.6 % | 37.0 % |
-| PSR (FCM) | 7.2 % → 46.4 % | 5.3 % → 43.8 % | 5.2 % → 39.5 % | 36.8 % → 36.8 % |
+| Tasa de éxito (FCM) | 7.2 % → 46.4 % | 5.3 % → 43.8 % | 5.2 % → 39.5 % | 36.8 % → 36.8 % |
 | Clasificados H por el bosque | 8.1 % → 32.5 % | 8.1 % → 36.2 % | 8.1 % → 33.0 % | 8.1 % → 8.1 % |
 | Más de 7 ausencias que llegan a H: FCM / bosque | 0.8 % / 1.1 % | 0.8 % / 1.1 % | 0.0 % / 1.1 % | 4.2 % / 1.1 % |
 
@@ -298,7 +361,10 @@ aristas Género → Class y Nacionalidad → Class, BPTT llega a 80.2 % y Ridge 
 sobre el entrenamiento: 5 pliegues agrupados por perfil y estratificados por
 Class, con el preprocesador reajustado en cada pliegue. La rejilla combina
 λ ∈ {0.5, 1, 2, 3, 5, 10} y α ∈ {0.0001, 0.001, 0.01}. Gana la mayor
-exactitud L/M/H y, a igual exactitud, el menor MAE.
+exactitud L/M/H y, a igual exactitud, el menor MAE. En el perfil «articulo» la
+rejilla incluye además la regla y la activación (Tabla 2): 5 combinaciones × 6
+λ, con α = 0.001. Los ajustes (pliegue × combinación) corren en paralelo con
+joblib; el resultado no depende del número de procesos.
 
 | λ (α = 0.001) | 0.5 | **1** | 2 | 3 | 5 | 10 |
 |---|---|---|---|---|---|---|
@@ -325,7 +391,7 @@ muestra la rejilla completa.
 
   El primer término es el error absoluto ponderado. El segundo penaliza el
   esfuerzo: con β = 0.4 (defecto) cada estudiante recibe un plan propio y el
-  PSR casi no baja (ver Limitaciones); con `--beta 0` queda solo el error
+  tasa de éxito casi no baja (ver Limitaciones); con `--beta 0` queda solo el error
   absoluto.
 * **Tope por ausentismo.** Si el estudiante tiene más de 7 ausencias
   (StudentAbsenceDays = Above-7), cada acción sube como máximo 0.15 de su rango
@@ -339,7 +405,7 @@ muestra la rejilla completa.
   |---|---|---|---|---|---|---|---|
   | Más de 7 ausencias que llegan a H: FCM | 15.3 % | 7.3 % | 3.1 % | 1.9 % | **0.8 %** | 0.0 % | 0.0 % |
   | Ídem según el bosque aleatorio | 6.1 % | 1.9 % | 1.3 % | 1.3 % | **1.1 %** | 1.1 % | 1.1 % |
-  | PSR (FCM), todos | 54.2 % | 49.9 % | 47.7 % | 47.0 % | **46.4 %** | 46.0 % | 46.0 % |
+  | Tasa de éxito (FCM), todos | 54.2 % | 49.9 % | 47.7 % | 47.0 % | **46.4 %** | 46.0 % | 46.0 % |
 
   El tope está en los límites de cada gen (`prescripcion.py`), no en el AG, que
   es genérico y no conoce conceptos. Si el esquema no tiene la columna
@@ -358,6 +424,27 @@ muestra la rejilla completa.
   cambio que lleva al estudiante a ese nivel, sin pasarse. Un perfil de riesgo
   es un estudiante escrito a mano (o cargado y editado): el objetivo parte de su
   media de entrenamiento y el AG calcula el valor exacto de cada acción.
+* **Valores deseados** (`deseados`, PRV-FCM sección 4.2: v_s(0)). El usuario da
+  valores del objetivo y de los mutables del sistema en unidades originales.
+  Cada uno se instancia en el estado inicial; los dinámicos además entran en el
+  costo. Un mutable fijo solo plantea un escenario (por ejemplo, ausencias
+  Under-7). Los inmutables y las acciones no admiten valor deseado.
+* **Aptitud** (`--aptitud`). Por defecto, el error absoluto ponderado al estado
+  deseado (arriba). `tabla4` (perfil «articulo») es la de PRV-FCM (Tabla 4, ec.
+  12, Algoritmo 1 paso 11): aplica un paso de la regla al vector deseado v^s y
+  al estado final v̂ y suma `|f(v_j + Σ_i W_ij v_i) − f(v̂_j + Σ_i W_ij v̂_i)|`
+  sobre los conceptos del sistema; las sumas internas excluyen las acciones. En
+  la reescalada usa 2v − 1 en los dos lados (la tabla omite el del lado de v̂,
+  que tomamos por errata). `garcia2025` es la ec. 1 de García et al. (2025):
+  `Σ_j |f(v̂_j + Σ_i W_ij v̂_i) − v_j|`. Cada una está en una función aislada
+  (`prescripcion.aptitud_tabla4`, `aptitud_garcia2025`).
+* **Siembra.** El perfil «mejorado» siembra las acciones actuales en la
+  población inicial; PRV-FCM parte de acciones aleatorias (`sembrar = false`).
+* **Búsqueda aleatoria del AG** (`--busqueda-ag`, perfil «articulo»). Como el
+  artículo, prueba 8 combinaciones de población (50-200), generaciones
+  (20-50), cruce (0.2-0.9) y mutación (0.2-0.5), sin parada temprana, y elige
+  la de menor MAE de reconstrucción (abajo) en hasta 30 registros de
+  entrenamiento en el mejor nivel.
 
 ### 4. Evaluación
 
@@ -366,8 +453,11 @@ el estado de convergencia con el estado deseado:
 
 * **MAE** = media de `|A*_Class - 1|`, **MSE** = media de `(A*_Class - 1)²`,
   **RMSE** = raíz del MSE.
-* **PSR** (*Prescriptive Success Rate*) = % de estudiantes con
-  `|A*_Class - 1| ≤ 0.25`, es decir, con rendimiento H según el FCM.
+* **Tasa de éxito prescriptivo** = % de estudiantes con
+  `|A*_Class - 1| ≤ 0.25`, es decir, con rendimiento H según el FCM (la
+  tolerancia es la mitad del salto desde el nivel anterior; 0.5 con dos
+  niveles). En `metricas.json` son las claves `PSR` y `PSR_base`. No es la PSR
+  del artículo (ec. 19, abajo).
 
 Todas se reportan también con las acciones actuales (línea base). Hay tres
 evaluaciones complementarias:
@@ -380,6 +470,17 @@ evaluaciones complementarias:
   optimista.
 * **Éxito por ausentismo:** las dos tasas anteriores, separadas entre
   estudiantes con más y con menos de 7 ausencias.
+* **Reconstrucción** (protocolo de PRV-FCM, Tablas 11 y 12; clave
+  `reconstruccion` de `metricas.json`). Para los registros de prueba que ya
+  están en el mejor nivel, sus valores del sistema son el estado deseado y el
+  AG busca las acciones sin sembrar las reales, con β = 0 y sin límites de
+  cambio ni tope. Se comparan las acciones prescritas con las reales (escala
+  [0, 1]): MAE, MSE y RMSE (ec. 16-18), R² (García et al., 2025; el global es el
+  promedio por acción) y la PSR de la ec. 19, `Σ prescrito / Σ real`, literal
+  (el artículo dice que debe ser menor que 1; si pasa de 1, `avisos` lo dice y
+  no se recorta). Por acción, media ± DE y comparación de medias: Lilliefors
+  (`scipy.stats.goodness_of_fit` con KS) y t de Student pareada si las dos son
+  normales, si no, Wilcoxon (p = null con menos de 3 registros).
 
 ### 5. Reporte prescriptivo en lenguaje natural
 
@@ -413,7 +514,7 @@ ausentismo de 0.15):
 | MAE | 0.598 | 0.463 |
 | MSE | 0.410 | 0.298 |
 | RMSE | 0.641 | 0.546 |
-| PSR (FCM) | 7.2 % | 46.4 % |
+| Tasa de éxito (FCM) | 7.2 % | 46.4 % |
 | Clasificados H por el bosque aleatorio | 8.1 % | 32.5 % |
 
 | Estudiantes que llegan a H | n | FCM | Bosque aleatorio |
@@ -429,7 +530,7 @@ ausentismo de 0.15):
 | λ y α elegidos | 2 y 0.0001 | 1 y 0.001 |
 | Exactitud del FCM | 70.8 % | 78.9 % |
 | Exactitud del bosque aleatorio | 81.2 % | 82.9 % |
-| PSR del FCM | 16.4 % → 35.8 % | 7.2 % → 46.4 % |
+| Tasa de éxito del FCM | 16.4 % → 35.8 % | 7.2 % → 46.4 % |
 | Clasificados H por el bosque aleatorio | 7.5 % → 22.4 % | 8.1 % → 32.5 % |
 
 Las conclusiones se mantienen: con los dos datasets el FCM promete H a unos 14
@@ -450,7 +551,7 @@ el valor observado de un concepto que se actualiza se pierde. Si C13-C15
 evolucionan (`--mutables-dinamicos`), el FCM reemplaza el ausentismo real del
 estudiante por el que infiere de su participación.
 
-| Variante (semilla 42) | Exactitud FCM | PSR (FCM) | Estudiantes con >7 ausencias que llegan a H: FCM / bosque aleatorio |
+| Variante (semilla 42) | Exactitud FCM | Tasa de éxito (FCM) | Estudiantes con >7 ausencias que llegan a H: FCM / bosque aleatorio |
 |---|---|---|---|
 | C13-C15 observados (defecto) | 78.9 % | 46.4 % | 0.8 % / 1.1 % |
 | C13-C15 dinámicos (λ = 1) | 69.0 % | 54.7 % | 14.8 % / 1.1 % |
@@ -463,17 +564,146 @@ C13-C15 en su valor observado. Siguen siendo conceptos de
 sistema mutables (pueden cambiar en la realidad), pero el AG no los controla y
 el FCM no los sobrescribe.
 
+## Perfiles «mejorado» y «articulo»
+
+`--perfil` (y la opción `perfil` de la aplicación) elige un conjunto de valores
+por defecto; las opciones explícitas mandan sobre el perfil. El worker los
+devuelve resueltos con el método `perfiles`.
+
+| Opción | «mejorado» (defecto) | «articulo» (PRV-FCM, 2023) |
+|---|---|---|
+| Pesos W | BPTT (gradiente exacto) | PSO, ec. 4 literal (ω = c1 = c2 = 1, Vmax = 2) |
+| Sesgo b_i | sí | no |
+| Regla y activación | Kosko modificada, sigmoide | elegidas por validación cruzada entre las de la Tabla 2 |
+| Mutables (C13-C15) | fijos en su valor observado | dinámicos |
+| Validación cruzada | 5 pliegues, λ × α | 10 pliegues, regla × activación × λ (α = 0.001) |
+| Tolerancia de convergencia | 1e-5 | 1e-4 (la del artículo) |
+| SMOTE | no | sí, solo en el entrenamiento |
+| Aptitud del AG | error absoluto al estado deseado | Tabla 4 |
+| AG | 50 × hasta 100 generaciones, siembra las acciones actuales | 200 × 50 (los valores del artículo para xAPI), sin siembra, búsqueda aleatoria de hiperparámetros |
+| Esfuerzo β, solo incrementos, tope por ausentismo | 0.4, sí, 0.15 | 0, no, no |
+
+`main.py` con el perfil «mejorado» da exactamente los resultados anteriores
+a los perfiles (`resultados/`). El objetivo binario (`binarizar_objetivo`) no
+depende del perfil: el artículo binarizó xAPI en nota < 70 frente a ≥ 70 (L
+frente a M+H) y se pide con `--binarizar-objetivo M`.
+
+**Desviaciones respecto al artículo que quedan en el perfil «articulo»:**
+
+* SMOTE solo en el entrenamiento de cada pliegue, no antes de dividir (ver
+  Preprocesamiento).
+* División agrupada por perfil inmutable cuando hay variantes (xAPI 4800); con
+  perfiles únicos (480 originales, heart, marketing) equivale a una aleatoria.
+* Un solo α (0.001) en la rejilla, por tiempo, y λ en {0.5, 1, 2, 3, 5, 10} en
+  lugar de valores aleatorios.
+* La validación cruzada elige los hiperparámetros con 40 iteraciones de PSO
+  (`pso_iteraciones_cv`); el modelo final usa el PSO completo (hasta 200
+  iteraciones, para tras 30 sin mejora). Con 10 pliegues × 30 combinaciones,
+  el PSO completo tardaba más de 15 minutos en marketing.
+* Con tanh, la reescalada coincide con Kosko modificada (interpretación nuestra
+  de la Tabla 2) y no se evalúa aparte.
+* En la Tabla 4 reescalada, 2v̂ − 1 también en el término W del lado de v̂ (la
+  tabla lo omite; parece errata).
+* Vmax = 2 en el PSO: el artículo no lo menciona, pero es parte del PSO original
+  y evita que las partículas salgan del rango.
+* La búsqueda aleatoria del AG se evalúa en registros de entrenamiento (el
+  artículo no dice en cuáles) y prueba 8 combinaciones.
+* El perfil «articulo» se corre con xAPI de 480 registros, como el artículo: en
+  4800, el PSO con 10 pliegues y la grilla de reglas no cabe en tiempo
+  razonable.
+
+## Ablación: «articulo» frente a «mejorado» (`experimentos.py`)
+
+Cinco datasets con objetivos de dos niveles, para que los dos perfiles
+resuelvan la misma tarea:
+
+* xAPI binarizado en M (L frente a M+H, como el artículo), con 480 y 4800
+  registros.
+* marketing (`Response`).
+* heart (`target`, con el supuesto 1 = sin enfermedad: ese grupo tiene mayor
+  frecuencia cardiaca máxima y menos depresión del ST, angina y vasos
+  afectados). Sus acciones (presión y colesterol) pueden bajar.
+* deserción (`Final_Grade` ≥ 10, que es exactamente «no desertó»; la columna
+  `Dropped_Out` se excluye porque es la definición del objetivo).
+
+Cada perfil se corre con PSO, BPTT y Ridge; en xAPI 4800, solo el perfil
+«mejorado». Semilla 42; los CSV completos y las Tablas 11 y 12 por acción
+están en `resultados_experimentos/`.
+
+| Dataset | Perfil, método | Exactitud (mayoritaria) | Tasa de éxito | Bosque: mejor nivel | Rec. MAE | R² | PSR ec. 19 | Acciones con p > 0,05 |
+|---|---|---|---|---|---|---|---|---|
+| xapi480 | articulo, pso | 76.0 % (71.9 %) | 14.6 → 9.8 % | 17.1 → 9.8 % | 0.42 | -2.5 | 1.22 | 2 de 4 |
+| xapi480 | articulo, bptt | 83.6 % (71.9 %) | 19.5 → 12.2 % | 17.1 → 7.3 % | 0.39 | -2.1 | 1.14 | 2 de 4 |
+| xapi480 | articulo, ridge | 81.5 % (71.9 %) | 12.2 → 95.1 % | 17.1 → 65.9 % | 0.38 | -2.0 | 1.22 | 0 de 4 |
+| xapi480 | mejorado, pso | 87.7 % (71.9 %) | 14.6 → 29.3 % | 17.1 → 39.0 % | 0.45 | -2.9 | 1.83 | 0 de 4 |
+| xapi480 | mejorado, bptt | 87.7 % (71.9 %) | 12.2 → 34.1 % | 17.1 → 48.8 % | 0.45 | -2.9 | 1.83 | 0 de 4 |
+| xapi480 | mejorado, ridge | 88.4 % (71.9 %) | 9.8 → 17.1 % | 17.1 → 36.6 % | 0.45 | -2.9 | 1.83 | 0 de 4 |
+| xapi4800 | mejorado, pso | 89.7 % (76.0 %) | 22.7 → 39.7 % | 2.1 → 21.2 % | 0.44 | -4.3 | 1.38 | 0 de 4 |
+| xapi4800 | mejorado, bptt | 94.2 % (76.0 %) | 3.6 → 6.7 % | 2.1 → 8.5 % | 0.45 | -4.6 | 1.83 | 0 de 4 |
+| xapi4800 | mejorado, ridge | 94.5 % (76.0 %) | 1.2 → 8.5 % | 2.1 → 7.6 % | 0.45 | -4.6 | 1.83 | 0 de 4 |
+| marketing | articulo, pso | 76.1 % (85.0 %) | 22.2 → 70.0 % | 1.4 → 2.1 % | 0.38 | -16.6 | 2.46 | 1 de 4 |
+| marketing | articulo, bptt | 85.0 % (85.0 %) | 0.0 → 0.0 % | 1.4 → 3.3 % | 0.37 | -14.5 | 2.65 | 0 de 4 |
+| marketing | articulo, ridge | 88.7 % (85.0 %) | 2.1 → 24.4 % | 1.4 → 2.4 % | 0.38 | -12.8 | 2.59 | 1 de 4 |
+| marketing | mejorado, pso | 88.4 % (85.0 %) | 3.7 → 5.6 % | 1.4 → 1.4 % | 0.35 | -18.6 | 1.30 | 0 de 4 |
+| marketing | mejorado, bptt | 88.9 % (85.0 %) | 3.5 → 42.9 % | 1.4 → 1.7 % | 0.81 | -49.0 | 5.20 | 0 de 4 |
+| marketing | mejorado, ridge | 88.4 % (85.0 %) | 1.9 → 49.6 % | 1.4 → 1.7 % | 0.81 | -49.0 | 5.20 | 0 de 4 |
+| heart | articulo, pso | 81.1 % (53.3 %) | 11.9 → 16.7 % | 11.9 → 11.9 % | 0.39 | -13.2 | 1.27 | 1 de 2 |
+| heart | articulo, bptt | 86.7 % (53.3 %) | 9.5 → 11.9 % | 11.9 → 9.5 % | 0.38 | -11.7 | 0.85 | 1 de 2 |
+| heart | articulo, ridge | 84.4 % (53.3 %) | 16.7 → 33.3 % | 11.9 → 14.3 % | 0.40 | -14.5 | 1.59 | 1 de 2 |
+| heart | mejorado, pso | 87.8 % (53.3 %) | 11.9 → 11.9 % | 11.9 → 11.9 % | 0.53 | -24.2 | 1.82 | 0 de 2 |
+| heart | mejorado, bptt | 86.7 % (53.3 %) | 14.3 → 14.3 % | 11.9 → 11.9 % | 0.28 | -4.8 | 0.00 | 0 de 2 |
+| heart | mejorado, ridge | 85.6 % (53.3 %) | 11.9 → 14.3 % | 11.9 → 11.9 % | 0.28 | -4.8 | 0.00 | 0 de 2 |
+| desercion | articulo, pso | 84.7 % (84.7 %) | 100.0 → 100.0 % | 43.3 → 46.7 % | 0.38 | -1.5 | 1.13 | 1 de 1 |
+| desercion | articulo, bptt | 89.8 % (84.7 %) | 13.3 → 13.3 % | 43.3 → 46.7 % | 0.43 | -2.3 | 1.47 | 0 de 1 |
+| desercion | articulo, ridge | 89.8 % (84.7 %) | 13.3 → 10.0 % | 43.3 → 46.7 % | 0.38 | -1.7 | 1.19 | 1 de 1 |
+| desercion | mejorado, pso | 85.2 % (84.7 %) | 73.3 → 73.3 % | 43.3 → 43.3 % | 0.64 | -4.8 | 2.75 | 0 de 1 |
+| desercion | mejorado, bptt | 90.3 % (84.7 %) | 13.3 → 13.3 % | 43.3 → 43.3 % | 0.36 | -1.6 | 0.00 | 0 de 1 |
+| desercion | mejorado, ridge | 88.3 % (84.7 %) | 66.7 → 66.7 % | 43.3 → 43.3 % | 0.36 | -1.6 | 0.00 | 0 de 1 |
+
+* **Predicción.** El perfil «mejorado» es tan exacto o más en todos los
+  datasets. Con el PSO de la ec. 4 literal (ω = c1 = c2 = 1), el enjambre se
+  estanca: para tras 42-65 iteraciones sin mejora (163 en heart), mientras que
+  Clerc sigue mejorando hasta las 200. En xAPI 4800 (sin sesgo, solo C16
+  dinámico), el literal queda en pérdida 0.069 y 66.8 % de exactitud; Clerc,
+  en 0.051 y 72.6 %, igual que BPTT (0.051 y 72.1 %). Algunas corridas del
+  perfil «articulo» predicen solo la clase mayoritaria (marketing con BPTT,
+  deserción con PSO: F1 0.46).
+* **Prescripción.** La aptitud de la Tabla 4 pide que el estado final del
+  sistema se parezca al deseado (incluidos los mutables dinámicos en su valor
+  actual), no que el objetivo suba. Sin la siembra de las acciones actuales,
+  la prescripción puede empeorar. En xAPI 480 la tasa de éxito baja de 14.6 %
+  a 9.8 % con PSO y de 19.5 % a 12.2 % con BPTT, y el bosque confirma la
+  caída (17.1 % → 9.8 % y 7.3 %).
+* **Reconstrucción.** El protocolo del artículo no reproduce sus errores:
+  * MAE de 0.28 a 0.81 (artículo: 0.007 a 0.036) y R² negativo en las 27
+    corridas.
+  * PSR de la ec. 19 de 0 a 5.2, mayor que 1 en 22 de 27.
+  * Medias sin diferencia (p > 0.05) en 11 de 78 acciones, todas del perfil
+    «articulo».
+
+  El problema está subdeterminado: muchas combinaciones de acciones llevan al
+  mismo estado, así que la prescripción no tiene por qué parecerse a las
+  acciones observadas. Con la aptitud por defecto y β = 0, el AG lleva cada
+  acción al extremo que más acerca el objetivo:
+  * Todas al máximo en xAPI: PSR = 1 / media real = 1.83.
+  * Todas al mínimo en heart y deserción con BPTT y Ridge: PSR = 0. Con PSO
+    van al máximo (PSR 1.8 y 2.8), porque sus pesos tienen el signo contrario.
+
+  Las PSR mayores que 1 de marketing (2.5 a 5.2) y heart (1.3 a 1.6) vienen de
+  acciones observadas bajas que la prescripción sube. El texto del artículo no
+  explica cómo obtuvo errores tan pequeños.
+
 ## Comparación con los artículos
 
 | Aspecto | PRV-FCM (Hoyos et al., 2023) | García et al. (2025) | Este proyecto |
 |---|---|---|---|
-| Construcción del FCM | PSO sobre datos | Expertos | Datos: L-BFGS-B con gradiente exacto (BPTT) |
-| Inferencia | Kosko modificada, sigmoide (λ = 10 en este dataset) | Kosko modificada, sigmoide | Kosko modificada con sesgo, sigmoide; λ = 1 por validación cruzada |
-| Datos y división | 70/30; validación cruzada de 10 pliegues | 70/30; validación cruzada de 5 pliegues | 70/30 agrupada; validación cruzada agrupada de 5 pliegues |
-| Rendimiento | 2 clases (nota < 70 o ≥ 70), balanceadas con SMOTE | Diagnóstico binario | 3 niveles (L/M/H), sin sobremuestreo |
+| Construcción del FCM | PSO sobre datos | Expertos | Datos: BPTT (defecto), Ridge, Lasso, correlación parcial o PSO; o matrices de expertos |
+| Inferencia | Kosko modificada, sigmoide (λ = 10 en este dataset) | Kosko modificada, sigmoide | Kosko modificada con sesgo, sigmoide; λ = 1 por validación cruzada (o las reglas de la Tabla 2) |
+| Datos y división | 70/30; validación cruzada de 10 pliegues | 70/30; validación cruzada de 5 pliegues | 70/30 agrupada; validación cruzada agrupada de 5 pliegues (10 en el perfil «articulo») |
+| Rendimiento | 2 clases (nota < 70 o ≥ 70), balanceadas con SMOTE | Diagnóstico binario | 3 niveles (L/M/H), o 2 con `--binarizar-objetivo`; SMOTE opcional, solo en el entrenamiento |
 | AG | Población 200, 50 generaciones, cruce 0.2, mutación 0.3 | Población 80-120, cruce 0.3-0.5, mutación 0.2-0.3; para si F mejora ≤ 0.001 | Población 50, hasta 100 generaciones, cruce 0.9, mutación 0.25; para tras 25 generaciones sin mejora |
 | Aptitud | Diferencia entre el estado deseado y el inferido | Σ_j \|f(v̂_j + Σ_i W_ij·v̂_i) − v_j\| | Error absoluto ponderado respecto al estado deseado + β·esfuerzo; tope por ausentismo |
-| Métricas | Exactitud; MAE, MSE, RMSE y PSR entre acciones reales y prescritas | Exactitud, precisión, recall, F1; R², MSE, RMSE | Exactitud, precisión, recall, F1; MAE, MSE, RMSE y PSR respecto al estado deseado; validación externa |
+| Métricas | Exactitud; MAE, MSE, RMSE y PSR entre acciones reales y prescritas | Exactitud, precisión, recall, F1; R², MSE, RMSE | Exactitud, precisión, recall, F1; MAE, MSE, RMSE y tasa de éxito respecto al estado deseado; validación externa; reconstrucción como el artículo (MAE, MSE, RMSE, R², PSR ec. 19, t o Wilcoxon) |
 
 Los artículos validan comparando las acciones prescritas con las observadas
 del mismo registro (Tablas 11 y 12 de PRV-FCM). Aquí el objetivo es cambiar las
@@ -485,10 +715,11 @@ estado deseado y se contrasta con un modelo independiente.
 * `recomendaciones.csv`: por estudiante (`id_estudiante` = fila del CSV, 0 = primera
   fila de datos), acciones actuales, recomendadas y cambio en unidades originales,
   activación de C16 antes y después, nivel L/M/H y éxito.
-* `metricas.json`: configuración (con el método de pesos, el sesgo, el
-  equilibrio de niveles, las aristas excluidas y el tope por ausentismo), tabla de validación cruzada, métricas de
-  predicción (por nivel y matriz de confusión), de prescripción, por ausentismo
-  y de la validación externa.
+* `metricas.json`: configuración (perfil, método de pesos, regla, sesgo,
+  equilibrio de niveles, aristas excluidas, tope por ausentismo, SMOTE,
+  binarización), tabla de validación cruzada, búsqueda del AG, métricas de
+  predicción (por nivel y matriz de confusión), de prescripción, por
+  ausentismo, de la validación externa y de la reconstrucción.
 * `seleccion_hiperparametros.csv` / `seleccion_hiperparametros.png`: exactitud de
   validación de cada combinación de λ y α.
 * `pesos_fcm.csv` / `pesos_fcm.png`: matriz de pesos aprendida; en el CSV, la
@@ -508,7 +739,7 @@ estado deseado y se contrasta con un modelo independiente.
   β pequeño, el AG sube las acciones casi al máximo y la prescripción se parece
   para todos; por eso el valor por defecto es β = 0.4 (con tope por ausentismo):
 
-  | β | PSR (FCM) | Clasificados H por el bosque | Cambio medio por acción | Combinaciones de acciones distintas |
+  | β | Tasa de éxito (FCM) | Clasificados H por el bosque | Cambio medio por acción | Combinaciones de acciones distintas |
   |---|---|---|---|---|
   | 0.05 | 47.4 % | 39.4 % | 0.35 | 534 |
   | 0.4 (defecto) | 46.4 % | 32.5 % | 0.17 | 959 |

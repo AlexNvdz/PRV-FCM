@@ -9,9 +9,12 @@ Cromosoma: a = (a_C9, a_C10, a_C11, a_C12), un gen real por concepto de
 acción, en escala normalizada [0, 1]. Los demás conceptos no forman parte del
 cromosoma: los fijos conservan su valor y los dinámicos los calcula el FCM.
 
-Función de costo (a minimizar):
+Función de costo (a minimizar), con la aptitud por defecto (``aptitud = "error"``):
 
     costo(a) = sum_i p_i * |A_i*(a) - D_i| / sum_i p_i  +  beta * media_k |a_k - a_k^actual|
+
+Las aptitudes de los artículos están en funciones aisladas, por si cambia su
+lectura: ``aptitud_tabla4`` (PRV-FCM, 2023) y ``aptitud_garcia2025``.
 
 * A*(a): estado de convergencia del FCM partiendo del estado actual del
   estudiante con las acciones sustituidas por a.
@@ -37,6 +40,49 @@ import numpy as np
 from .configuracion import ConfigAG, ConfigPrescripcion
 from .fcm import MapaCognitivoDifuso
 from .genetico import AlgoritmoGenetico
+
+APTITUDES = ("error", "tabla4", "garcia2025")
+
+
+def _paso_del_sistema(fcm: MapaCognitivoDifuso, estados: np.ndarray, sistema: np.ndarray) -> np.ndarray:
+    """f(m*u_j + k1*(sum_{i del sistema} w_ij*u_i + b_j)) para cada concepto j del sistema: un paso de la regla sin las acciones."""
+    memoria = fcm.regla[0]
+    u = fcm.entrada(np.atleast_2d(estados))[:, sistema]
+    W = fcm.pesos[np.ix_(sistema, sistema)]
+    return fcm.activar(memoria * u + fcm.config.coef_influencia * (u @ W + fcm.sesgo[sistema]))
+
+
+def aptitud_tabla4(fcm: MapaCognitivoDifuso, deseado: np.ndarray, finales: np.ndarray, indices_accion: np.ndarray) -> np.ndarray:
+    """Aptitud de PRV-FCM (Hoyos, Aguilar y Toro, 2023; Tabla 4, ec. 12, Algoritmo 1 paso 11).
+
+        F = sum_j | f(v_j + sum_{i != j} W_ij v_i) - f(v̂_j + sum_{i != j} W_ij v̂_i) |
+
+    (Kosko modificada; en Kosko sin el primer término, en la reescalada con
+    2v - 1 en lugar de v en los dos lados: la tabla omite el 2v̂ - 1 del término
+    W del lado de v̂, que tomamos por errata). v = ``deseado``, el vector
+    deseado del sistema v^s(0) completo; v̂ = ``finales``, el estado final de la
+    inferencia (uno por candidato). j e i recorren los conceptos del sistema: las
+    acciones no entran en las sumas, solo influyen a través de v̂. En los
+    conceptos fijos (sin aristas entrantes y con v̂_j = v_j) el término vale 0.
+    """
+    sistema = np.setdiff1d(np.arange(fcm.n_conceptos), indices_accion)
+    return np.abs(_paso_del_sistema(fcm, deseado, sistema) - _paso_del_sistema(fcm, finales, sistema)).sum(axis=1)
+
+
+def aptitud_garcia2025(
+    fcm: MapaCognitivoDifuso, deseado: np.ndarray, finales: np.ndarray, indices_accion: np.ndarray, indices_deseados: np.ndarray
+) -> np.ndarray:
+    """Aptitud de García et al. (2025), ec. 1: un paso sobre el estado final comparado con el deseado.
+
+        F = sum_j | f(v̂_j + sum_{i != j} W_ij v̂_i) - v_j |
+
+    j recorre los conceptos con valor deseado (``indices_deseados``) e i los del
+    sistema: en los fijos f(v_j) no es v_j y sumaría una constante.
+    """
+    sistema = np.setdiff1d(np.arange(fcm.n_conceptos), indices_accion)
+    paso = _paso_del_sistema(fcm, finales, sistema)
+    columnas = np.searchsorted(sistema, indices_deseados)
+    return np.abs(paso[:, columnas] - np.asarray(deseado)[indices_deseados]).sum(axis=1)
 
 
 @dataclass
@@ -96,6 +142,8 @@ class PrescriptorPRVFCM:
         self.config_ag = config_ag
         self.config = config
         self.indice_condicion = None if config.condicion_columna is None else indice_condicion
+        if config.aptitud not in APTITUDES:
+            raise ValueError(f"aptitud debe ser una de {APTITUDES}, no '{config.aptitud}'.")
 
     def condicion_activa(self, estado_actual: np.ndarray) -> bool:
         """True si el concepto de la condición está activo (>= 0.5) y limita la subida de las acciones."""
@@ -125,6 +173,16 @@ class PrescriptorPRVFCM:
         estados[:, self.indices_accion] = acciones
         return estados
 
+    def aptitud(self, estado_actual: np.ndarray, finales: np.ndarray) -> np.ndarray:
+        """Parte de error del costo según ``config.aptitud``; el vector deseado es el estado actual con los valores deseados."""
+        if self.config.aptitud == "error":
+            return self.error_objetivo(finales)
+        deseado = np.array(estado_actual, dtype=float)
+        deseado[self.indices_objetivo] = self.valores_deseados
+        if self.config.aptitud == "tabla4":
+            return aptitud_tabla4(self.fcm, deseado, finales, self.indices_accion)
+        return aptitud_garcia2025(self.fcm, deseado, finales, self.indices_accion, self.indices_objetivo)
+
     def funcion_costo(self, estado_actual: np.ndarray):
         """Función de costo vectorizada del AG para un estudiante concreto."""
         acciones_actuales = estado_actual[self.indices_accion]
@@ -132,7 +190,7 @@ class PrescriptorPRVFCM:
         def costo(poblacion: np.ndarray) -> np.ndarray:
             finales = self.fcm.inferir(self.estados_con_acciones(estado_actual, poblacion)).estados
             esfuerzo = np.mean(np.abs(poblacion - acciones_actuales), axis=1)
-            return self.error_objetivo(finales) + self.config.beta_esfuerzo * esfuerzo
+            return self.aptitud(estado_actual, finales) + self.config.beta_esfuerzo * esfuerzo
 
         return costo
 
@@ -153,8 +211,8 @@ class PrescriptorPRVFCM:
 
         ag = AlgoritmoGenetico(self.funcion_costo(estado_actual), inferior, superior, self.config_ag, rng)
         # Las acciones actuales se siembran en la población inicial: con elitismo,
-        # la prescripción nunca es peor que mantener la situación actual.
-        resultado = ag.ejecutar(semillas=acciones_actuales, al_generar=al_generar)
+        # la prescripción nunca es peor que mantener la situación actual. PRV-FCM no siembra.
+        resultado = ag.ejecutar(semillas=acciones_actuales if self.config.sembrar else None, al_generar=al_generar)
 
         recomendadas = resultado.mejor_cromosoma
         estado_nuevo = estado_actual.copy()

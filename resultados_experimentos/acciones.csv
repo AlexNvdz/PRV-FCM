@@ -1,0 +1,79 @@
+dataset,perfil,metodo,columna,nombre,mae,mse,rmse,r2,media_real,de_real,media_prescrita,de_prescrita,normal_real,normal_prescrita,prueba,p
+heart,mejorado,bptt,trestbps,Presión arterial en reposo,0.303656,0.110829,0.332909,-4.95152,0.303656,0.137906,0,0,False,False,wilcoxon,1.54849e-09
+heart,mejorado,bptt,chol,Colesterol,0.247113,0.0741166,0.272244,-4.67871,0.247113,0.115453,0,0,True,False,wilcoxon,2.39438e-09
+xapi480,mejorado,bptt,raisedhands,Manos levantadas,0.438571,0.264525,0.51432,-2.6648,0.561429,0.269952,1,0,False,False,wilcoxon,1.19486e-18
+xapi480,mejorado,bptt,VisITedResources,Recursos visitados,0.318615,0.177323,0.421097,-1.33912,0.681385,0.276652,1,0,False,False,wilcoxon,8.30784e-19
+xapi480,mejorado,bptt,AnnouncementsView,Anuncios consultados,0.544121,0.360551,0.600459,-4.59132,0.455879,0.255155,1,0,False,False,wilcoxon,5.76686e-19
+xapi480,mejorado,bptt,Discussion,Grupos de discusión,0.509718,0.344068,0.586573,-3.08363,0.490282,0.29166,1,0,False,False,wilcoxon,5.78608e-19
+xapi480,articulo,bptt,raisedhands,Manos levantadas,0.41112,0.247257,0.497249,-2.42557,0.561429,0.269952,0.708939,0.40523,False,False,wilcoxon,0.00070123
+xapi480,articulo,bptt,VisITedResources,Recursos visitados,0.297609,0.158199,0.397742,-1.08684,0.681385,0.276652,0.705175,0.413421,False,False,wilcoxon,0.166595
+xapi480,articulo,bptt,AnnouncementsView,Anuncios consultados,0.401948,0.227174,0.476628,-2.52295,0.455879,0.255155,0.615629,0.429513,False,False,wilcoxon,0.00048398
+xapi480,articulo,bptt,Discussion,Grupos de discusión,0.46023,0.291985,0.540356,-2.46548,0.490282,0.29166,0.476069,0.445067,False,False,wilcoxon,0.694161
+xapi480,articulo,ridge,raisedhands,Manos levantadas,0.398519,0.226788,0.476222,-2.14198,0.561429,0.269952,0.772192,0.392468,False,False,wilcoxon,2.50304e-06
+xapi480,articulo,ridge,VisITedResources,Recursos visitados,0.28113,0.140269,0.374526,-0.850332,0.681385,0.276652,0.900374,0.21073,False,False,wilcoxon,1.39207e-11
+xapi480,articulo,ridge,AnnouncementsView,Anuncios consultados,0.398985,0.234395,0.484144,-2.63494,0.455879,0.255155,0.629138,0.43159,False,False,wilcoxon,9.80268e-05
+xapi480,articulo,ridge,Discussion,Grupos de discusión,0.427889,0.273969,0.523421,-2.25166,0.490282,0.29166,0.375869,0.424793,False,False,wilcoxon,0.0170105
+xapi480,mejorado,ridge,raisedhands,Manos levantadas,0.438571,0.264525,0.51432,-2.6648,0.561429,0.269952,1,0,False,False,wilcoxon,1.19486e-18
+xapi480,mejorado,ridge,VisITedResources,Recursos visitados,0.318615,0.177323,0.421097,-1.33912,0.681385,0.276652,1,0,False,False,wilcoxon,8.30784e-19
+xapi480,mejorado,ridge,AnnouncementsView,Anuncios consultados,0.544121,0.360551,0.600459,-4.59132,0.455879,0.255155,1,0,False,False,wilcoxon,5.76686e-19
+xapi480,mejorado,ridge,Discussion,Grupos de discusión,0.509718,0.344068,0.586573,-3.08363,0.490282,0.29166,1,0,False,False,wilcoxon,5.78608e-19
+xapi480,mejorado,pso,raisedhands,Manos levantadas,0.438571,0.264525,0.51432,-2.6648,0.561429,0.269952,1,0,False,False,wilcoxon,1.19486e-18
+xapi480,mejorado,pso,VisITedResources,Recursos visitados,0.318615,0.177323,0.421097,-1.33912,0.681385,0.276652,1,0,False,False,wilcoxon,8.30784e-19
+xapi480,mejorado,pso,AnnouncementsView,Anuncios consultados,0.544121,0.360551,0.600459,-4.59132,0.455879,0.255155,1,0,False,False,wilcoxon,5.76686e-19
+xapi480,mejorado,pso,Discussion,Grupos de discusión,0.509718,0.344068,0.586573,-3.08363,0.490282,0.29166,1,0,False,False,wilcoxon,5.78608e-19
+xapi4800,mejorado,bptt,raisedhands,Manos levantadas,0.433471,0.240385,0.490291,-3.57978,0.566529,0.229213,1,0,False,False,wilcoxon,9.77951e-172
+xapi4800,mejorado,bptt,VisITedResources,Recursos visitados,0.306991,0.138366,0.371976,-2.13596,0.693009,0.210154,1,0,False,False,wilcoxon,3.09265e-172
+xapi4800,mejorado,bptt,AnnouncementsView,Anuncios consultados,0.547704,0.344532,0.586968,-6.73317,0.452296,0.211176,1,0,False,False,wilcoxon,3.16512e-172
+xapi4800,mejorado,bptt,Discussion,Grupos de discusión,0.530414,0.328176,0.572867,-6.0068,0.469586,0.216522,1,0,False,False,wilcoxon,3.16782e-172
+xapi4800,mejorado,ridge,raisedhands,Manos levantadas,0.433471,0.240385,0.490291,-3.57978,0.566529,0.229213,1,0,False,False,wilcoxon,9.77951e-172
+xapi4800,mejorado,ridge,VisITedResources,Recursos visitados,0.306991,0.138366,0.371976,-2.13596,0.693009,0.210154,1,0,False,False,wilcoxon,3.09265e-172
+xapi4800,mejorado,ridge,AnnouncementsView,Anuncios consultados,0.547704,0.344532,0.586968,-6.73317,0.452296,0.211176,1,0,False,False,wilcoxon,3.16512e-172
+xapi4800,mejorado,ridge,Discussion,Grupos de discusión,0.530414,0.328176,0.572867,-6.0068,0.469586,0.216522,1,0,False,False,wilcoxon,3.16782e-172
+xapi4800,mejorado,pso,raisedhands,Manos levantadas,0.433471,0.240385,0.490291,-3.57978,0.566529,0.229213,1,0,False,False,wilcoxon,9.77951e-172
+xapi4800,mejorado,pso,VisITedResources,Recursos visitados,0.306991,0.138366,0.371976,-2.13596,0.693009,0.210154,1,0,False,False,wilcoxon,3.09265e-172
+xapi4800,mejorado,pso,AnnouncementsView,Anuncios consultados,0.547704,0.344532,0.586968,-6.73317,0.452296,0.211176,1,0,False,False,wilcoxon,3.16512e-172
+xapi4800,mejorado,pso,Discussion,Grupos de discusión,0.469586,0.267347,0.517057,-4.70806,0.469586,0.216522,0,0,False,False,wilcoxon,3.16782e-172
+xapi480,articulo,pso,raisedhands,Manos levantadas,0.42932,0.25067,0.50067,-2.47286,0.561429,0.269952,0.649737,0.407646,False,False,wilcoxon,0.0661647
+xapi480,articulo,pso,VisITedResources,Recursos visitados,0.345536,0.204264,0.451956,-1.6945,0.681385,0.276652,0.668359,0.432369,False,False,wilcoxon,0.511356
+xapi480,articulo,pso,AnnouncementsView,Anuncios consultados,0.462126,0.282724,0.531718,-3.38441,0.455879,0.255155,0.685649,0.453869,False,False,wilcoxon,8.08135e-06
+xapi480,articulo,pso,Discussion,Grupos de discusión,0.45167,0.283589,0.53253,-2.36583,0.490282,0.29166,0.664179,0.432391,False,False,wilcoxon,0.000905186
+marketing,articulo,pso,NumDealsPurchases,Compras con descuento,0.49748,0.354018,0.594994,-16.303,0.163036,0.143751,0.610014,0.370595,False,False,wilcoxon,5.77207e-14
+marketing,articulo,pso,NumCatalogPurchases,Compras por catálogo,0.333889,0.195551,0.442212,-16.8581,0.153465,0.105166,0.422687,0.360822,False,False,wilcoxon,3.36693e-09
+marketing,articulo,pso,NumWebPurchases,Compras web,0.443762,0.286949,0.535676,-28.0714,0.187019,0.0998457,0.544176,0.383166,False,False,wilcoxon,5.74628e-11
+marketing,articulo,pso,NumWebVisitsMonth,Visitas web al mes,0.263298,0.111065,0.333264,-5.04833,0.265842,0.136186,0.316849,0.343593,False,False,wilcoxon,0.651064
+marketing,articulo,bptt,NumDealsPurchases,Compras con descuento,0.376836,0.206888,0.454849,-9.11188,0.163036,0.143751,0.507038,0.278523,False,False,wilcoxon,6.35743e-15
+marketing,articulo,bptt,NumCatalogPurchases,Compras por catálogo,0.410341,0.244503,0.494472,-21.3284,0.153465,0.105166,0.539386,0.301875,False,False,wilcoxon,1.73082e-15
+marketing,articulo,bptt,NumWebPurchases,Compras web,0.378933,0.207095,0.455077,-19.9813,0.187019,0.0998457,0.518375,0.290916,False,False,wilcoxon,1.02565e-13
+marketing,articulo,bptt,NumWebVisitsMonth,Visitas web al mes,0.317133,0.157237,0.396532,-7.56277,0.265842,0.136186,0.473481,0.32303,False,False,wilcoxon,4.43496e-07
+marketing,articulo,ridge,NumDealsPurchases,Compras con descuento,0.545461,0.394324,0.627952,-18.273,0.163036,0.143751,0.680752,0.377916,False,False,wilcoxon,3.43789e-16
+marketing,articulo,ridge,NumCatalogPurchases,Compras por catálogo,0.248267,0.120396,0.346982,-9.99478,0.153465,0.105166,0.329933,0.351053,False,False,wilcoxon,9.44219e-06
+marketing,articulo,ridge,NumWebPurchases,Compras web,0.221304,0.0792892,0.281583,-7.03297,0.187019,0.0998457,0.253834,0.263466,False,False,wilcoxon,0.117933
+marketing,articulo,ridge,NumWebVisitsMonth,Visitas web al mes,0.493173,0.310154,0.556915,-15.8903,0.265842,0.136186,0.729401,0.334499,False,False,wilcoxon,3.1901e-16
+marketing,mejorado,bptt,NumDealsPurchases,Compras con descuento,0.836964,0.720968,0.849098,-34.2382,0.163036,0.143751,1,0,False,False,wilcoxon,8.87727e-19
+marketing,mejorado,bptt,NumCatalogPurchases,Compras por catálogo,0.846535,0.727571,0.852978,-65.443,0.153465,0.105166,1,0,False,False,wilcoxon,2.35541e-18
+marketing,mejorado,bptt,NumWebPurchases,Compras web,0.812981,0.670809,0.819029,-66.9612,0.187019,0.0998457,1,0,False,False,wilcoxon,2.26633e-18
+marketing,mejorado,bptt,NumWebVisitsMonth,Visitas web al mes,0.734158,0.557351,0.74656,-29.352,0.265842,0.136186,1,0,False,False,wilcoxon,2.26709e-18
+marketing,mejorado,ridge,NumDealsPurchases,Compras con descuento,0.836964,0.720968,0.849098,-34.2382,0.163036,0.143751,1,0,False,False,wilcoxon,8.87727e-19
+marketing,mejorado,ridge,NumCatalogPurchases,Compras por catálogo,0.846535,0.727571,0.852978,-65.443,0.153465,0.105166,1,0,False,False,wilcoxon,2.35541e-18
+marketing,mejorado,ridge,NumWebPurchases,Compras web,0.812981,0.670809,0.819029,-66.9612,0.187019,0.0998457,1,0,False,False,wilcoxon,2.26633e-18
+marketing,mejorado,ridge,NumWebVisitsMonth,Visitas web al mes,0.734158,0.557351,0.74656,-29.352,0.265842,0.136186,1,0,False,False,wilcoxon,2.26709e-18
+marketing,mejorado,pso,NumDealsPurchases,Compras con descuento,0.163036,0.0470407,0.216889,-1.29917,0.163036,0.143751,0,0,False,False,wilcoxon,3.6847e-18
+marketing,mejorado,pso,NumCatalogPurchases,Compras por catálogo,0.153465,0.0345019,0.185747,-2.15077,0.153465,0.105166,0,0,False,False,wilcoxon,3.31481e-17
+marketing,mejorado,pso,NumWebPurchases,Compras web,0.812981,0.670809,0.819029,-66.9612,0.187019,0.0998457,1,0,False,False,wilcoxon,2.26633e-18
+marketing,mejorado,pso,NumWebVisitsMonth,Visitas web al mes,0.265842,0.0890347,0.298387,-3.84861,0.265842,0.136186,0,0,False,False,wilcoxon,2.26709e-18
+heart,articulo,pso,trestbps,Presión arterial en reposo,0.341286,0.146274,0.382458,-6.85495,0.303656,0.137906,0.198553,0.321814,False,False,wilcoxon,0.0500132
+heart,articulo,pso,chol,Colesterol,0.434098,0.268729,0.51839,-19.5896,0.247113,0.115453,0.502853,0.431862,True,False,wilcoxon,0.00167282
+heart,articulo,bptt,trestbps,Presión arterial en reposo,0.398286,0.204111,0.451787,-9.96081,0.303656,0.137906,0.181894,0.384435,False,False,wilcoxon,0.0400768
+heart,articulo,bptt,chol,Colesterol,0.359535,0.189522,0.435342,-13.5209,0.247113,0.115453,0.284139,0.439983,True,False,wilcoxon,0.882223
+heart,articulo,ridge,trestbps,Presión arterial en reposo,0.359357,0.184041,0.429,-8.88304,0.303656,0.137906,0.331575,0.421721,False,False,wilcoxon,0.963181
+heart,articulo,ridge,chol,Colesterol,0.446941,0.275576,0.524953,-20.1143,0.247113,0.115453,0.541725,0.446074,True,False,wilcoxon,0.000104434
+heart,mejorado,ridge,trestbps,Presión arterial en reposo,0.303656,0.110829,0.332909,-4.95152,0.303656,0.137906,0,0,False,False,wilcoxon,1.54849e-09
+heart,mejorado,ridge,chol,Colesterol,0.247113,0.0741166,0.272244,-4.67871,0.247113,0.115453,0,0,True,False,wilcoxon,2.39438e-09
+heart,mejorado,pso,trestbps,Presión arterial en reposo,0.303656,0.110829,0.332909,-4.95152,0.303656,0.137906,0,0,False,False,wilcoxon,1.54849e-09
+heart,mejorado,pso,chol,Colesterol,0.752887,0.57989,0.761505,-43.4304,0.247113,0.115453,1,0,True,False,wilcoxon,1.62941e-09
+desercion,articulo,pso,Study_Time,Tiempo de Estudio,0.378685,0.210045,0.458307,-1.49758,0.363454,0.290877,0.410853,0.359097,False,False,wilcoxon,0.103957
+desercion,articulo,bptt,Study_Time,Tiempo de Estudio,0.428574,0.278067,0.52732,-2.3064,0.363454,0.290877,0.536058,0.428378,False,False,wilcoxon,3.85688e-06
+desercion,articulo,ridge,Study_Time,Tiempo de Estudio,0.382544,0.230377,0.479977,-1.73935,0.363454,0.290877,0.430734,0.415215,False,False,wilcoxon,0.0641593
+desercion,mejorado,bptt,Study_Time,Tiempo de Estudio,0.363454,0.216198,0.464971,-1.57074,0.363454,0.290877,0,0,False,False,wilcoxon,5.43635e-24
+desercion,mejorado,ridge,Study_Time,Tiempo de Estudio,0.363454,0.216198,0.464971,-1.57074,0.363454,0.290877,0,0,False,False,wilcoxon,5.43635e-24
+desercion,mejorado,pso,Study_Time,Tiempo de Estudio,0.636546,0.48929,0.699493,-4.818,0.363454,0.290877,1,0,False,False,wilcoxon,8.3232e-28
