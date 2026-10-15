@@ -27,6 +27,7 @@ from .esquema import NIVELES_NUMERICOS, categorias_one_hot, codificacion_de, col
 from .evaluacion import discretizar_rendimiento
 from .fcm import correlaciones_parciales
 from .preprocesamiento import Preprocesador, como_texto, etiquetas_objetivo, fechas
+from .reporte import numero
 
 # Palabras (sin tildes, en minúsculas) que sugieren el rol de una columna.
 PALABRAS_OBJETIVO = (
@@ -201,8 +202,8 @@ def _excluir_si_determinan(df: pd.DataFrame, objetivo: dict, columnas: list[dict
         entrada.clear()
         entrada.update({"columna": columna, "rol": "excluir"})
         avisos.append(
-            f"{columna} acierta el nivel de {objetivo['columna']} en el {100 * acierto:.1f} % de los registros por sí sola "
-            f"(la clase mayoritaria, {100 * base:.1f} %): parece su definición o un dato posterior, así que se excluyó. "
+            f"{columna} acierta el nivel de {objetivo['columna']} en el {numero(100 * acierto)} % de los registros por sí sola "
+            f"(la clase mayoritaria, {numero(100 * base)} %): parece su definición o un dato posterior, así que se excluyó. "
             "Si es una causa legítima, márquela de nuevo en el paso 2."
         )
 
@@ -263,7 +264,7 @@ def sugerir_esquema(df: pd.DataFrame, nombre: str = "") -> tuple[dict, list[str]
     if entrada_objetivo is not None:
         _excluir_si_determinan(df, entrada_objetivo, columnas, avisos)
     if not any(c["rol"] == "accion" for c in columnas):
-        avisos.append("No se reconocieron acciones: marque las variables que la institución o el estudiante pueden cambiar.")
+        avisos.append("No se reconocieron acciones: marque las variables que se pueden cambiar para mejorar el objetivo.")
     esquema = {
         "nombre": nombre,
         "objetivo": objetivo,

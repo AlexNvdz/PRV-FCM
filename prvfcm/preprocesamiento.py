@@ -32,6 +32,7 @@ from sklearn.neighbors import NearestNeighbors
 
 from .configuracion import ACCION, ESQUEMA_XAPI, INMUTABLE, MUTABLE, Esquema
 from .evaluacion import discretizar_rendimiento
+from .reporte import numero
 
 SEPARADORES = (",", ";", "\t", "|")
 EXTENSIONES_EXCEL = (".xlsx", ".xlsm", ".xls")
@@ -259,7 +260,7 @@ def dividir_entrenamiento_prueba(
         return entrenamiento, prueba
     n_prueba = round(proporcion_prueba * n_partes)
     if not 1 <= n_prueba < n_partes:
-        raise ValueError(f"proporcion_prueba debe estar entre {1 / n_partes:g} y {1 - 1 / n_partes:g}.")
+        raise ValueError(f"proporcion_prueba debe estar entre {numero(1 / n_partes, 6)} y {numero(1 - 1 / n_partes, 6)}.")
     pliegues = StratifiedGroupKFold(n_splits=n_partes, shuffle=True, random_state=semilla)
     partes = [prueba for _, prueba in pliegues.split(df, estratos, groups=grupos)]
     es_prueba = np.zeros(len(df), dtype=bool)

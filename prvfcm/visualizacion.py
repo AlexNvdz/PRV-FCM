@@ -27,7 +27,18 @@ import pandas as pd  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
+from matplotlib.ticker import FuncFormatter  # noqa: E402
+
 from .prescripcion import ResultadoPrescripcion  # noqa: E402
+from .reporte import numero  # noqa: E402
+
+# Marcas de los ejes con coma decimal (es-CO), como el resto de los textos.
+MARCAS_ES = FuncFormatter(lambda valor, _: numero(valor, 2))
+
+
+def con_signo(valor: float) -> str:
+    """Peso con dos decimales y signo: +0,25; -0,1."""
+    return f"{'+' if valor > 0 else ''}{numero(valor, 2)}"
 
 if TYPE_CHECKING:
     from .pipeline import ResultadoPipeline
@@ -99,7 +110,7 @@ def grafica_seleccion(
     otros = sorted(tabla.loc[~es_elegido, "alpha_l2"].unique())
     for k, alpha in enumerate(otros):
         grupo = tabla[np.isclose(tabla["alpha_l2"], alpha)].sort_values("lambda")
-        etiqueta = f"Otros α ({', '.join(f'{a:g}' for a in otros)})" if k == 0 else None
+        etiqueta = f"Otros α ({', '.join(numero(a, 6) for a in otros)})" if k == 0 else None
         ax.plot(grupo["lambda"], 100 * grupo["exactitud"], color=EJE, linewidth=1.5, zorder=1, label=etiqueta)
 
     elegido = tabla[es_elegido].sort_values("lambda")
@@ -108,26 +119,26 @@ def grafica_seleccion(
     ax.fill_between(elegido["lambda"], media - desviacion, media + desviacion, color=SERIE_1, alpha=0.12, linewidth=0)
     ax.plot(
         elegido["lambda"], media, color=SERIE_1, linewidth=2, marker="o", markersize=6,
-        markeredgecolor=SUPERFICIE, markeredgewidth=1.5, zorder=3, label=f"α = {alpha_elegido:g} (± 1 desviación estándar)",
+        markeredgecolor=SUPERFICIE, markeredgewidth=1.5, zorder=3, label=f"α = {numero(alpha_elegido, 6)} (± 1 desviación estándar)",
     )
 
     def marcar(lambda_: float, texto: str, desplazamiento: tuple[int, int]) -> None:
         y = media[np.isclose(elegido["lambda"], lambda_)]
         if y.size:
             ax.scatter([lambda_], y[:1], s=170, facecolor="none", edgecolor=TINTA, linewidth=1.2, zorder=4)
-            ax.annotate(texto.format(y=y[0]), xy=(lambda_, y[0]), xytext=desplazamiento, textcoords="offset points",
+            ax.annotate(texto.format(y=numero(y[0])), xy=(lambda_, y[0]), xytext=desplazamiento, textcoords="offset points",
                         ha="center", color=TINTA, fontsize=9)
 
-    marcar(lambda_elegido, f"elegido: λ = {lambda_elegido:g} ({{y:.1f}} %)", (0, 12))
+    marcar(lambda_elegido, f"elegido: λ = {numero(lambda_elegido, 6)} ({{y}} %)", (0, 12))
     if lambda_articulo is not None and not np.isclose(lambda_articulo, lambda_elegido):
-        marcar(lambda_articulo, f"λ = {lambda_articulo:g} del artículo ({{y:.1f}} %)", (-30, -22))
+        marcar(lambda_articulo, f"λ = {numero(lambda_articulo, 6)} del artículo ({{y}} %)", (-30, -22))
     if exactitud_mayoritaria is not None:
         ax.axhline(100 * exactitud_mayoritaria, color=TINTA_TENUE, linewidth=1, zorder=0)
-        ax.text(lambdas[0], 100 * exactitud_mayoritaria - 1.5, f"clase mayoritaria ({100 * exactitud_mayoritaria:.0f} %)",
+        ax.text(lambdas[0], 100 * exactitud_mayoritaria - 1.5, f"clase mayoritaria ({numero(100 * exactitud_mayoritaria, 0)} %)",
                 va="top", ha="left", color=TINTA_SECUNDARIA, fontsize=9)
 
     ax.set_xscale("log")
-    ax.set_xticks(lambdas, [f"{v:g}" for v in lambdas])
+    ax.set_xticks(lambdas, [numero(v, 6) for v in lambdas])
     ax.minorticks_off()
     ax.set_ylim(0, 100)
     ax.set_title("Selección de hiperparámetros del FCM (validación cruzada agrupada)")
@@ -140,8 +151,8 @@ def grafica_seleccion(
     plt.close(fig)
 
 
-def grafica_convergencia(resultados: list[ResultadoPrescripcion], ruta: Path) -> None:
-    """Mejor costo por generación: mediana y rango intercuartílico entre estudiantes."""
+def grafica_convergencia(resultados: list[ResultadoPrescripcion], ruta: Path, plural: str = "registros") -> None:
+    """Mejor costo por generación: mediana y rango intercuartílico entre registros (``plural``: «estudiantes», «pacientes»...)."""
     _estilo()
     largo = max(len(r.historial_costo) for r in resultados)
     # Las corridas detenidas antes conservan su último mejor costo.
@@ -154,7 +165,8 @@ def grafica_convergencia(resultados: list[ResultadoPrescripcion], ruta: Path) ->
     fig, ax = plt.subplots(figsize=(7.5, 4))
     ax.fill_between(generaciones, q1, q3, color=SERIE_1, alpha=0.12, linewidth=0)
     ax.plot(generaciones, mediana, color=SERIE_1, linewidth=2, solid_capstyle="round")
-    ax.set_title(f"Convergencia del AG: mejor costo por generación ({len(resultados)} estudiantes)")
+    ax.set_title(f"Convergencia del AG: mejor costo por generación ({numero(len(resultados), 0)} {plural})")
+    ax.yaxis.set_major_formatter(MARCAS_ES)
     ax.set_xlabel("Generación")
     ax.set_ylabel("Mejor costo (mediana y rango intercuartílico)")
     ax.grid(axis="y")
@@ -173,8 +185,9 @@ def grafica_antes_despues(
     nombre_objetivo: str = "Rendimiento académico",
     niveles: tuple[str, ...] = ("L", "M", "H"),
     niveles_prescritos: tuple[str, ...] = ("L", "M"),
+    plural: str = "registros",
 ) -> None:
-    """Activación del objetivo con acciones actuales y prescritas (niveles del peor al mejor)."""
+    """Activación del objetivo con acciones actuales y prescritas (niveles del peor al mejor); ``plural`` nombra a los registros."""
     _estilo()
     base = np.array([r.estado_base[indice_objetivo] for r in resultados])
     prescrito = np.array([r.estado_prescrito[indice_objetivo] for r in resultados])
@@ -193,9 +206,10 @@ def grafica_antes_despues(
         ax.scatter(x, base, s=36, color=SERIE_1, edgecolor=SUPERFICIE, linewidth=1.5, zorder=3, label="Acciones actuales")
         ax.scatter(x, prescrito, s=36, color=SERIE_2, edgecolor=SUPERFICIE, linewidth=1.5, zorder=3, label="Acciones prescritas")
     ax.axhline(umbral_h, color=TINTA_TENUE, linewidth=1, zorder=0)
-    ax.text(len(x) + 0.5, umbral_h, f" umbral {niveles[-1]} ({umbral_h:.2f})", va="center", ha="left", color=TINTA_SECUNDARIA, fontsize=9)
+    ax.text(len(x) + 0.5, umbral_h, f" umbral {niveles[-1]} ({numero(umbral_h, 2)})", va="center", ha="left", color=TINTA_SECUNDARIA, fontsize=9)
     ax.set_title(f"{nombre_objetivo} inferido por el FCM, antes y después de la prescripción")
-    ax.set_xlabel(f"Registros de prueba con nivel {' o '.join(niveles_prescritos)} (ordenados por activación inicial)")
+    ax.yaxis.set_major_formatter(MARCAS_ES)
+    ax.set_xlabel(f"{plural.capitalize()} de prueba con nivel {' o '.join(niveles_prescritos)} (ordenados por activación inicial)")
     ax.set_ylabel(f"Activación de {objetivo} (0 = {niveles[0]}, 1 = {niveles[-1]})")
     ax.set_ylim(0, 1)
     ax.set_xlim(0, len(x) + 1)
@@ -227,7 +241,7 @@ def grafica_pesos(
             ax.text(columna, fila, "–", ha="center", va="center", color=TINTA_TENUE, fontsize=9)
             continue
         intenso = abs(valor) > 0.6 * limite
-        ax.text(columna, fila, f"{valor:+.2f}", ha="center", va="center", fontsize=8.5, color="white" if intenso else TINTA)
+        ax.text(columna, fila, con_signo(valor), ha="center", va="center", fontsize=8.5, color="white" if intenso else TINTA)
     ax.set_xticks(range(len(indices_destino)), [nombres[i] for i in indices_destino])
     ax.set_yticks(range(len(nombres)), [f"{n}  {d}" for n, d in zip(nombres, descripciones)])
     ax.tick_params(length=0)
@@ -349,7 +363,7 @@ def grafica_red_fcm(
 
     fuertes = sorted(aristas, key=lambda a: -abs(a[2]))[:etiquetas_peso]
     nx.draw_networkx_edge_labels(
-        grafo, posiciones, edge_labels={(o, d): f"{w:+.2f}" for o, d, w in fuertes}, label_pos=0.4, font_size=8,
+        grafo, posiciones, edge_labels={(o, d): con_signo(w) for o, d, w in fuertes}, label_pos=0.4, font_size=8,
         font_color=TINTA, bbox={"boxstyle": "round,pad=0.2", "fc": SUPERFICIE, "ec": "none", "alpha": 0.9}, ax=ax,
     )
     for c in conceptos:
@@ -426,12 +440,12 @@ def generar_figuras(r: "ResultadoPipeline", salida: Path, lambda_articulo: float
         salida / "red_fcm.png",
     )
     figuras.append("red_fcm.png")
-    grafica_convergencia(r.resultados, salida / "convergencia_ag.png")
+    grafica_convergencia(r.resultados, salida / "convergencia_ag.png", esquema.sujeto.plural)
     figuras.append("convergencia_ag.png")
     grafica_antes_despues(
         r.resultados, pre.indice_objetivo, 1.0 - r.config_prescripcion.tolerancia_exito, salida / "rendimiento_antes_despues.png",
         objetivo=esquema.objetivo, nombre_objetivo=conceptos[pre.indice_objetivo].nombre, niveles=orden,
-        niveles_prescritos=tuple(r.config_prescripcion.clases_a_prescribir),
+        niveles_prescritos=tuple(r.config_prescripcion.clases_a_prescribir), plural=esquema.sujeto.plural,
     )
     figuras.append("rendimiento_antes_despues.png")
     grafica_pesos(fcm.pesos, fcm.estructura, fcm.nombres, [c.nombre for c in conceptos], pre.indices_dinamicos, salida / "pesos_fcm.png")

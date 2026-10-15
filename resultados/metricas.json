@@ -94,7 +94,12 @@
     "smote": false,
     "n_sinteticos": 0,
     "busqueda_ag": false,
-    "expertos": []
+    "expertos": [],
+    "sujeto": {
+      "singular": "estudiante",
+      "plural": "estudiantes",
+      "femenino": false
+    }
   },
   "seleccion_hiperparametros": [
     {
@@ -301,7 +306,7 @@
       }
     ],
     "avisos": [
-      "PSR de la ec. 19 = 1.565 > 1: las acciones prescritas suman más que las reales (el artículo espera un cociente menor que 1; no se recorta)."
+      "PSR de la ec. 19 = 1,565 > 1: las acciones prescritas suman más que las reales (el artículo espera un cociente menor que 1; no se recorta)."
     ]
   },
   "prediccion_fcm": {

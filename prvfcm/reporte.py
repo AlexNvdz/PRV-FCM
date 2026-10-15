@@ -145,17 +145,25 @@ def resumen_prescripciones(
     columna_objetivo: str,
     metricas: dict | None = None,
     nivel: str | None = None,
+    sujeto=None,
 ) -> dict:
     """Resumen de las prescripciones del conjunto de prueba (``recomendaciones.csv``).
+
+    ``sujeto`` (``configuracion.Sujeto``) da el nombre de los registros en el
+    texto («pacientes», «personas»); por defecto, «registros».
 
     ``acciones`` trae columna, nombre, mínimo y máximo de cada acción. Con
     ``nivel`` se resume solo a los registros de ese nivel observado.
     """
+    plural, femenino = (sujeto.plural, sujeto.femenino) if sujeto is not None else ("registros", False)
     if nivel:
         tabla = tabla[tabla["clase_observada"].astype(str) == str(nivel)]
     n = len(tabla)
     if n == 0:
-        return {"n": 0, "texto": "No hay registros prescritos con ese filtro.", "acciones": [], "por_nivel": [], "ejemplos": []}
+        return {
+            "n": 0, "texto": f"No hay {plural} {'prescritas' if femenino else 'prescritos'} con ese filtro.",
+            "acciones": [], "por_nivel": [], "ejemplos": [],
+        }
 
     exito = tabla["exito"].astype(bool)
     base, prescrito = tabla[f"{columna_objetivo}_fcm_base"], tabla[f"{columna_objetivo}_fcm_prescrito"]
@@ -206,7 +214,7 @@ def resumen_prescripciones(
 
     niveles = " o ".join(f"«{nivel}»" for nivel in dict.fromkeys(tabla["clase_observada"].astype(str)))
     partes = [
-        f"El algoritmo genético prescribió acciones a {numero(n, 0)} registros de prueba con nivel {niveles}. "
+        f"El algoritmo genético prescribió acciones a {numero(n, 0)} {plural} de prueba con nivel {niveles}. "
         f"Con las acciones prescritas, el FCM ubica en el mejor nivel («{mejor_nivel}») al {porcentaje(100 * exito.mean())}; "
         f"{nombre_objetivo} pasa en promedio de {numero(base.mean(), 2)} a {numero(prescrito.mean(), 2)}."
     ]
@@ -221,7 +229,7 @@ def resumen_prescripciones(
     for a in sorted(filas_acciones, key=lambda f: -f["pct_aumenta"]):
         if a["pct_aumenta"] >= 50:
             frases.append(
-                f"aumentar {a['nombre']} (al {porcentaje(a['pct_aumenta'], 0)} de los registros; de {numero(a['actual_media'], a['decimales'])} "
+                f"aumentar {a['nombre']} (al {porcentaje(a['pct_aumenta'], 0)} de {'las' if femenino else 'los'} {plural}; de {numero(a['actual_media'], a['decimales'])} "
                 f"a {numero(a['recomendada_media'], a['decimales'])} en promedio)"
             )
     iguales = [a["nombre"] for a in filas_acciones if a["pct_igual"] >= 50]
@@ -232,7 +240,7 @@ def resumen_prescripciones(
     if len(por_nivel) > 1:
         partes.append(
             "Por nivel observado: "
-            + "; ".join(f"«{g['nivel']}» ({numero(g['n'], 0)} registros) llega a «{mejor_nivel}» el {porcentaje(g['pct_exito'])}" for g in por_nivel)
+            + "; ".join(f"«{g['nivel']}» ({numero(g['n'], 0)} {plural}) llega a «{mejor_nivel}» el {porcentaje(g['pct_exito'])}" for g in por_nivel)
             + "."
         )
     return {

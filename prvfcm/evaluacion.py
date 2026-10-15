@@ -33,6 +33,7 @@ from sklearn.metrics import precision_recall_fscore_support, r2_score
 from .configuracion import NIVELES_RENDIMIENTO
 from .fcm import MapaCognitivoDifuso
 from .prescripcion import ResultadoPrescripcion
+from .reporte import numero
 
 
 def mae(real: np.ndarray, estimado: np.ndarray) -> float:
@@ -263,7 +264,7 @@ def evaluar_reconstruccion(
     avisos = []
     if psr > 1:
         avisos.append(
-            f"PSR de la ec. 19 = {psr:.3f} > 1: las acciones prescritas suman más que las reales "
+            f"PSR de la ec. 19 = {numero(psr, 3)} > 1: las acciones prescritas suman más que las reales "
             "(el artículo espera un cociente menor que 1; no se recorta)."
         )
     return {

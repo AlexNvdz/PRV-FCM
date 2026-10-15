@@ -17,8 +17,13 @@ Esquema de un dataset en JSON: el formato que usa la aplicación web.
       ],
       "segmento": {"columna": "StudentAbsenceDays", "valor": "Above-7",
                    "nombre_si": "ausencias > 7", "nombre_no": "ausencias <= 7"},
-      "binarizar_objetivo": "M"                # opcional: objetivo de dos niveles (ver configuracion.binarizar)
+      "binarizar_objetivo": "M",               # opcional: objetivo de dos niveles (ver configuracion.binarizar)
+      "sujeto": {"singular": "estudiante", "plural": "estudiantes", "femenino": false}   # opcional
     }
+
+``sujeto`` es cómo llaman los textos a cada registro; sin él, «registro». Un
+esquema de xAPI sin ``sujeto`` (objetivo Class y las acciones C9-C12) usa
+«estudiante», para los modelos guardados antes de este campo.
 
 Roles (notación PRV-FCM): ``objetivo`` (C_T, concepto objetivo), ``accion``
 (C_P, concepto prescriptivo), ``inmutable`` y ``mutable`` (C_S, conceptos del
@@ -37,9 +42,10 @@ import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 
-from .configuracion import ACCION, ESQUEMA_XAPI, INMUTABLE, MUTABLE, Concepto, Esquema, binarizar
+from .configuracion import ACCION, ESQUEMA_XAPI, INMUTABLE, MUTABLE, Concepto, Esquema, Sujeto, binarizar
 from .pipeline import SEGMENTO_AUSENTISMO, Segmento
 from .preprocesamiento import columnas_imputables, como_texto, etiquetas_objetivo, fechas
+from .reporte import numero
 
 ROLES = ("inmutable", "accion", "mutable", "objetivo", "excluir")
 CODIFICACIONES = ("numerica", "ordinal", "nominal", "one_hot", "numero_en_texto", "fecha")
@@ -47,6 +53,8 @@ NIVELES_NUMERICOS = {"Bajo": 0.0, "Medio": 0.5, "Alto": 1.0}
 TIPO_DE_ROL = {"inmutable": INMUTABLE, "accion": ACCION, "mutable": MUTABLE, "objetivo": MUTABLE}
 MIN_FILAS = 30
 MAX_CATEGORIAS_ONE_HOT = 30
+MAX_SUJETO = 40
+ACCIONES_XAPI = {"raisedhands", "VisITedResources", "AnnouncementsView", "Discussion"}
 # Una columna que sola acierta el nivel del objetivo en el 99 % de los registros suele ser su
 # definición o un dato posterior (por ejemplo, "desertó" = nota final < 10): filtra el objetivo.
 UMBRAL_FUGA = 0.99
@@ -179,7 +187,23 @@ def esquema_a_dict(esquema: Esquema, segmento: Segmento | None = None) -> dict:
         resultado["segmento"] = segmento_a_dict(segmento)
     if esquema.binarizar_objetivo is not None:
         resultado["binarizar_objetivo"] = esquema.binarizar_objetivo
+    resultado["sujeto"] = sujeto_a_dict(esquema.sujeto)
     return resultado
+
+
+def sujeto_a_dict(sujeto: Sujeto) -> dict:
+    return {"singular": sujeto.singular, "plural": sujeto.plural, "femenino": sujeto.femenino}
+
+
+def sujeto_desde_dict(datos: dict) -> Sujeto:
+    """Sujeto del esquema; sin el campo, «registro», salvo en el esquema de xAPI (modelos anteriores al campo)."""
+    sujeto = datos.get("sujeto")
+    if sujeto:
+        return Sujeto(str(sujeto["singular"]).strip(), str(sujeto["plural"]).strip(), bool(sujeto.get("femenino", False)))
+    acciones = {e.get("columna") for e in datos.get("columnas", []) if e.get("rol") == "accion"}
+    if datos.get("objetivo") == "Class" and ACCIONES_XAPI <= acciones:
+        return ESQUEMA_XAPI.sujeto
+    return Sujeto()
 
 
 def segmento_a_dict(segmento: Segmento) -> dict:
@@ -239,6 +263,13 @@ def _errores_de_estructura(datos: dict) -> list[str]:
             errores.append(f"{nombre}: una acción debe ser numérica u ordinal; con codificación {codificacion} no se puede aumentar.")
         if rol == "objetivo" and codificacion not in ("ordinal", "numerica"):
             errores.append(f"{nombre}: el objetivo debe ser ordinal (del peor al mejor nivel) o numérico.")
+    sujeto = datos.get("sujeto")
+    if sujeto is not None:
+        textos = [sujeto.get(c) for c in ("singular", "plural")] if isinstance(sujeto, dict) else []
+        if len(textos) != 2 or not all(isinstance(t, str) and 0 < len(t.strip()) <= MAX_SUJETO for t in textos):
+            errores.append(f"El sujeto necesita singular y plural, cada uno de 1 a {MAX_SUJETO} caracteres (por ejemplo, paciente y pacientes).")
+        elif not isinstance(sujeto.get("femenino", False), bool):
+            errores.append("El campo femenino del sujeto debe ser verdadero o falso.")
     objetivos = [e["columna"] for e in columnas if e.get("rol") == "objetivo"]
     if len(objetivos) != 1:
         errores.append("Marque exactamente una columna como objetivo (rendimiento o deserción).")
@@ -319,6 +350,7 @@ def esquema_desde_dict(datos: dict) -> Esquema:
         nombre=str(datos.get("nombre", "")),
         one_hot=one_hot,
         columnas_fecha=tuple(de_fecha),
+        sujeto=sujeto_desde_dict(datos),
     )
     if datos.get("binarizar_objetivo") is not None:
         try:
@@ -337,12 +369,12 @@ def validar_esquema(datos: dict, df: pd.DataFrame) -> dict:
     try:
         esquema = esquema_desde_dict(datos)
     except ErrorEsquema as error:
-        return {"ok": False, "errores": error.errores, "avisos": [], "filas_utiles": 0}
+        return {"ok": False, "errores": error.errores, "avisos": [], "filas_utiles": 0, "sujeto": sujeto_a_dict(Sujeto())}
 
     errores, avisos = [], []
     faltantes = [c for c in esquema.columnas_origen + list(esquema.columnas_excluidas) if c not in df.columns]
     if faltantes:
-        return {"ok": False, "errores": [f"El archivo no tiene las columnas: {', '.join(faltantes)}."], "avisos": [], "filas_utiles": 0}
+        return {"ok": False, "errores": [f"El archivo no tiene las columnas: {', '.join(faltantes)}."], "avisos": [], "filas_utiles": 0, "sujeto": sujeto_a_dict(esquema.sujeto)}
 
     usadas = df[esquema.columnas_origen]
     imputables = set(columnas_imputables(esquema))
@@ -397,8 +429,8 @@ def validar_esquema(datos: dict, df: pd.DataFrame) -> dict:
         entradas = [c for c in esquema.columnas_origen if c != esquema.objetivo]
         for columna, acierto, base in columnas_que_determinan(completas, entradas, etiquetas.to_numpy()):
             avisos.append(
-                f"{columna} acierta el nivel de {esquema.objetivo} en el {100 * acierto:.1f} % de los registros por sí sola "
-                f"(la clase mayoritaria, {100 * base:.1f} %): si es su definición o un dato posterior, exclúyala para no filtrar el objetivo."
+                f"{columna} acierta el nivel de {esquema.objetivo} en el {numero(100 * acierto)} % de los registros por sí sola "
+                f"(la clase mayoritaria, {numero(100 * base)} %): si es su definición o un dato posterior, exclúyala para no filtrar el objetivo."
             )
         conteo = etiquetas.value_counts()
         if conteo.get(esquema.mejor_nivel, 0) == 0:
@@ -415,7 +447,10 @@ def validar_esquema(datos: dict, df: pd.DataFrame) -> dict:
             errores.append(f"El segmento usa la columna {segmento.columna}, que no está en el archivo.")
         elif not como_texto(df[segmento.columna].dropna()).eq(segmento.valor).any():
             avisos.append(f"Ningún registro tiene {segmento.columna} = {segmento.valor}; el segmento quedará vacío.")
-    return {"ok": not errores, "errores": errores, "avisos": avisos, "filas_utiles": int(len(completas))}
+    return {
+        "ok": not errores, "errores": errores, "avisos": avisos, "filas_utiles": int(len(completas)),
+        "sujeto": sujeto_a_dict(esquema.sujeto),
+    }
 
 
 ESQUEMA_XAPI_DICT = esquema_a_dict(ESQUEMA_XAPI, SEGMENTO_AUSENTISMO)

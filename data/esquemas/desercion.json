@@ -263,5 +263,10 @@
       "columna": "Dropped_Out",
       "rol": "excluir"
     }
-  ]
+  ],
+  "sujeto": {
+    "singular": "estudiante",
+    "plural": "estudiantes",
+    "femenino": false
+  }
 }

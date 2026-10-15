@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
+from .reporte import numero
+
 # ---------------------------------------------------------------------------
 # Tipos de concepto
 # ---------------------------------------------------------------------------
@@ -110,6 +112,24 @@ LAMBDA_ARTICULO = 10.0
 # Esquema de un dataset
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
+class Sujeto:
+    """Cómo llaman los textos a cada registro: "estudiante", "paciente", "persona" (femenino)..."""
+
+    singular: str = "registro"
+    plural: str = "registros"
+    femenino: bool = False
+
+    @property
+    def este(self) -> str:
+        """«este estudiante», «esta persona»."""
+        return f"{'esta' if self.femenino else 'este'} {self.singular}"
+
+    def con_articulo(self, texto: str = "") -> str:
+        """«el paciente 7», «la persona 7»."""
+        return f"{'la' if self.femenino else 'el'} {self.singular}{f' {texto}' if texto else ''}"
+
+
+@dataclass(frozen=True)
 class Esquema:
     """Cómo leer un dataset: conceptos del FCM, codificación de columnas y niveles del objetivo.
 
@@ -136,6 +156,7 @@ class Esquema:
     columnas_fecha: tuple[str, ...] = ()             # Fecha -> días desde la fecha mínima de entrenamiento.
     umbral_objetivo: float | None = None             # Objetivo numérico binarizado: éxito si >= umbral (<= si se invierte).
     binarizar_objetivo: str | float | None = None    # Nivel o umbral con el que se binarizó (ver ``binarizar``).
+    sujeto: Sujeto = Sujeto()                        # Cómo llaman los textos a cada registro.
 
     @property
     def columnas(self) -> list[str]:
@@ -185,6 +206,7 @@ ESQUEMA_XAPI = Esquema(
     columnas_excluidas=COLUMNAS_EXCLUIDAS,
     niveles=NIVELES_RENDIMIENTO,
     nombre="xAPI-Edu-Data",
+    sujeto=Sujeto("estudiante", "estudiantes"),
 )
 
 
@@ -227,7 +249,7 @@ def binarizar(esquema: Esquema, valor: str | float) -> Esquema:
         umbral = float(valor)
     except (TypeError, ValueError):
         raise ValueError(f"{objetivo} es numérico: para binarizarlo use un umbral numérico, no «{valor}».") from None
-    texto = f"{umbral:g}"
+    texto = numero(umbral, 6)
     niveles = {f">{texto}": 0.0, f"≤{texto}": 1.0} if esquema.invertir_objetivo else {f"<{texto}": 0.0, f"≥{texto}": 1.0}
     return replace(esquema, umbral_objetivo=umbral, niveles=niveles, binarizar_objetivo=umbral)
 

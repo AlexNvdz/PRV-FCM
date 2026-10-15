@@ -35,7 +35,15 @@ import pandas as pd
 
 from .api import PredictorFCM, PrescriptorAG
 from .configuracion import PERFILES
-from .esquema import ESQUEMA_XAPI_DICT, ErrorEsquema, esquema_desde_dict, rol_de, segmento_desde_dict, validar_esquema
+from .esquema import (
+    ESQUEMA_XAPI_DICT,
+    ErrorEsquema,
+    esquema_desde_dict,
+    rol_de,
+    segmento_desde_dict,
+    sujeto_a_dict,
+    validar_esquema,
+)
 from .fcm import construir_estructura
 from .modelo import ModeloPRVFCM, guardar_modelo
 from .perfilado import (
@@ -50,7 +58,7 @@ from .perfilado import (
 )
 from .pipeline import OpcionesPipeline, ResultadoPipeline, ejecutar, opciones_desde_dict as _opciones_pipeline, valores_de_perfil
 from .preprocesamiento import Preprocesador, cargar_datos, etiquetas_objetivo, leer_csv, leer_excel
-from .reporte import resumen_prescripciones
+from .reporte import numero, porcentaje, resumen_prescripciones
 
 VERSION_MOTOR = "1.2"
 NOMBRE_METODO = {
@@ -241,7 +249,8 @@ def m_prescribir(modelo: str, ruta: str, esquema: dict, id: int, beta: float | N
                  nivel_meta: str | None = None, deseados: dict | None = None) -> dict:
     df, _ = _datos(ruta, esquema)
     return PrescriptorAG(_modelo(modelo)).prescribir(
-        _registro(df, id), nivel_meta, beta, delta_max, permitir_reducciones, semilla=int(id), sujeto=f"el registro {int(id)}",
+        _registro(df, id), nivel_meta, beta, delta_max, permitir_reducciones, semilla=int(id),
+        sujeto=_modelo(modelo).esquema.sujeto.con_articulo(str(int(id))),
         deseados=deseados,
     )
 
@@ -266,7 +275,9 @@ def m_resumen_prescripciones(directorio: str, nivel: str | None = None) -> dict:
     ruta_metricas = carpeta / "metricas.json"
     metricas = json.loads(ruta_metricas.read_text(encoding="utf-8")) if ruta_metricas.exists() else None
     nombre_objetivo = m.esquema.conceptos[m.pre.indice_objetivo].nombre
-    return resumen_prescripciones(tabla, m.acciones(), nombre_objetivo, m.esquema.mejor_nivel, m.esquema.objetivo, metricas, nivel)
+    return resumen_prescripciones(
+        tabla, m.acciones(), nombre_objetivo, m.esquema.mejor_nivel, m.esquema.objetivo, metricas, nivel, m.esquema.sujeto
+    )
 
 
 def m_modelo_info(modelo: str) -> dict:
@@ -277,6 +288,7 @@ def m_modelo_info(modelo: str) -> dict:
         "mejor_nivel": m.esquema.mejor_nivel,
         "metodo_pesos": m.fcm.config.metodo_pesos,
         "sesgo": m.fcm.config.sesgo,
+        "sujeto": sujeto_a_dict(m.esquema.sujeto),
         "perfil": m.perfil,
         "inferencia": m.fcm.config.inferencia,
         "activacion": m.fcm.config.activacion,
@@ -368,32 +380,34 @@ def opciones_desde_dict(datos: dict, esquema_dict: dict) -> OpcionesPipeline:
 
 
 def _mensaje_etapa(etapa: str, r: ResultadoPipeline) -> str:
+    plural = r.esquema.sujeto.plural
     if etapa == "preprocesamiento":
-        mensaje = f"Datos divididos: {len(r.entrenamiento)} registros para entrenar y {len(r.prueba)} para probar."
+        mensaje = f"Datos divididos: {numero(len(r.entrenamiento), 0)} {plural} para entrenar y {numero(len(r.prueba), 0)} para probar."
         if r.n_sinteticos:
-            mensaje += f" SMOTE agregó {r.n_sinteticos} registros sintéticos al entrenamiento."
+            mensaje += f" SMOTE agregó {numero(r.n_sinteticos, 0)} registros sintéticos al entrenamiento."
         if r.opciones.division == "agrupada" and r.division != "agrupada":
             mensaje += f" Solo hay {r.grupos.nunique()} perfiles inmutables distintos: la división es aleatoria, no agrupada."
         return mensaje
     if etapa == "seleccion":
         mejor = r.seleccion_cv.iloc[0]
+        parametros = f"λ = {numero(mejor['lambda'], 6)}, α = {numero(mejor['alpha_l2'], 6)}"
         if "exactitud_equilibrada" in mejor:
-            return (
-                f"Validación cruzada: λ = {mejor['lambda']:g}, α = {mejor['alpha_l2']:g} "
-                f"({100 * mejor['exactitud_equilibrada']:.1f} % de exactitud equilibrada)."
-            )
+            return f"Validación cruzada: {parametros} ({porcentaje(100 * mejor['exactitud_equilibrada'])} de exactitud equilibrada)."
         regla = f"{mejor['inferencia']} con {mejor['activacion']}, " if "inferencia" in mejor else ""
-        return f"Validación cruzada: {regla}λ = {mejor['lambda']:g}, α = {mejor['alpha_l2']:g} ({100 * mejor['exactitud']:.1f} % de exactitud)."
+        return f"Validación cruzada: {regla}{parametros} ({porcentaje(100 * mejor['exactitud'])} de exactitud)."
     if etapa == "fcm":
         metodo = NOMBRE_METODO.get(r.config_fcm.metodo_pesos, r.config_fcm.metodo_pesos)
         excluidas = len(r.opciones.aristas_excluidas)
         return (
             f"FCM entrenado con {metodo}{f' y {excluidas} aristas excluidas' if excluidas else ''}: "
-            f"{100 * r.prediccion['exactitud_rendimiento']:.1f} % de exactitud en prueba."
+            f"{porcentaje(100 * r.prediccion['exactitud_rendimiento'])} de exactitud en prueba."
         )
     if etapa == "prescripcion":
-        return f"Buscando acciones para {int(r.seleccion.sum())} registros con el algoritmo genético."
-    return f"Éxito prescriptivo: {r.metricas['PSR_base']:.1f} % con las acciones actuales y {r.metricas['PSR']:.1f} % con las prescritas."
+        return f"Buscando acciones para {numero(int(r.seleccion.sum()), 0)} {plural} con el algoritmo genético."
+    return (
+        f"Éxito prescriptivo: {porcentaje(r.metricas['PSR_base'])} con las acciones actuales y "
+        f"{porcentaje(r.metricas['PSR'])} con las prescritas."
+    )
 
 
 def entrenar(datos: Path, esquema: Path, opciones: Path | None, salida: Path) -> int:
@@ -447,6 +461,7 @@ def entrenar(datos: Path, esquema: Path, opciones: Path | None, salida: Path) ->
             "metodo_pesos": r.config_fcm.metodo_pesos,
             "sesgo": r.config_fcm.sesgo,
             "perfil": r.opciones.perfil,
+            "sujeto": sujeto_a_dict(r.esquema.sujeto),
             "inferencia": r.config_fcm.inferencia,
             "activacion": r.config_fcm.activacion,
             "aristas_excluidas": [list(a) for a in r.opciones.aristas_excluidas],

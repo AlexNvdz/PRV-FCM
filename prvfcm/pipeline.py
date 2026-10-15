@@ -59,6 +59,7 @@ from .fcm import (
 )
 from .prescripcion import APTITUDES, PrescriptorPRVFCM, ResultadoPrescripcion
 from .preprocesamiento import Preprocesador, como_texto, dividir_entrenamiento_prueba, grupos_por_perfil, smote
+from .reporte import numero
 from .seleccion import configuracion_de, validacion_cruzada_fcm
 
 
@@ -179,6 +180,8 @@ class ResultadoPipeline:
                 "n_sinteticos": self.n_sinteticos,
                 "busqueda_ag": o.busqueda_ag,
                 "expertos": [str(m.get("experto", "")) for m in o.matrices_expertos] if self.config_fcm.metodo_pesos == "expertos" else [],
+                "sujeto": {"singular": self.esquema.sujeto.singular, "plural": self.esquema.sujeto.plural,
+                           "femenino": self.esquema.sujeto.femenino},
             },
             "seleccion_hiperparametros": None if self.seleccion_cv is None else self.seleccion_cv.to_dict(orient="records"),
             "busqueda_ag": None if self.busqueda_ag is None else self.busqueda_ag.to_dict(orient="records"),
@@ -311,7 +314,7 @@ def matriz_expertos(pre: Preprocesador, estructura: np.ndarray, matrices: tuple[
                 continue
             j, i = pre.indice(origen), pre.indice(destino)
             if not -1.0 <= peso <= 1.0:
-                errores.append(f"{nombre}: el peso de {origen} → {destino} ({peso:g}) está fuera de [-1, 1].")
+                errores.append(f"{nombre}: el peso de {origen} → {destino} ({numero(peso, 6)}) está fuera de [-1, 1].")
             elif i in fijos:
                 errores.append(f"{nombre}: {destino} es un concepto fijo en la inferencia; ninguna arista puede entrar en él.")
             elif not estructura[j, i]:

@@ -281,13 +281,13 @@ def imprimir_inicio_prescripcion(r: ResultadoPipeline) -> None:
         f"cruce {ag.tipo_cruce} ({ag.tasa_cruce:g}), mutación {ag.tasa_mutacion:g} "
         f"(sigma {ag.sigma_mutacion:g}), elitismo {ag.elitismo}"
     )
-    print(f"Registros de prueba con nivel {'/'.join(presc.clases_a_prescribir)}: {int(r.seleccion.sum())}")
+    print(f"{r.esquema.sujeto.plural.capitalize()} de prueba con nivel {'/'.join(presc.clases_a_prescribir)}: {int(r.seleccion.sum())}")
 
 
 def imprimir_evaluacion(r: ResultadoPipeline) -> None:
     titulo("4. EVALUACIÓN")
     metricas, externa, presc = r.metricas, r.externa, r.config_prescripcion
-    print(f"Registros evaluados: {metricas['n_estudiantes']} | tolerancia de éxito: {presc.tolerancia_exito:g}")
+    print(f"{r.esquema.sujeto.plural.capitalize()} evaluados: {metricas['n_estudiantes']} | tolerancia de éxito: {presc.tolerancia_exito:g}")
     print(f"{'':<8}{'Acciones actuales':>20}{'PRV-FCM':>12}")
     print(f"{'MAE':<8}{metricas['MAE_base']:>20.4f}{metricas['MAE']:>12.4f}")
     print(f"{'MSE':<8}{metricas['MSE_base']:>20.4f}{metricas['MSE']:>12.4f}")
@@ -303,7 +303,7 @@ def imprimir_evaluacion(r: ResultadoPipeline) -> None:
     print(f"  Probabilidad media de H:    {externa['prob_H_base']:.3f} -> {externa['prob_H_prescrita']:.3f}")
 
     if r.exito_por_segmento:
-        print("\nRegistros que alcanzan el mejor nivel por segmento (acciones actuales -> prescritas):")
+        print(f"\n{r.esquema.sujeto.plural.capitalize()} que alcanzan el mejor nivel por segmento (acciones actuales -> prescritas):")
         for nombre, fcm_seg in r.exito_por_segmento.items():
             rf_seg = externa["por_segmento"][nombre]
             print(
@@ -316,7 +316,7 @@ def imprimir_evaluacion(r: ResultadoPipeline) -> None:
     for clase in presc.clases_a_prescribir:
         ejemplo = recomendaciones[recomendaciones["clase_observada"] == clase].head(1)
         for _, fila in ejemplo.iterrows():
-            print(f"  Registro {fila['id_estudiante']} ({objetivo} observado: {clase}):")
+            print(f"  {r.esquema.sujeto.singular.capitalize()} {fila['id_estudiante']} ({objetivo} observado: {clase}):")
             for i in pre.indices_accion:
                 columna = pre.columnas[i]
                 print(

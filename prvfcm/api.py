@@ -372,7 +372,7 @@ class PrescriptorAG:
             },
         }
         nombre_objetivo = m.esquema.conceptos[m.pre.indice_objetivo].nombre
-        salida["reporte"] = reporte_individual(salida, nombre_objetivo, sujeto or ("este perfil" if es_perfil else "este registro"))
+        salida["reporte"] = reporte_individual(salida, nombre_objetivo, sujeto or ("este perfil" if es_perfil else m.esquema.sujeto.este))
         if es_perfil:
             salida["perfil"] = {c: entrada.get(c) for c in m.esquema.columnas_origen if c != m.esquema.objetivo}
         return salida

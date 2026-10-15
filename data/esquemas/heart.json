@@ -3,19 +3,114 @@
   "objetivo": "target",
   "invertir_objetivo": false,
   "columnas": [
-    {"columna": "age", "rol": "inmutable", "codificacion": "numerica", "nombre": "Edad"},
-    {"columna": "sex", "rol": "inmutable", "codificacion": "ordinal", "orden": ["0", "1"], "nombre": "Sexo"},
-    {"columna": "cp", "rol": "inmutable", "codificacion": "nominal", "nombre": "Tipo de dolor torácico"},
-    {"columna": "fbs", "rol": "inmutable", "codificacion": "ordinal", "orden": ["0", "1"], "nombre": "Glucemia en ayunas > 120"},
-    {"columna": "restecg", "rol": "inmutable", "codificacion": "nominal", "nombre": "Electrocardiograma en reposo"},
-    {"columna": "ca", "rol": "inmutable", "codificacion": "numerica", "nombre": "Vasos coloreados"},
-    {"columna": "thal", "rol": "inmutable", "codificacion": "nominal", "nombre": "Talasemia"},
-    {"columna": "trestbps", "rol": "accion", "codificacion": "numerica", "nombre": "Presión arterial en reposo"},
-    {"columna": "chol", "rol": "accion", "codificacion": "numerica", "nombre": "Colesterol"},
-    {"columna": "thalach", "rol": "mutable", "codificacion": "numerica", "dinamico": false, "nombre": "Frecuencia cardiaca máxima"},
-    {"columna": "exang", "rol": "mutable", "codificacion": "ordinal", "orden": ["0", "1"], "dinamico": false, "nombre": "Angina por ejercicio"},
-    {"columna": "oldpeak", "rol": "mutable", "codificacion": "numerica", "dinamico": false, "nombre": "Depresión del ST"},
-    {"columna": "slope", "rol": "mutable", "codificacion": "numerica", "dinamico": false, "nombre": "Pendiente del ST"},
-    {"columna": "target", "rol": "objetivo", "codificacion": "ordinal", "orden": ["0", "1"], "nombre": "Sin enfermedad cardiaca"}
-  ]
+    {
+      "columna": "age",
+      "rol": "inmutable",
+      "codificacion": "numerica",
+      "nombre": "Edad"
+    },
+    {
+      "columna": "sex",
+      "rol": "inmutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "0",
+        "1"
+      ],
+      "nombre": "Sexo"
+    },
+    {
+      "columna": "cp",
+      "rol": "inmutable",
+      "codificacion": "nominal",
+      "nombre": "Tipo de dolor torácico"
+    },
+    {
+      "columna": "fbs",
+      "rol": "inmutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "0",
+        "1"
+      ],
+      "nombre": "Glucemia en ayunas > 120"
+    },
+    {
+      "columna": "restecg",
+      "rol": "inmutable",
+      "codificacion": "nominal",
+      "nombre": "Electrocardiograma en reposo"
+    },
+    {
+      "columna": "ca",
+      "rol": "inmutable",
+      "codificacion": "numerica",
+      "nombre": "Vasos coloreados"
+    },
+    {
+      "columna": "thal",
+      "rol": "inmutable",
+      "codificacion": "nominal",
+      "nombre": "Talasemia"
+    },
+    {
+      "columna": "trestbps",
+      "rol": "accion",
+      "codificacion": "numerica",
+      "nombre": "Presión arterial en reposo"
+    },
+    {
+      "columna": "chol",
+      "rol": "accion",
+      "codificacion": "numerica",
+      "nombre": "Colesterol"
+    },
+    {
+      "columna": "thalach",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Frecuencia cardiaca máxima"
+    },
+    {
+      "columna": "exang",
+      "rol": "mutable",
+      "codificacion": "ordinal",
+      "orden": [
+        "0",
+        "1"
+      ],
+      "dinamico": false,
+      "nombre": "Angina por ejercicio"
+    },
+    {
+      "columna": "oldpeak",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Depresión del ST"
+    },
+    {
+      "columna": "slope",
+      "rol": "mutable",
+      "codificacion": "numerica",
+      "dinamico": false,
+      "nombre": "Pendiente del ST"
+    },
+    {
+      "columna": "target",
+      "rol": "objetivo",
+      "codificacion": "ordinal",
+      "orden": [
+        "0",
+        "1"
+      ],
+      "nombre": "Sin enfermedad cardiaca"
+    }
+  ],
+  "sujeto": {
+    "singular": "paciente",
+    "plural": "pacientes",
+    "femenino": false
+  }
 }

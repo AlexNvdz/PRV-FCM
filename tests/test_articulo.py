@@ -1,5 +1,6 @@
 """Pruebas del perfil "articulo" y de lo que agrega: reglas de la Tabla 2, PSO, expertos, SMOTE,
 reconstrucción, aptitudes de los artículos, fechas, objetivo binario y valores deseados."""
+import re
 from pathlib import Path
 
 import numpy as np
@@ -285,3 +286,51 @@ def test_expertos_y_correlacion_parcial_guardan_sesgo_falso(tmp_path):
         assert not r.config_fcm.sesgo and not r.fcm.sesgo.any()
         assert r.reporte()["configuracion"]["fcm"]["sesgo"] is False
         assert r.reporte()["configuracion"]["expertos"] == (["A"] if metodo == "expertos" else [])
+
+
+# ---------------------------------------------------------------------------
+# Sujeto de los textos y números es-CO
+# ---------------------------------------------------------------------------
+def test_sujeto_por_defecto_xapi_y_esquemas_viejos():
+    from prvfcm.esquema import ESQUEMA_XAPI_DICT, ErrorEsquema
+
+    assert esquema_desde_dict(esquema_desercion()).sujeto.plural == "registros"
+    assert ESQUEMA_XAPI_DICT["sujeto"] == {"singular": "estudiante", "plural": "estudiantes", "femenino": False}
+    viejo = {k: v for k, v in ESQUEMA_XAPI_DICT.items() if k != "sujeto"}  # Modelo guardado antes del campo.
+    assert esquema_desde_dict(viejo).sujeto.singular == "estudiante"
+    con_sujeto = esquema_desde_dict({**esquema_desercion(), "sujeto": {"singular": "persona", "plural": "personas", "femenino": True}})
+    assert con_sujeto.sujeto.este == "esta persona" and con_sujeto.sujeto.con_articulo("7") == "la persona 7"
+    assert esquema_desde_dict(esquema_a_dict(con_sujeto)).sujeto == con_sujeto.sujeto
+    with pytest.raises(ErrorEsquema, match="sujeto"):
+        esquema_desde_dict({**esquema_desercion(), "sujeto": {"singular": "", "plural": "x"}})
+    with pytest.raises(ErrorEsquema, match="femenino"):
+        esquema_desde_dict({**esquema_desercion(), "sujeto": {"singular": "a", "plural": "b", "femenino": "sí"}})
+
+
+def test_textos_usan_el_sujeto_y_la_coma_decimal(tmp_path):
+    from prvfcm.reporte import resumen_prescripciones
+    from prvfcm.servicio import _mensaje_etapa, m_modelo_info
+
+    ruta = tmp_path / "datos.csv"
+    dataset_desercion(500).to_csv(ruta, index=False)
+    datos_esquema = {**esquema_desercion(), "sujeto": {"singular": "persona", "plural": "personas", "femenino": True}}
+    esquema = esquema_desde_dict(datos_esquema)
+    datos = cargar_datos(ruta, esquema)
+    r = ejecutar(datos, esquema, opciones_desde_dict({"validacion_cruzada": False, "ag": {"generaciones": 10}, "reconstruccion": False}))
+    assert "personas con el algoritmo" in _mensaje_etapa("prescripcion", r)
+    assert re.search(r"\d,\d % de exactitud en prueba", _mensaje_etapa("fcm", r))
+    guardar_modelo(r, tmp_path / "modelo.json")
+    info = m_modelo_info(str(tmp_path / "modelo.json"))
+    assert info["sujeto"] == {"singular": "persona", "plural": "personas", "femenino": True}
+    salida = PrescriptorAG(ModeloPRVFCM.cargar(tmp_path / "modelo.json")).prescribir(datos.iloc[[0]], beta=0.0)
+    assert salida["reporte"]["texto"].startswith("Para esta persona")
+    resumen = resumen_prescripciones(r.recomendaciones, [], "Deserción", "No", "desercion", sujeto=esquema.sujeto)
+    assert "personas de prueba" in resumen["texto"]
+    # Números para personas con coma decimal; los del JSON siguen siendo números.
+    aviso = evaluar_reconstruccion(np.array([[0.2], [0.4], [0.5]]), np.array([[0.3], [0.5], [0.6]]), ["a"], ["A"])["avisos"][0]
+    assert "= 1,273 > 1" in aviso
+    umbral = binarizar(esquema_desde_dict({**esquema_desercion(), "columnas": [
+        *[c for c in esquema_desercion()["columnas"] if c["columna"] != "desercion"],
+        {"columna": "desercion", "rol": "objetivo", "codificacion": "numerica"},
+    ]}), 9.5)
+    assert list(umbral.niveles) == ["<9,5", "≥9,5"]
