@@ -4,9 +4,13 @@
 // interfaz una gráfica o una tarjeta con `ctx.emitir`.
 import { z } from 'zod';
 
-// Penalización del esfuerzo del plan moderado. En xAPI, con 0.4 el éxito del FCM
-// no baja (59.2 %) y los cambios son menores y distintos por estudiante (README).
+// Penalización del esfuerzo de los dos planes. El moderado usa 0.4, el β por defecto
+// del motor: en xAPI el éxito del FCM no baja y los cambios son menores y distintos
+// por estudiante (README). El máximo usa 0.05, el β por defecto anterior, que lleva
+// las acciones casi al tope: sirve de techo. Se pasan explícitos para que los dos
+// planes no coincidan cuando el modelo se entrenó con β = 0.4.
 export const BETA_MODERADO = 0.4;
+export const BETA_MAXIMO = 0.05;
 
 const redondear = (valor, decimales = 3) =>
   typeof valor === 'number' && Number.isFinite(valor) ? Number(valor.toFixed(decimales)) : valor;
@@ -225,14 +229,14 @@ const HERRAMIENTAS = {
 
   analizar_estudiante: {
     descripcion:
-      'Perfil de un estudiante por su id_estudiante: sus datos, el nivel que predice el FCM y dos prescripciones del algoritmo genético: un plan moderado (cambios pequeños, preferible para recomendar) y el plan máximo del modelo.',
+      'Perfil de un estudiante por su id_estudiante: sus datos, el nivel que predice el FCM y dos prescripciones del algoritmo genético: un plan moderado (cambios pequeños, preferible para recomendar) y un plan máximo (el mayor efecto posible, solo como techo).',
     parametros: conIdEstudiante(),
     async ejecutar({ id_estudiante: id }, ctx) {
       requiereModelo(ctx);
       const base = { ruta: ctx.rutaDatos, esquema: ctx.dataset.esquema, id, modelo: ctx.rutaModelo };
       const [estudiante, maxima, moderada] = await Promise.all([
         ctx.motor.llamar('estudiante', base),
-        ctx.motor.llamar('prescribir', base),
+        ctx.motor.llamar('prescribir', { ...base, beta: BETA_MAXIMO }),
         ctx.motor.llamar('prescribir', { ...base, beta: BETA_MODERADO }),
       ]);
       ctx.emitir({ tipo: 'estudiante', id, estudiante, prescripcion: moderada, prescripcionMaxima: maxima });
@@ -244,7 +248,7 @@ const HERRAMIENTAS = {
           columna: a.columna,
           actual: redondear(a.actual.valor, 1),
           recomendada: redondear(a.recomendada.valor, 1),
-          ...(Math.abs(a.cambio) < 1e-6 ? { nota: 'sin cambio: el modelo no espera beneficio' } : {}),
+          ...(Math.abs(a.cambio) < 1e-6 ? { nota: 'sin cambio: el modelo no espera un beneficio que compense el esfuerzo' } : {}),
         })),
       });
       return {
@@ -252,7 +256,8 @@ const HERRAMIENTAS = {
         lectura:
           `Nivel observado en los datos: ${estudiante.nivel_observado ?? 'desconocido'}. Con sus acciones actuales el FCM lo ubica en ${maxima.base.nivel} ` +
           `(activación ${redondear(maxima.base.activacion, 2)} en una escala de 0 a 1; no es una probabilidad). ` +
-          `Con el plan moderado quedaría en ${moderada.prescrito.nivel} y con el plan máximo en ${maxima.prescrito.nivel}.`,
+          `Con el plan moderado quedaría en ${moderada.prescrito.nivel} y con el plan máximo en ${maxima.prescrito.nivel}.` +
+          (moderada.restriccion ? ` ${moderada.restriccion.texto}` : ''),
         reporte: moderada.reporte?.texto,
         datos: estudiante.registro,
         nivel_observado: estudiante.nivel_observado,
@@ -293,11 +298,12 @@ const HERRAMIENTAS = {
         nivel_actual: prescripcion.base.nivel,
         nivel_con_el_plan: prescripcion.prescrito.nivel,
         meta: prescripcion.meta.nivel,
+        ...(prescripcion.restriccion ? { restriccion: prescripcion.restriccion.texto } : {}),
         acciones: prescripcion.acciones.map((a) => ({
           accion: a.nombre,
           actual: redondear(a.actual.valor, 1),
           recomendada: redondear(a.recomendada.valor, 1),
-          ...(Math.abs(a.cambio) < 1e-6 ? { nota: 'sin cambio: el modelo no espera beneficio' } : {}),
+          ...(Math.abs(a.cambio) < 1e-6 ? { nota: 'sin cambio: el modelo no espera un beneficio que compense el esfuerzo' } : {}),
         })),
       };
     },

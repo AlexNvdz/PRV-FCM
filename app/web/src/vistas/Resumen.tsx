@@ -128,7 +128,7 @@ export function Resumen() {
             titulo={`Qué más influye en ${graficas.objetivo}`}
             descripcion="Los ocho pesos más fuertes del mapa cognitivo."
             etiquetaValor="Peso"
-            datos={graficas.influencias.slice(0, 8).map((i) => ({ nombre: `${i.id} ${i.nombre}`, valor: i.peso, detalle: i.rol === 'inmutable' ? 'Inmutable: puede compensar la falta de sesgo' : undefined }))}
+            datos={graficas.influencias.slice(0, 8).map((i) => ({ nombre: `${i.id} ${i.nombre}`, valor: i.peso, detalle: i.rol === 'inmutable' ? (graficas.sesgo ? 'Inmutable: diferencia entre grupos, no causa' : 'Inmutable: puede compensar la falta de sesgo') : undefined }))}
           />
         </div>
       )}

@@ -1,10 +1,11 @@
 // Inferencia del FCM paso a paso: cómo la regla de Kosko lleva al objetivo desde su valor
 // inicial (t = 0) hasta el punto fijo, con las acciones actuales y con las del simulador.
 //
-// Regla: A_o(t) = f( k2·A_o(t−1) + k1·Σ_j w_jo·A_j(t−1) ), f(x) = 1 / (1 + e^(−λ·x)).
+// Regla: A_o(t) = f( k2·A_o(t−1) + k1·(Σ_j w_jo·A_j(t−1) + b_o) ), f(x) = 1 / (1 + e^(−λ·x)).
 // Las acciones quedan fijas durante la inferencia, así que su aporte k1·Σ w·a a la
-// entrada del objetivo es el mismo en cada iteración: cambiar una acción desplaza esa
-// entrada y la iteración propaga el desplazamiento hasta un nuevo punto fijo.
+// entrada del objetivo es el mismo en cada iteración, como el del sesgo k1·b_o: cambiar
+// una acción desplaza esa entrada y la iteración propaga el desplazamiento hasta un
+// nuevo punto fijo. Sin sesgo (modelos antiguos), b_o = 0.
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -21,10 +22,10 @@ function zonasDeNivel(niveles: string[], valores: Record<string, number>) {
   return niveles.map((nivel, i) => ({ nivel, desde: limites[i], hasta: limites[i + 1], color: colorNivel(i, niveles.length) }));
 }
 
-/** La cuenta de una iteración con sus números: memoria, influencia de las acciones y del resto, y la sigmoide. */
+/** La cuenta de una iteración con sus números: memoria, influencia de las acciones y del resto, sesgo y la sigmoide. */
 function CuentaIteracion({ inferencia, t, objetivo }: { inferencia: Inferencia; t: number; objetivo: string }) {
   const valores = inferencia.series[0]?.valores ?? [];
-  const { lambda, k1, k2 } = inferencia.parametros;
+  const { lambda, k1, k2, sesgo: b } = inferencia.parametros;
   if (t === 0) {
     return (
       <p className="text-sm text-tinta-2">
@@ -41,8 +42,8 @@ function CuentaIteracion({ inferencia, t, objetivo }: { inferencia: Inferencia; 
   return (
     <div className="space-y-2 text-sm">
       <p className="overflow-x-auto whitespace-nowrap rounded-lg border border-linea bg-hoja-2/60 px-3 py-2 font-mono text-[0.8rem] text-tinta">
-        A({t}) = f( {num(k2, 2)}·{num(valores[t - 1], 3)} {paso.influencia >= 0 ? '+' : '−'} {num(Math.abs(paso.influencia), 3)} ) = f({num(paso.entrada, 3)}) ={' '}
-        {num(paso.activacion, 3)}
+        A({t}) = f( {num(k2, 2)}·{num(valores[t - 1], 3)} {paso.influencia >= 0 ? '+' : '−'} {num(Math.abs(paso.influencia), 3)}
+        {paso.sesgo ? ` ${paso.sesgo >= 0 ? '+' : '−'} ${num(Math.abs(paso.sesgo), 3)}` : ''} ) = f({num(paso.entrada, 3)}) = {num(paso.activacion, 3)}
       </p>
       <dl className="tabular grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-xs">
         <dt className="text-tinta-2">Memoria k2·A({t - 1})</dt>
@@ -51,13 +52,20 @@ function CuentaIteracion({ inferencia, t, objetivo }: { inferencia: Inferencia; 
         <dd className="text-right text-tinta">{firmado(paso.influencia_acciones, 3)}</dd>
         <dt className="text-tinta-2">Influencia del resto de conceptos</dt>
         <dd className="text-right text-tinta">{firmado(resto, 3)}</dd>
+        {paso.sesgo ? (
+          <>
+            <dt className="text-tinta-2">Sesgo k1·b (constante)</dt>
+            <dd className="text-right text-tinta">{firmado(paso.sesgo, 3)}</dd>
+          </>
+        ) : null}
         <dt className="text-tinta-2">Entrada x y activación f(x)</dt>
         <dd className="text-right text-tinta">
           {num(paso.entrada, 3)} y {num(paso.activacion, 3)}
         </dd>
       </dl>
       <p className="text-xs text-tinta-3">
-        f(x) = 1 / (1 + e^(−λ·x)) con λ = {num(lambda, 2)}; k1 = {num(k1, 2)} y k2 = {num(k2, 2)}. Cambio respecto a la iteración anterior:{' '}
+        f(x) = 1 / (1 + e^(−λ·x)) con λ = {num(lambda, 2)}; k1 = {num(k1, 2)} y k2 = {num(k2, 2)}
+        {b ? `; sesgo del objetivo b = ${firmado(b, 3)}` : '; este modelo no tiene sesgo'}. Cambio respecto a la iteración anterior:{' '}
         {Math.abs(cambio) < tolerancia ? `menor que ${num(tolerancia, 6)}` : firmado(cambio, 4)}
         {t === inferencia.iteraciones && (inferencia.convergio ? '; la inferencia se detiene: llegó al punto fijo' : '; se alcanzó el máximo de iteraciones')}.
       </p>
@@ -97,6 +105,7 @@ export function TrayectoriaInferencia({
   const zonas = zonasDeNivel(niveles, valores);
   const accionesBase = base.pasos[0]?.influencia_acciones;
   const accionesSimulado = simulado?.pasos[0]?.influencia_acciones;
+  const sesgoBase = base.pasos[0]?.sesgo;
   const tolerancia = base.parametros.tolerancia;
 
   return (
@@ -107,7 +116,8 @@ export function TrayectoriaInferencia({
         <>
           La regla de Kosko se repite hasta que el objetivo cambia menos de {num(tolerancia, 6)}: {base.iteraciones} iteraciones con las acciones actuales
           {simulado ? ` y ${simulado.iteraciones} con las del simulador` : ''}. Las acciones quedan fijas y aportan {firmado(accionesBase ?? 0)} a la entrada del objetivo en
-          cada iteración{accionesSimulado !== undefined ? ` (${firmado(accionesSimulado)} con el simulador)` : ''}.
+          cada iteración{accionesSimulado !== undefined ? ` (${firmado(accionesSimulado)} con el simulador)` : ''}
+          {sesgoBase ? `; el sesgo suma ${firmado(sesgoBase)}, igual con cualquier acción` : ''}.
         </>
       }
       leyenda={

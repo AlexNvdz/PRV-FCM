@@ -8,7 +8,7 @@ import { clase, colorNivel, firmado, num, pct } from '../utilidades';
 import { EvolucionAG } from './evolucion';
 import { GraficaMancuernas } from './graficas';
 import { RedaccionIA } from './RedaccionIA';
-import { NivelChip } from './ui';
+import { Aviso, NivelChip } from './ui';
 
 /** Barra de 0 a 1 con las zonas de cada nivel y la activación del estudiante. */
 export function Medidor({ prediccion, niveles, valores, etiqueta }: { prediccion: EstadoPrediccion; niveles: string[]; valores: Record<string, number>; etiqueta: string }) {
@@ -91,21 +91,23 @@ export function TablaPrescripcion({ prescripcion }: { prescripcion: Prescripcion
   );
 }
 
-/** Gráfica de aportes k1·w·A al objetivo: las acciones cambian con el plan; el resto se mantiene. */
+/** Gráfica de aportes k1·w·A al objetivo: las acciones cambian con el plan; el resto y el sesgo k1·b se mantienen. */
 export function GraficaAportes({ prescripcion }: { prescripcion: Prescripcion }) {
   const contribuciones = prescripcion.contribuciones ?? [];
   if (!contribuciones.length) return null;
   const acciones = contribuciones.filter((c) => c.rol === 'accion');
   const otras = contribuciones.filter((c) => c.rol !== 'accion').slice(0, Math.max(3, 9 - acciones.length));
-  const filas = [...acciones, ...otras]
-    .sort((a, b) => b.aporte_prescrito - a.aporte_prescrito)
-    .map((c) => ({ nombre: `${c.id} ${c.nombre}`, desde: c.aporte_base, hasta: c.aporte_prescrito }));
+  const sesgo = prescripcion.aporte_sesgo;
+  const filas = [
+    ...[...acciones, ...otras].map((c) => ({ nombre: `${c.id} ${c.nombre}`, desde: c.aporte_base, hasta: c.aporte_prescrito })),
+    ...(sesgo ? [{ nombre: 'Sesgo del objetivo (k1·b)', desde: sesgo, hasta: sesgo }] : []),
+  ].sort((a, b) => b.hasta - a.hasta);
   const limite = Math.max(0.5, ...filas.flatMap((f) => [Math.abs(f.desde), Math.abs(f.hasta)]));
   const dominio: [number, number] = [-Math.ceil(limite * 4) / 4, Math.ceil(limite * 4) / 4];
   return (
     <GraficaMancuernas
       titulo="Qué empuja al objetivo"
-      descripcion="Aporte de cada concepto a la entrada del objetivo (peso × activación). Positivo acerca al mejor nivel; solo las acciones cambian con el plan."
+      descripcion={`Aporte de cada concepto a la entrada del objetivo (peso × activación). Positivo acerca al mejor nivel; solo las acciones cambian con el plan.${sesgo ? ' El sesgo es una constante del modelo, igual para todos los estudiantes.' : ''}`}
       filas={filas}
       dominio={dominio}
       referencia={0}
@@ -142,6 +144,7 @@ export function ResultadoPrescripcion({
             {prescripcion.prescrito.exito ? 'La prescripción la alcanza.' : 'La prescripción no la alcanza con estas restricciones.'} {prescripcion.generaciones} generaciones, β = {num(prescripcion.configuracion.beta, 2)}.
           </p>
         )}
+        {prescripcion.restriccion && <Aviso tipo="aviso">{prescripcion.restriccion.texto}</Aviso>}
         <TablaPrescripcion prescripcion={prescripcion} />
         {acciones}
       </section>

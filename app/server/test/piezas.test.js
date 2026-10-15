@@ -74,7 +74,13 @@ test('analizar_estudiante acepta "id" como alias de id_estudiante', async () => 
   assert.equal(resultado.id_estudiante, 14);
   assert.match(resultado.lectura, /no es una probabilidad/);
   assert.ok(llamadas.every(([, params]) => params.id === 14));
-  assert.ok(llamadas.some(([metodo, params]) => metodo === 'prescribir' && params.beta === 0.4));
+  // Los dos planes llevan β explícito: con el β del modelo (0.4 por defecto) serían iguales.
+  const betas = llamadas.filter(([metodo]) => metodo === 'prescribir').map(([, params]) => params.beta);
+  assert.deepEqual(betas.sort(), [0.05, 0.4]);
+
+  prescripcion.restriccion = { columna: 'StudentAbsenceDays', nombre: 'Ausencias', delta_max: 0.15, texto: 'Con más de 7 ausencias, cada acción sube como máximo 15 %.' };
+  const conRestriccion = await ejecutarHerramienta('analizar_estudiante', { id: 14 }, ctx);
+  assert.match(conRestriccion.lectura, /como máximo 15 %/);
 });
 
 test('la validación cruzada rápida usa una rejilla pequeña', () => {
@@ -89,6 +95,7 @@ test('las opciones aceptan el método de pesos y la máscara causal', () => {
   const porDefecto = OpcionesEntrenamiento.parse({});
   assert.equal(porDefecto.metodo_pesos, 'bptt');
   assert.deepEqual(porDefecto.aristas_excluidas, []);
+  assert.equal(porDefecto.beta, 0.4);
   const ridge = opcionesMotor(OpcionesEntrenamiento.parse({ metodo_pesos: 'ridge', aristas_excluidas: [['gender', 'Class']] }));
   assert.equal(ridge.metodo_pesos, 'ridge');
   assert.deepEqual(ridge.aristas_excluidas, [['gender', 'Class']]);

@@ -87,10 +87,10 @@ export const GLOSARIO = {
     termino: 'β (beta)',
     expansion: 'Penalización del esfuerzo o costo de intervención',
     definicion:
-      'Peso que la función de costo del algoritmo genético da al tamaño del cambio en las acciones. Con β pequeño (0,05, el valor por defecto al entrenar) el AG busca el máximo efecto y suele llevar las acciones al tope; con β mayor prefiere cambios pequeños aunque el avance sea algo menor. Con 0,4 los planes son moderados y distintos para cada estudiante. No se confunde con β_j de la fórmula w_ji = tanh(β_j), que es un coeficiente de la regresión.',
+      'Peso que la función de costo del algoritmo genético da al tamaño del cambio en las acciones. Con β pequeño (0,05) el AG busca el máximo efecto y suele llevar las acciones al tope; con β mayor prefiere cambios pequeños aunque el avance sea algo menor. Con 0,4, el valor por defecto, los planes son moderados y distintos para cada estudiante. No se confunde con β_j de la fórmula w_ji = tanh(β_j), que es un coeficiente de la regresión.',
     formula: 'costo(a) = |A*_T(a) − D_T| + β · media_k |a_k − a_k,actual|',
     donde:
-      'Paso 3 («Penalización del esfuerzo (β)», de 0 a 5) y paso 4 («Costo de intervención (β)» o «Penalización del esfuerzo», de 0 a 1; 0,4 por defecto).',
+      'Paso 3 («Penalización del esfuerzo (β)», de 0 a 5; 0,4 por defecto) y paso 4 («Costo de intervención (β)» o «Penalización del esfuerzo», de 0 a 1; 0,4 por defecto).',
     ver: ['funcion-costo', 'plan', 'cambio-maximo'],
     claves: 'beta esfuerzo costo de intervencion penalizacion',
     simbolo: true,
@@ -99,8 +99,8 @@ export const GLOSARIO = {
     termino: 'k1 y k2',
     expansion: 'Coeficientes de influencia y de memoria',
     definicion:
-      'En la regla de Kosko modificada, k1 multiplica la suma de influencias de los demás conceptos y k2 la activación previa del propio concepto (su memoria). En esta aplicación ambos valen 1.',
-    formula: 'A_i(t+1) = f( k2·A_i(t) + k1·Σ_j w_ji·A_j(t) )',
+      'En la regla de Kosko modificada, k1 multiplica la suma de influencias de los demás conceptos más el sesgo, y k2 la activación previa del propio concepto (su memoria). En esta aplicación ambos valen 1.',
+    formula: 'A_i(t+1) = f( k2·A_i(t) + k1·(Σ_j w_ji·A_j(t) + b_i) )',
     donde: 'Fórmula de la regla de inferencia (paso 3) y aportes «k1·w·A» de una prescripción.',
     ver: ['kosko', 'memoria', 'aporte'],
     claves: 'coeficiente memoria influencia',
@@ -186,9 +186,9 @@ export const GLOSARIO = {
     termino: 'Aporte al objetivo',
     expansion: 'k1 · w · A',
     definicion:
-      'Lo que cada concepto suma a la entrada del objetivo: su peso hacia el objetivo por su activación (y por k1, que vale 1). Positivo acerca al mejor nivel; negativo aleja. La gráfica «Qué empuja al objetivo» lo compara con las acciones actuales y con el plan: solo cambian las acciones, el resto de conceptos queda igual.',
+      'Lo que cada concepto suma a la entrada del objetivo: su peso hacia el objetivo por su activación (y por k1, que vale 1). Positivo acerca al mejor nivel; negativo aleja. La gráfica «Qué empuja al objetivo» lo compara con las acciones actuales y con el plan: solo cambian las acciones, el resto de conceptos queda igual. Si el modelo tiene sesgo, la gráfica suma una fila «Sesgo del objetivo (k1·b)»: una constante, igual para todos los estudiantes y con o sin el plan.',
     donde: 'Resultado de una prescripción individual (panel del estudiante y perfil de riesgo).',
-    ver: ['peso', 'frenos', 'k1-k2'],
+    ver: ['peso', 'frenos', 'k1-k2', 'sesgo'],
     claves: 'contribucion que empuja al objetivo',
   },
   arista: {
@@ -235,7 +235,7 @@ export const GLOSARIO = {
     termino: 'BPTT',
     expansion: 'Backpropagation Through Time (retropropagación a través del tiempo)',
     definicion:
-      'Método por defecto para aprender la matriz W. Repite 30 iteraciones de la regla del FCM como si fueran capas de una red y calcula de forma exacta cómo cambia el error, entre la activación final del objetivo y su valor observado, al mover cada peso (el gradiente). Con ese gradiente, el optimizador L-BFGS-B ajusta los pesos dentro de [−1, 1], con una penalización L2. En la fórmula, v_r es el peso de cada registro: 1 para todos, salvo si equilibra los niveles. Es el método más preciso (72 % de exactitud en el dataset del proyecto) y el más lento.',
+      'Método por defecto para aprender la matriz W. Repite 30 iteraciones de la regla del FCM como si fueran capas de una red y calcula de forma exacta cómo cambia el error, entre la activación final del objetivo y su valor observado, al mover cada peso (el gradiente). Con ese gradiente, el optimizador L-BFGS-B ajusta los pesos dentro de [−1, 1], con una penalización L2. En la fórmula, v_r es el peso de cada registro: 1 para todos, salvo si equilibra los niveles. Es el método más preciso (79 % de exactitud en el dataset del proyecto) y el más lento.',
     formula: 'L(W) = media_r [ v_r · (A_T,r − y_r)² ] + α · Σ w²',
     donde: 'Paso 3, «Método de extracción de la matriz de pesos W».',
     ver: ['gradiente', 'lbfgsb', 'l1-l2', 'ridge'],
@@ -253,7 +253,7 @@ export const GLOSARIO = {
     definicion:
       'Límite de cuánto puede moverse cada acción en una prescripción, como fracción de su rango: 0,2 permite moverla como máximo un 20 % de la distancia entre su mínimo y su máximo observados. Vacío o «sin límite»: la acción puede llegar al extremo de su rango. Sirve para pedir planes realistas.',
     donde: 'Paso 3 (campo «Cambio máximo por acción») y paso 4 (controles del panel del estudiante y del perfil de riesgo).',
-    ver: ['beta', 'rango', 'del-rango'],
+    ver: ['beta', 'rango', 'del-rango', 'tope-ausentismo'],
     claves: 'delta maximo limite',
   },
   'cambio-medio': {
@@ -342,7 +342,7 @@ export const GLOSARIO = {
   'correlacion-parcial': {
     termino: 'Correlación parcial',
     definicion:
-      'Correlación entre dos variables después de descontar el efecto de todas las demás: mide la relación directa. Se obtiene de la inversa de la matriz de covarianzas (P, la matriz de precisión) estimada con la contracción de Ledoit-Wolf. Como método de W describe bien la estructura, pero no calibra la inferencia: 48 % de exactitud en el dataset del proyecto. No admite equilibrar los niveles.',
+      'Correlación entre dos variables después de descontar el efecto de todas las demás: mide la relación directa. Se obtiene de la inversa de la matriz de covarianzas (P, la matriz de precisión) estimada con la contracción de Ledoit-Wolf. Como método de W describe bien la estructura, pero no calibra la inferencia: 48 % de exactitud en el dataset del proyecto. No tiene sesgo (b = 0) ni admite equilibrar los niveles.',
     formula: 'w_ji = −P_ji / √(P_jj · P_ii)',
     donde: 'Paso 3 (método de W) y método «Parcial» del mapa de calor de correlaciones.',
     ver: ['correlacion', 'covarianza', 'ledoit-wolf'],
@@ -688,7 +688,7 @@ export const GLOSARIO = {
   'inferencia-paso-a-paso': {
     termino: 'Inferencia paso a paso',
     definicion:
-      'Gráfica con la activación del objetivo en cada iteración t de la regla de Kosko, desde t = 0 (el valor de partida) hasta el punto fijo: azul con las acciones actuales y naranja con las del simulador. Las bandas son las zonas de los niveles. Debajo, la cuenta de la iteración elegida: memoria k2·A(t−1), influencia de las acciones, influencia del resto de conceptos, entrada x y f(x). Las acciones quedan fijas, así que su influencia es la misma en todas las iteraciones: cambiar una acción mueve la entrada del objetivo y la iteración lleva ese cambio hasta un nuevo punto fijo.',
+      'Gráfica con la activación del objetivo en cada iteración t de la regla de Kosko, desde t = 0 (el valor de partida) hasta el punto fijo: azul con las acciones actuales y naranja con las del simulador. Las bandas son las zonas de los niveles. Debajo, la cuenta de la iteración elegida: memoria k2·A(t−1), influencia de las acciones, influencia del resto de conceptos, sesgo k1·b (si el modelo lo tiene), entrada x y f(x). Las acciones quedan fijas, así que su influencia es la misma en todas las iteraciones, como el sesgo: cambiar una acción mueve la entrada del objetivo y la iteración lleva ese cambio hasta un nuevo punto fijo.',
     donde: 'Paso 4, panel del estudiante, bajo el simulador de acciones.',
     ver: ['inferencia', 'iteracion', 'memoria', 'simulador'],
     claves: 'trayectoria iteraciones what if kosko estabilizacion',
@@ -697,13 +697,14 @@ export const GLOSARIO = {
     termino: 'Inmutable',
     expansion: 'Concepto del sistema (C_S)',
     definicion:
-      'Rasgo que no cambia en el periodo analizado: edad, género, nacionalidad, curso, grado, semestre. Queda fijo en la inferencia y forma el perfil inmutable con el que se agrupan los registros. Como la regla no tiene sesgo, los inmutables suelen recibir pesos grandes que hacen ese papel: no deben leerse como causas.',
+      'Rasgo que no cambia en el periodo analizado: edad, género, nacionalidad, curso, grado, semestre. Queda fijo en la inferencia y forma el perfil inmutable con el que se agrupan los registros. Sus pesos describen diferencias entre grupos, no causas. En los modelos sin sesgo (los entrenados antes de que la regla lo tuviera) suelen ser grandes porque hacen el papel del sesgo.',
     donde: 'Paso 2 (rol «Inmutable (C_S)»), mapa del FCM (puntos grises) y perfil de riesgo.',
     ver: ['c-s', 'perfil-inmutable', 'sesgo'],
   },
   intercepto: {
     termino: 'Intercepto',
-    definicion: 'Término constante de una regresión. Ridge y Lasso se ajustan sin intercepto porque la regla del FCM no tiene sesgo.',
+    definicion:
+      'Término constante de una regresión. En Ridge y Lasso, el intercepto c es el sesgo del concepto (b_i = tanh(c)) y no se penaliza. En un modelo sin sesgo, la regresión se ajusta sin intercepto.',
     ver: ['ridge', 'lasso', 'sesgo'],
   },
   iteracion: {
@@ -732,8 +733,8 @@ export const GLOSARIO = {
     termino: 'Lasso',
     expansion: 'Regresión con penalización L1',
     definicion:
-      'Método de W: una regresión lineal por concepto dinámico, sin intercepto, que explica el valor z con el que el dato observado del objetivo sería un punto fijo de la regla. La penalización L1 anula los pesos débiles y deja un mapa más simple. Los coeficientes se truncan a (−1, 1) con tanh. Es casi instantáneo; 71 % de exactitud en el dataset del proyecto.',
-    formula: 'min ‖z − X·w‖² / (2n) + α·‖w‖₁,   w_ji = tanh(β_j)',
+      'Método de W: una regresión lineal por concepto dinámico que explica el valor z con el que el dato observado del objetivo sería un punto fijo de la regla; su intercepto es el sesgo. La penalización L1 anula los pesos débiles y deja un mapa más simple. Los coeficientes se truncan a (−1, 1) con tanh. Es casi instantáneo; 77 % de exactitud en el dataset del proyecto.',
+    formula: 'min ‖z − X·w − c‖² / (2n) + α·‖w‖₁,   w_ji = tanh(β_j),   b_i = tanh(c)',
     donde: 'Paso 3, método «Regresión Lasso».',
     ver: ['ridge', 'l1-l2', 'tanh', 'logit'],
     claves: 'regresion',
@@ -774,7 +775,7 @@ export const GLOSARIO = {
   mascara: {
     termino: 'Máscara de dirección causal',
     definicion:
-      'Opción del paso 3 para quitar las aristas que considere lógicamente imposibles. Una arista excluida queda con peso 0 y los demás pesos se reajustan sin ella. Como la regla no tiene sesgo, quitar las aristas de los inmutables hacia el objetivo suele bajar la exactitud (en el dataset del proyecto, Ridge sin C1 ni C2 baja a 64,7 %).',
+      'Opción del paso 3 para quitar las aristas que considere lógicamente imposibles. Una arista excluida queda con peso 0 y los demás pesos se reajustan sin ella. El sesgo no es una arista: no se puede excluir. Con sesgo, quitar las aristas de los inmutables hacia el objetivo casi no cambia la exactitud (en el dataset del proyecto, BPTT sin C1-C8: 78,8 % frente a 78,9 %); en un modelo sin sesgo la bajaba mucho (57,1 %), porque esos pesos hacían el papel del sesgo.',
     donde: 'Paso 3, «Máscara de dirección causal (opcional)».',
     ver: ['arista', 'estructura', 'sesgo'],
     claves: 'causal excluir aristas',
@@ -1049,9 +1050,9 @@ export const GLOSARIO = {
   plan: {
     termino: 'Plan moderado y plan máximo',
     definicion:
-      'Dos prescripciones que el asistente muestra para un estudiante. El plan moderado usa β = 0,4: cambios pequeños, preferibles para recomendar. El plan máximo usa el β del entrenamiento (0,05 por defecto) y busca el mayor efecto posible.',
+      'Dos prescripciones que el asistente muestra para un estudiante. El plan moderado usa β = 0,4, el valor por defecto: cambios pequeños, preferibles para recomendar. El plan máximo usa β = 0,05 y busca el mayor efecto posible; sirve de techo. Con ausentismo alto, el tope por ausentismo limita a los dos.',
     donde: 'Tarjetas del asistente (columnas «Actual», «Moderado» y «Máximo»).',
-    ver: ['beta', 'asistente'],
+    ver: ['beta', 'asistente', 'tope-ausentismo'],
   },
   pliegue: {
     termino: 'Pliegue',
@@ -1161,8 +1162,8 @@ export const GLOSARIO = {
   kosko: {
     termino: 'Regla de Kosko modificada',
     definicion:
-      'Regla de inferencia del FCM, con memoria (Stylios y Groumpos, 2004): la nueva activación de cada concepto dinámico es la sigmoide de su activación previa (por k2) más la suma ponderada de las activaciones de los demás (por k1). No tiene término de sesgo.',
-    formula: 'A_i(t+1) = f( k2·A_i(t) + k1·Σ_j w_ji·A_j(t) )',
+      'Regla de inferencia del FCM, con memoria (Stylios y Groumpos, 2004): la nueva activación de cada concepto dinámico es la sigmoide de su activación previa (por k2) más la suma ponderada de las activaciones de los demás y el sesgo b_i del concepto (ambos por k1).',
+    formula: 'A_i(t+1) = f( k2·A_i(t) + k1·(Σ_j w_ji·A_j(t) + b_i) )',
     donde: 'Paso 3, «Cómo se construye y se usa W».',
     ver: ['sigmoide', 'k1-k2', 'inferencia', 'sesgo'],
     claves: 'regla de inferencia',
@@ -1191,8 +1192,8 @@ export const GLOSARIO = {
     termino: 'Ridge',
     expansion: 'Regresión con penalización L2',
     definicion:
-      'Método de W: una regresión lineal por concepto dinámico, sin intercepto, que explica el valor z con el que el dato observado del objetivo sería un punto fijo de la regla. La penalización L2 encoge los pesos. Los coeficientes se truncan a (−1, 1) con tanh. Es casi instantáneo; 71 % de exactitud en el dataset del proyecto.',
-    formula: 'min ‖z − X·w‖² + α·n·‖w‖²,   w_ji = tanh(β_j)',
+      'Método de W: una regresión lineal por concepto dinámico que explica el valor z con el que el dato observado del objetivo sería un punto fijo de la regla; su intercepto es el sesgo. La penalización L2 encoge los pesos. Los coeficientes se truncan a (−1, 1) con tanh. Es casi instantáneo; 77 % de exactitud en el dataset del proyecto.',
+    formula: 'min ‖z − X·w − c‖² + α·n·‖w‖²,   w_ji = tanh(β_j),   b_i = tanh(c)',
     donde: 'Paso 3, método «Regresión Ridge».',
     ver: ['lasso', 'l1-l2', 'tanh', 'logit', 'punto-fijo'],
     claves: 'regresion',
@@ -1231,10 +1232,14 @@ export const GLOSARIO = {
   },
   sesgo: {
     termino: 'Sesgo',
-    expansion: 'Bias',
+    expansion: 'Bias, b_i',
     definicion:
-      'Término constante que muchos modelos suman a cada entrada. La regla de inferencia del FCM no lo tiene; por eso los pesos grandes de los inmutables suelen hacer su papel y no deben leerse como causas.',
-    ver: ['inmutable', 'kosko', 'intercepto'],
+      'Término constante que la regla de inferencia suma a la entrada de cada concepto dinámico, igual para todos los estudiantes. Equivale al peso de un concepto que siempre vale 1: si es negativo, el objetivo tiende al peor nivel antes de sumar las influencias; si es positivo, al mejor. Se aprende con los pesos y queda en [−1, 1]: BPTT lo optimiza junto con W, en Ridge y Lasso es el intercepto y con la correlación parcial vale 0. No es una variable ni una arista: el AG no lo cambia y la máscara no lo excluye. Los modelos entrenados antes de que la regla tuviera sesgo no lo tienen; en ellos, los pesos grandes de los inmutables hacían su papel.',
+    formula: 'A_i(t+1) = f( k2·A_i(t) + k1·(Σ_j w_ji·A_j(t) + b_i) )',
+    donde:
+      'Paso 3 (dato «Método de W», mapa del FCM bajo el objetivo y su vista de tabla), paso 4 (cuenta de la inferencia paso a paso y gráfica «Qué empuja al objetivo») y contexto del asistente.',
+    ver: ['kosko', 'intercepto', 'inmutable', 'aporte'],
+    claves: 'bias b constante termino independiente',
   },
   sigmoide: {
     termino: 'Sigmoide',
@@ -1305,6 +1310,14 @@ export const GLOSARIO = {
     donde: 'Paso 4 y resultado de una prescripción («activación … ± …»).',
     ver: ['psr', 'meta', 'nivel-predicho'],
     claves: 'umbral exito',
+  },
+  'tope-ausentismo': {
+    termino: 'Tope por ausentismo',
+    definicion:
+      'Restricción del algoritmo genético: si el estudiante tiene ausentismo alto, cada acción solo puede subir hasta un 15 % de su rango sobre su valor actual. Con muchas ausencias, los datos casi no registran el mejor nivel, y sin tope el FCM prometía alcanzarlo con planes que el bosque aleatorio no confirmaba. Se activa cuando la columna `StudentAbsenceDays` existe en el esquema y el estudiante está en la mitad alta de su escala (en xAPI, Above-7); en otros datasets no aplica. Si además hay un cambio máximo por acción, vale el más estricto.',
+    donde: 'Paso 4: aviso en el resultado de la prescripción de un estudiante o de un perfil de riesgo; tarjetas y respuestas del asistente.',
+    ver: ['cambio-maximo', 'beta', 'plan'],
+    claves: 'restriccion ausencias absence above-7 limite condicion',
   },
   torneo: {
     termino: 'Torneo',

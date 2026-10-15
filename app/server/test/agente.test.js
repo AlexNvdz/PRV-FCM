@@ -118,6 +118,46 @@ test('redactarRecomendacion convierte una prescripción en texto sin herramienta
   assert.match(datos.reporte_del_modelo, /estudiante 14/);
 });
 
+test('el contexto explica el sesgo aparte de los pesos y menciona la restricción por ausentismo', () => {
+  const esquema = {
+    columnas: [
+      { columna: 'raisedhands', rol: 'accion' },
+      { columna: 'StudentAbsenceDays', rol: 'mutable', nombre: 'Ausencias' },
+      { columna: 'Class', rol: 'objetivo', orden: ['L', 'M', 'H'] },
+    ],
+  };
+  const resultados = (sesgo, prescripcion) => ({
+    metricas: {
+      configuracion: { n_entrenamiento: 100, fcm: { lambda_: 1, ...(sesgo === undefined ? {} : { sesgo }) }, prescripcion },
+      prediccion_fcm: { exactitud_rendimiento: 0.7, por_clase: {} },
+      prescripcion: { n_estudiantes: 10, PSR_base: 10, PSR: 50 },
+      validacion_externa: { PSR_externo_base: 8, PSR_externo: 40 },
+    },
+    graficas: {
+      objetivo: 'Class',
+      mejor_nivel: 'H',
+      ...(sesgo === undefined ? {} : { sesgo }),
+      conceptos: [{ columna: 'raisedhands', sesgo: 0 }, { columna: 'Class', sesgo: sesgo ? -0.42 : 0 }],
+      influencias: [{ nombre: 'raisedhands', rol: 'accion', peso: 0.5 }],
+    },
+  });
+  const contexto = (r) => agente.describirContexto({ dataset: { nombre: 'Prueba', esquema }, modelo: { id: 'md' }, resultados: r });
+
+  const nuevo = contexto(resultados(true, { condicion_columna: 'StudentAbsenceDays', condicion_delta_max: 0.15 }));
+  assert.match(nuevo, /Sesgo del objetivo: b = -0\.42\. .*no es una variable ni una influencia/);
+  assert.match(nuevo, /hacia el peor nivel/);
+  assert.match(nuevo, /Restricción por ausentismo: si StudentAbsenceDays \(Ausencias\).* 15 % de su rango/);
+  assert.doesNotMatch(nuevo, /no tiene término de sesgo/);
+
+  // Métricas antiguas: sin la clave sesgo ni la condición.
+  const antiguo = contexto(resultados(undefined, { beta_esfuerzo: 0.05 }));
+  assert.match(antiguo, /no tiene término de sesgo/);
+  assert.doesNotMatch(antiguo, /Restricción por ausentismo/);
+  // Condición desactivada (null) o columna ausente del esquema: sin restricción.
+  assert.doesNotMatch(contexto(resultados(true, { condicion_columna: null, condicion_delta_max: 0.15 })), /Restricción/);
+  assert.doesNotMatch(contexto(resultados(true, { condicion_columna: 'absences', condicion_delta_max: 0.15 })), /Restricción/);
+});
+
 test('todas las llamadas usan el mismo tamaño de contexto (Ollama no recarga el modelo)', () => {
   const contextos = new Set(peticiones.map((p) => p.options.num_ctx));
   assert.equal(contextos.size, 1);

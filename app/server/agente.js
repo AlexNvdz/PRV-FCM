@@ -19,7 +19,7 @@ export const RESPUESTA_FUERA_DE_TEMA =
 
 const PROMPT_GUARDIA = `Eres un filtro de temas para un asistente de analítica educativa. Decide si el último mensaje del usuario está dentro del alcance.
 
-Dentro del alcance: rendimiento académico, deserción o permanencia escolar, estudiantes, docentes, cursos, aprendizaje, hábitos de estudio, asistencia, intervenciones pedagógicas, análisis o gráficas de datos educativos, el modelo PRV-FCM, mapas cognitivos difusos, algoritmos genéticos, los datos cargados en la aplicación y el uso de la aplicación. También saludos, agradecimientos, preguntas sobre qué puede hacer el asistente y continuaciones de la conversación (por ejemplo «¿y el estudiante 14?» o «explícalo mejor»).
+Dentro del alcance: rendimiento académico, deserción o permanencia escolar, estudiantes, docentes, cursos, aprendizaje, hábitos de estudio, asistencia, intervenciones pedagógicas, análisis o gráficas de datos educativos, el modelo PRV-FCM y sus términos (pesos, sesgo, activación, β, niveles, prescripción, restricción por ausentismo), mapas cognitivos difusos, algoritmos genéticos, los datos cargados en la aplicación y el uso de la aplicación. También saludos, agradecimientos, preguntas sobre qué puede hacer el asistente y continuaciones de la conversación (por ejemplo «¿y el estudiante 14?» o «explícalo mejor»).
 
 Fuera del alcance: cualquier otro tema (recetas, deportes, política, programación general, tareas personales, chistes, etc.).
 
@@ -67,8 +67,9 @@ Cómo trabajas:
 - Qué herramienta usar: recomendaciones generales o por nivel → resumen_prescripciones; un estudiante concreto → analizar_estudiante; un perfil hipotético («un estudiante con más de 7 ausencias que casi no visita recursos») → prescribir_perfil; panorama de cómo se relacionan todas las variables → correlaciones_variables; la relación entre dos variables que el usuario nombra → relacion_variables con x e y.
 - Si una herramienta devuelve un campo «reporte» o «texto», úsalo como base de tu respuesta y conserva sus cifras.
 - Al recomendar, combina la prescripción del modelo con prácticas pedagógicas concretas (tutorías, seguimiento de la asistencia, participación en clase, comunicación con la familia) y explica el porqué.
-- Para un estudiante, recomienda el plan moderado y menciona el plan máximo solo como techo. No recomiendes cambiar una acción que la prescripción deja igual: el modelo no espera beneficio de ella.
+- Para un estudiante, recomienda el plan moderado y menciona el plan máximo solo como techo. No recomiendes cambiar una acción que la prescripción deja igual: el modelo no espera un beneficio que compense el esfuerzo de cambiarla.
 - Si un cambio recomendado es muy grande, propón metas intermedias realistas y un seguimiento periódico.
+- Si un resultado trae una restricción por ausentismo, menciónala con su texto: explica que por eso el plan sube poco las acciones y que la asistencia es lo primero que conviene atender.
 - La activación del FCM va de 0 a 1 e indica cercanía al mejor nivel; no es una probabilidad. Habla de niveles.
 - Aclara cuando convenga que el modelo muestra asociaciones en los datos, no causas comprobadas.
 - Si no hay un modelo entrenado, dilo y sugiere entrenarlo en la vista «Modelo» (paso 3 del flujo).
@@ -121,9 +122,36 @@ export function describirContexto({ dataset, modelo, resultados }) {
     `- Signo de los pesos: positivo = al aumentar la variable el estudiante se acerca a ${graficas.mejor_nivel} (mejor nivel); negativo = se aleja.`,
     `- Peso de cada acción (lo único que el AG cambia): ${formatearPesos(graficas.influencias.filter((i) => i.rol === 'accion'), graficas.mejor_nivel)}.`,
     `- Otras influencias fuertes, no controlables directamente: ${formatearPesos(graficas.influencias.filter((i) => i.rol !== 'accion').slice(0, 4), graficas.mejor_nivel)}.`,
-    '- Cuidado al interpretar: la regla del FCM no tiene término de sesgo y los pesos grandes de variables inmutables (por ejemplo nacionalidad, género o grado) compensan esa falta; no los presentes como causas. Las acciones y las variables mutables sí se pueden interpretar como asociaciones útiles.',
+    describirSesgo(resultados),
+    ...describirRestriccion(metricas.configuracion.prescripcion, esquema),
+    '- Las acciones y las variables mutables se pueden interpretar como asociaciones útiles; los pesos de variables inmutables (por ejemplo nacionalidad, género o grado) no son causas.',
   );
   return lineas.join('\n');
+}
+
+/** Tope de las acciones por ausentismo (lista vacía si está desactivado, si la columna no existe o en métricas antiguas). */
+export function describirRestriccion(prescripcion, esquema) {
+  const columna = esquema?.columnas.find((c) => c.columna === prescripcion?.condicion_columna && c.rol !== 'excluir');
+  if (!columna || typeof prescripcion.condicion_delta_max !== 'number') return [];
+  const nombre = columna.nombre && columna.nombre !== columna.columna ? `${columna.columna} (${columna.nombre})` : columna.columna;
+  return [
+    `- Restricción por ausentismo: si ${nombre} está en la mitad alta de su escala (en xAPI, Above-7), el AG solo puede subir cada acción hasta ` +
+      `${Math.round(100 * prescripcion.condicion_delta_max)} % de su rango sobre el valor actual; por eso los planes de esos estudiantes son más modestos.`,
+  ];
+}
+
+/** Frase sobre el sesgo del objetivo: no es un peso ni una influencia, y los modelos antiguos no lo tienen. */
+export function describirSesgo({ metricas, graficas }) {
+  const conSesgo = graficas.sesgo ?? metricas.configuracion.fcm.sesgo ?? false;
+  const b = graficas.conceptos?.find((c) => c.columna === graficas.objetivo)?.sesgo;
+  if (!conSesgo || typeof b !== 'number') {
+    return '- Este modelo no tiene término de sesgo: los pesos grandes de variables inmutables compensan esa falta, así que no los presentes como causas.';
+  }
+  return (
+    `- Sesgo del objetivo: b = ${b >= 0 ? '+' : ''}${b.toFixed(2)}. Es una constante de la regla del FCM, igual para todos los estudiantes; no es una variable ni una influencia. ` +
+    `Al ser ${b >= 0 ? `positivo, empuja a todos hacia ${graficas.mejor_nivel}` : 'negativo, empuja a todos hacia el peor nivel'} antes de sumar las variables. ` +
+    'Nadie puede cambiarlo: no lo cuentes entre los pesos ni lo recomiendes.'
+  );
 }
 
 /**
@@ -190,6 +218,7 @@ Reglas:
 - Para cada acción con "cambio_grande": true, propone una meta intermedia (por ejemplo, la mitad del cambio en las primeras semanas) antes de la meta final.
 - Habla de niveles. La activación del modelo va de 0 a 1 y no es una probabilidad: nunca la expreses como porcentaje.
 - No presentes rasgos inmutables (género, nacionalidad, grado, etc.) como causas ni propongas cambiarlos.
+- Si los datos traen "restriccion", menciónala en la situación: explica que por eso el plan sube poco las acciones.
 - Cierra con una sola frase: el modelo muestra asociaciones de los datos, no causas comprobadas.`;
 
 const ESTRUCTURA_INDIVIDUAL = `Estructura:
@@ -231,6 +260,7 @@ export function hechosIndividual({ sujeto, prescripcion }, contexto = {}) {
       .filter((c) => c.rol === 'mutable' && c.aporte_prescrito < -0.05)
       .slice(0, 3)
       .map((c) => ({ variable: c.nombre, aporte: redondeo(c.aporte_prescrito) })),
+    ...(prescripcion.restriccion ? { restriccion: prescripcion.restriccion.texto } : {}),
     reporte_del_modelo: prescripcion.reporte?.texto,
   };
 }

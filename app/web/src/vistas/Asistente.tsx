@@ -109,6 +109,11 @@ function TarjetaEstudiante({ id, prescripcion, maxima, niveles }: { id: number; 
           })}
         />
       </div>
+      {prescripcion.restriccion && (
+        <Aviso tipo="aviso" className="mt-3">
+          {prescripcion.restriccion.texto}
+        </Aviso>
+      )}
     </div>
   );
 }
@@ -160,6 +165,11 @@ function TarjetaPerfil({ origen, cambios, prescripcion, niveles }: { origen: str
           filas={prescripcion.acciones.map((a) => ({ nombre: a.nombre, celdas: [valor(a.actual), valor(a.recomendada)], igual: [true, Math.abs(a.cambio) < 1e-6] }))}
         />
       </div>
+      {prescripcion.restriccion && (
+        <Aviso tipo="aviso" className="mt-3">
+          {prescripcion.restriccion.texto}
+        </Aviso>
+      )}
     </div>
   );
 }

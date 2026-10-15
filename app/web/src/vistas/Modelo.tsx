@@ -26,7 +26,7 @@ const OPCIONES_INICIALES: OpcionesEntrenamiento = {
   aristas_excluidas: [],
   lambda: 1,
   alpha_l2: 0.001,
-  beta: 0.05,
+  beta: 0.4,
   delta_max: null,
   permitir_reducciones: false,
   semilla: 42,
@@ -61,9 +61,9 @@ const MODOS_CV = [
 ] as const;
 
 const METODOS: { valor: MetodoPesos; texto: string; ayuda: string }[] = [
-  { valor: 'bptt', texto: 'BPTT (recomendado)', ayuda: 'Gradiente exacto a través de las iteraciones del FCM y L-BFGS-B con W en [−1, 1]. 72 % de exactitud en xAPI.' },
-  { valor: 'ridge', texto: 'Regresión Ridge', ayuda: 'Regresión lineal con penalización L2 por concepto dinámico; tanh trunca a [−1, 1]. Instantánea, 71 % en xAPI.' },
-  { valor: 'lasso', texto: 'Regresión Lasso', ayuda: 'Penalización L1: anula los pesos débiles; tanh trunca a [−1, 1]. 71 % en xAPI.' },
+  { valor: 'bptt', texto: 'BPTT (recomendado)', ayuda: 'Gradiente exacto a través de las iteraciones del FCM y L-BFGS-B con W en [−1, 1]. 79 % de exactitud en xAPI.' },
+  { valor: 'ridge', texto: 'Regresión Ridge', ayuda: 'Regresión lineal con penalización L2 por concepto dinámico; tanh trunca a [−1, 1]. Instantánea, 77 % en xAPI.' },
+  { valor: 'lasso', texto: 'Regresión Lasso', ayuda: 'Penalización L1: anula los pesos débiles; tanh trunca a [−1, 1]. 77 % en xAPI.' },
   { valor: 'correlacion_parcial', texto: 'Correlación parcial', ayuda: 'w = correlación de cada par dados los demás. Describe la estructura, pero no calibra la inferencia: 48 % en xAPI.' },
 ];
 
@@ -313,14 +313,14 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
       <details className="rounded-lg border border-linea px-4 py-3 text-sm">
         <summary className="cursor-pointer font-medium text-tinta">Cómo se construye y se usa W</summary>
         <div className="mt-3 space-y-3">
-          <Formula lectura="Regla de Kosko modificada con memoria. Solo los conceptos dinámicos (el objetivo) se actualizan; los demás quedan fijos en su valor.">
-            A_i(t+1) = f( k2·A_i(t) + k1·Σ_j w_ji·A_j(t) ),   f(x) = 1 / (1 + e^(−λx))
+          <Formula lectura="Regla de Kosko modificada con memoria y sesgo. Solo los conceptos dinámicos (el objetivo) se actualizan; los demás quedan fijos en su valor. b_i es el sesgo del concepto i: una constante en [−1, 1] que se aprende junto con los pesos, como el peso de un concepto que siempre vale 1.">
+            A_i(t+1) = f( k2·A_i(t) + k1·(Σ_j w_ji·A_j(t) + b_i) ),   f(x) = 1 / (1 + e^(−λx))
           </Formula>
-          <Formula lectura="Ridge y Lasso: con y el valor observado del objetivo, este es el valor que debe sumar la influencia para que y sea un punto fijo de la regla. Se ajusta sin intercepto porque la regla no tiene sesgo.">
-            z = ( logit(y)/λ − k2·y ) / k1 ≈ Σ_j w_ji·x_j,   Ridge: + α·n·‖w‖²   Lasso: + α·‖w‖₁
+          <Formula lectura="Ridge y Lasso: con y el valor observado del objetivo, este es el valor que debe sumar la influencia más el sesgo para que y sea un punto fijo de la regla. El sesgo es el intercepto c de la regresión, que no se penaliza.">
+            z = ( logit(y)/λ − k2·y ) / k1 ≈ Σ_j w_ji·x_j + c,   Ridge: + α·n·‖w‖²   Lasso: + α·‖w‖₁
           </Formula>
-          <Formula lectura="Truncamiento de los coeficientes de la regresión al rango de un peso causal. BPTT ya los acota con L-BFGS-B; la correlación parcial ya está en [−1, 1].">
-            w_ji = tanh(β_j) ∈ (−1, 1)
+          <Formula lectura="Truncamiento de los coeficientes y del intercepto de la regresión al rango de un peso causal. BPTT ya acota pesos y sesgo con L-BFGS-B; la correlación parcial ya está en [−1, 1] y no tiene sesgo (b = 0).">
+            w_ji = tanh(β_j) ∈ (−1, 1),   b_i = tanh(c)
           </Formula>
           <Formula lectura="Correlación parcial: la relación directa entre dos conceptos descontando a todos los demás (P es la inversa de la covarianza, con contracción de Ledoit-Wolf).">
             w_ji = −P_ji / √(P_jj·P_ii)
@@ -337,8 +337,8 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
           Máscara de dirección causal (opcional){opciones.aristas_excluidas.length ? `: ${opciones.aristas_excluidas.length} aristas excluidas` : ''}
         </summary>
         <p className="mt-2 text-xs text-tinta-2">
-          Desmarque las conexiones que considere lógicamente imposibles. El peso de una arista excluida queda en 0 y el resto se reajusta sin ella: como la
-          regla no tiene sesgo, quitar inmutables suele bajar la exactitud.
+          Desmarque las conexiones que considere lógicamente imposibles. El peso de una arista excluida queda en 0 y el resto se reajusta sin ella. El sesgo
+          no es una arista: no se puede excluir. Con sesgo, quitar inmutables casi no cambia la exactitud (en xAPI, 78,8 % sin C1-C8 frente a 78,9 %).
         </p>
         <div className="mt-3">
           <EditorMascara dataset={dataset} excluidas={opciones.aristas_excluidas} alCambiar={ponerExcluidas} />
@@ -524,6 +524,8 @@ export function Modelo() {
   const niveles = nivelesDe(dataset.esquema);
   const m = modelo.data?.metricas;
   const g = modelo.data?.graficas;
+  // Los modelos entrenados antes del sesgo no traen la clave: equivale a sin sesgo.
+  const conSesgo = g?.sesgo ?? m?.configuracion.fcm.sesgo ?? false;
   const ocupado = Boolean(enCurso) || Boolean(trabajo && !trabajo.terminado);
 
   return (
@@ -574,6 +576,7 @@ export function Modelo() {
                 etiqueta="Método de W"
                 valor={NOMBRE_METODO[m.configuracion.fcm.metodo_pesos ?? 'bptt']}
                 detalle={[
+                  conSesgo ? 'Con sesgo' : 'Sin sesgo',
                   m.configuracion.fcm.balancear_niveles ? 'Niveles equilibrados' : null,
                   m.configuracion.aristas_excluidas?.length ? `${m.configuracion.aristas_excluidas.length} aristas excluidas` : 'Sin máscara',
                 ]
@@ -618,7 +621,14 @@ export function Modelo() {
             </div>
           </Seccion>
 
-          <Seccion titulo="Estructura aprendida" descripcion="Cada concepto influye sobre el objetivo con un peso entre −1 y 1. Los inmutables con pesos grandes suelen compensar la falta de sesgo de la regla, no son causas.">
+          <Seccion
+            titulo="Estructura aprendida"
+            descripcion={
+              conSesgo
+                ? 'Cada concepto influye sobre el objetivo con un peso entre −1 y 1, y el objetivo suma además su sesgo b, una constante. Los pesos de los inmutables describen diferencias entre grupos, no causas.'
+                : 'Cada concepto influye sobre el objetivo con un peso entre −1 y 1. Este modelo no tiene sesgo: los inmutables con pesos grandes suelen compensar esa falta, no son causas.'
+            }
+          >
             <MapaFCM conceptos={g.conceptos} aristas={g.aristas} objetivo={g.objetivo} />
             <div className="mt-6 space-y-6">
               <MatrizW graficas={g} />

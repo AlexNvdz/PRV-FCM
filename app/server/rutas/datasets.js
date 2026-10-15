@@ -25,7 +25,7 @@ export const OpcionesEntrenamiento = z.object({
   aristas_excluidas: z.array(z.tuple([z.string().min(1), z.string().min(1)])).max(2000).default([]),
   lambda: z.number().positive().max(20).default(1),
   alpha_l2: z.number().min(0).max(1).default(0.001),
-  beta: z.number().min(0).max(5).default(0.05),
+  beta: z.number().min(0).max(5).default(0.4),
   delta_max: z.number().min(0).max(1).nullable().default(null),
   permitir_reducciones: z.boolean().default(false),
   semilla: z.number().int().min(0).max(1_000_000).default(42),

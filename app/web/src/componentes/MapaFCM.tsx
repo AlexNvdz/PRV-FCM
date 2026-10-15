@@ -1,6 +1,7 @@
 // Mapa cognitivo difuso aprendido: el objetivo al centro y cada concepto
 // alrededor, agrupado por rol. El grosor de cada arista es la fuerza del peso y
-// el color su signo. Al pasar el cursor (o con Tab) se lee el peso exacto.
+// el color su signo. Al pasar el cursor (o con Tab) se lee el peso exacto. Los
+// conceptos dinámicos muestran además su sesgo b_i, si el modelo lo tiene.
 import { ChartColumn, Table2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -22,6 +23,9 @@ const GRUPO: Record<string, string> = { accion: 'Acciones', mutable: 'Mutables',
 function recortar(texto: string, largo: number) {
   return texto.length > largo ? `${texto.slice(0, largo - 1)}…` : texto;
 }
+
+/** Sesgo b_i de un concepto dinámico; undefined en los fijos y en modelos sin sesgo (b = 0 o ausente). */
+const sesgoDe = (c: ConceptoGrafo | null | undefined) => (c?.dinamico && c.sesgo ? c.sesgo : undefined);
 
 function Marca({ rol, x, y, r, activo }: { rol: string; x: number; y: number; r: number; activo: boolean }) {
   const trazo = activo ? 'var(--tinta)' : 'var(--tinta-2)';
@@ -90,7 +94,11 @@ export function MapaFCM({ conceptos, aristas, objetivo, titulo = 'Mapa cognitivo
   const pesoDe = (id: string) => aristas.find((a) => a.origen === id && a.destino === centro?.id)?.peso;
   const activoConcepto = activo ? posiciones.get(activo)?.c : null;
   const pesoActivo = activo ? pesoDe(activo) : undefined;
+  const sesgoCentro = sesgoDe(centro);
 
+  const filasSesgo = conceptos
+    .filter((c) => sesgoDe(c) !== undefined)
+    .map((c) => [c.id, `Sesgo b de ${c.nombre}`, NOMBRE_ROL[c.rol], firmado(c.sesgo!)]);
   const filasTabla = aristas
     .filter((a) => a.destino === centro?.id)
     .sort((a, b) => Math.abs(b.peso) - Math.abs(a.peso))
@@ -106,6 +114,7 @@ export function MapaFCM({ conceptos, aristas, objetivo, titulo = 'Mapa cognitivo
           <span className="block text-[0.98rem] font-semibold text-tinta">{titulo}</span>
           <span className="mt-0.5 block text-sm text-tinta-2">
             Pesos hacia {centro?.nombre ?? objetivo}: el grosor es la fuerza y el color, el sentido.
+            {sesgoCentro !== undefined && ` Bajo el objetivo, su sesgo b: una constante que se suma a su entrada.`}
           </span>
         </figcaption>
         <button
@@ -121,7 +130,7 @@ export function MapaFCM({ conceptos, aristas, objetivo, titulo = 'Mapa cognitivo
 
       {verTabla ? (
         <div className="p-5">
-          <TablaSimple tabla={{ columnas: ['Concepto', 'Variable', 'Rol', 'Peso'], filas: filasTabla }} />
+          <TablaSimple tabla={{ columnas: ['Concepto', 'Variable', 'Rol', filasSesgo.length ? 'Peso o sesgo' : 'Peso'], filas: [...filasSesgo, ...filasTabla] }} />
         </div>
       ) : (
         <>
@@ -203,35 +212,92 @@ export function MapaFCM({ conceptos, aristas, objetivo, titulo = 'Mapa cognitivo
                       strokeWidth={3}
                       paintOrder="stroke"
                     >
-                      {recortar(`${c.id} ${c.nombre}`, muchos ? 18 : 24)}
+                        {recortar(`${c.id} ${c.nombre}`, muchos ? 18 : 24)}
                     </text>
+                    {sesgoDe(c) !== undefined && (
+                      <text
+                        x={lx}
+                        y={y + 4 + letra + 2}
+                        textAnchor={derecha ? 'start' : 'end'}
+                        fontSize={letra - 1.5}
+                        fill="var(--tinta-3)"
+                        stroke="var(--superficie-grafica)"
+                        strokeWidth={3}
+                        paintOrder="stroke"
+                      >
+                        b = {firmado(c.sesgo!)}
+                      </text>
+                    )}
                   </g>
                 );
               })}
 
               {centro && (
-                <g>
-                  <circle cx={disposicion.cx} cy={disposicion.cy} r={radioCentro} fill="var(--pizarra)" stroke="var(--superficie-grafica)" strokeWidth={3} />
+                <g
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${centro.id} ${centro.nombre}, objetivo${sesgoCentro !== undefined ? `, sesgo ${firmado(sesgoCentro)}` : ''}`}
+                  onMouseEnter={() => setActivo(centro.id)}
+                  onMouseLeave={() => setActivo(null)}
+                  onFocus={() => setActivo(centro.id)}
+                  onBlur={() => setActivo(null)}
+                  className="cursor-default outline-none"
+                >
+                  <circle
+                    cx={disposicion.cx}
+                    cy={disposicion.cy}
+                    r={radioCentro}
+                    fill="var(--pizarra)"
+                    stroke={activo === centro.id ? 'var(--tinta)' : 'var(--superficie-grafica)'}
+                    strokeWidth={3}
+                  />
                   <text x={disposicion.cx} y={disposicion.cy - 2} textAnchor="middle" fontSize={compacto ? 12 : 13.5} fontWeight={650} fill="var(--tiza)">
                     {recortar(centro.columna, 10)}
                   </text>
                   <text x={disposicion.cx} y={disposicion.cy + 13} textAnchor="middle" fontSize={10} fill="var(--tiza-2)">
                     objetivo
                   </text>
+                  {sesgoCentro !== undefined && (
+                    <text
+                      x={disposicion.cx}
+                      y={disposicion.cy + radioCentro + 16}
+                      textAnchor="middle"
+                      fontSize={letra}
+                      fontWeight={600}
+                      fill="var(--tinta)"
+                      stroke="var(--superficie-grafica)"
+                      strokeWidth={4}
+                      paintOrder="stroke"
+                    >
+                      b = {firmado(sesgoCentro)}
+                    </text>
+                  )}
                 </g>
               )}
             </svg>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-xs text-tinta-2" aria-live="polite">
             <p className="min-h-[1.25rem]">
-              {activoConcepto ? (
+              {activoConcepto && activoConcepto.id === centro?.id ? (
+                <>
+                  <strong className="text-tinta">
+                    {activoConcepto.id} {activoConcepto.nombre}
+                  </strong>{' '}
+                  (objetivo):{' '}
+                  {sesgoCentro !== undefined
+                    ? `sesgo b = ${firmado(sesgoCentro)}, una constante que se suma a su entrada en cada iteración y empuja a todos los estudiantes hacia el ${sesgoCentro >= 0 ? 'mejor' : 'peor'} nivel.`
+                    : 'recibe los pesos de los demás conceptos. Este modelo no tiene sesgo.'}
+                </>
+              ) : activoConcepto ? (
                 <>
                   <strong className="text-tinta">
                     {activoConcepto.id} {activoConcepto.nombre}
                   </strong>{' '}
                   ({NOMBRE_ROL[activoConcepto.rol].toLowerCase()}): peso {firmado(pesoActivo ?? 0)},{' '}
                   {(pesoActivo ?? 0) >= 0 ? 'empuja hacia el mejor nivel' : 'empuja hacia el peor nivel'}
-                  {activoConcepto.rol === 'inmutable' && '. En inmutables el peso puede compensar la falta de sesgo del modelo.'}
+                  {sesgoDe(activoConcepto) !== undefined && `; sesgo b = ${firmado(activoConcepto.sesgo!)}`}
+                  {activoConcepto.rol === 'inmutable' &&
+                    (sesgoCentro !== undefined ? '. En inmutables el peso describe diferencias entre grupos, no causas.' : '. En inmutables el peso puede compensar la falta de sesgo del modelo.')}
                 </>
               ) : (
                 'Pase el cursor o use Tab sobre un concepto para leer su peso.'

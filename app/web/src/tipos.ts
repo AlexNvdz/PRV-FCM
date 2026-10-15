@@ -185,9 +185,18 @@ export interface Metricas {
     n_prueba: number;
     perfiles_compartidos: number;
     semilla: number;
-    fcm: { lambda_: number; alpha_l2: number; metodo_pesos?: MetodoPesos; balancear_niveles?: boolean; coef_memoria?: number; coef_influencia?: number };
+    /** `sesgo` falta en modelos entrenados antes de que la regla tuviera sesgo (equivale a false). */
+    fcm: { lambda_: number; alpha_l2: number; metodo_pesos?: MetodoPesos; balancear_niveles?: boolean; sesgo?: boolean; coef_memoria?: number; coef_influencia?: number };
     ag: Record<string, number | string>;
-    prescripcion: { beta_esfuerzo: number; delta_max: number | null; tolerancia_exito: number; clases_a_prescribir: string[] };
+    prescripcion: {
+      beta_esfuerzo: number;
+      delta_max: number | null;
+      tolerancia_exito: number;
+      clases_a_prescribir: string[];
+      /** Tope de las acciones por ausentismo: columna que lo activa (null = desactivado) y cambio máximo en [0, 1]. Faltan en modelos antiguos. */
+      condicion_columna?: string | null;
+      condicion_delta_max?: number;
+    };
     mutables_dinamicos: string[];
     aristas_excluidas?: [string, string][];
   };
@@ -232,6 +241,8 @@ export interface ConceptoGrafo {
   rol: Exclude<Rol, 'excluir'>;
   dinamico: boolean;
   codificacion: Codificacion;
+  /** Sesgo b_i de la regla (0 en los conceptos fijos). Falta en modelos antiguos. */
+  sesgo?: number;
 }
 
 export interface Influencia extends ConceptoGrafo {
@@ -261,6 +272,8 @@ export interface Graficas {
   influencias: Influencia[];
   acciones_info: AccionInfo[];
   metodo_pesos?: MetodoPesos;
+  /** Si la regla del modelo tiene sesgo. Falta en modelos antiguos (equivale a false). */
+  sesgo?: boolean;
   aristas_excluidas?: [string, string][];
   figuras?: string[];
 }
@@ -298,13 +311,15 @@ export interface PaginaFilas {
   filas: Record<string, string | number | boolean | null>[];
 }
 
-/** Una iteración de la regla de Kosko para el objetivo: A_o(t) = f(memoria + influencia), con A(t−1). */
+/** Una iteración de la regla de Kosko para el objetivo: A_o(t) = f(memoria + influencia + sesgo), con A(t−1). */
 export interface PasoInferencia {
   t: number;
   memoria: number;
   influencia: number;
   /** Parte de la influencia que aportan las acciones (constante: las acciones quedan fijas). */
   influencia_acciones: number;
+  /** k1·b_o, constante en todas las iteraciones (0 sin sesgo). */
+  sesgo: number;
   entrada: number;
   activacion: number;
 }
@@ -313,7 +328,8 @@ export interface PasoInferencia {
 export interface Inferencia {
   iteraciones: number;
   convergio: boolean;
-  parametros: { lambda: number; k1: number; k2: number; tolerancia: number };
+  /** `sesgo` es b_o, el sesgo del objetivo. */
+  parametros: { lambda: number; k1: number; k2: number; tolerancia: number; sesgo: number };
   /** Activación de cada concepto dinámico en t = 0..T; el objetivo primero. */
   series: { id: string; columna: string; nombre: string; rol: Exclude<Rol, 'excluir'>; valores: number[] }[];
   pasos: PasoInferencia[];
@@ -391,11 +407,18 @@ export interface Prescripcion {
   /** Por generación del AG: mejor costo, costo medio, activación del objetivo y mejores acciones (en el orden de `acciones`). */
   historial?: { mejor: number[]; promedio: number[]; activacion?: number[]; acciones?: number[][] };
   contribuciones?: Contribucion[];
+  /** k1·b_o: aporte constante del sesgo a la entrada del objetivo, en las unidades de las contribuciones (0 sin sesgo). */
+  aporte_sesgo: number;
+  /** Tope de las acciones por ausentismo; null si no aplica a este estudiante. `delta_max` está en [0, 1]. */
+  restriccion: null | { columna: string; nombre: string; delta_max: number; texto: string };
   reporte?: ReporteIndividual;
   perfil?: Record<string, string | number | null>;
   configuracion: {
     beta: number;
     delta_max: number | null;
+    /** Columna que activa el tope por ausentismo (null = desactivado) y cambio máximo en [0, 1]. */
+    condicion_columna: string | null;
+    condicion_delta_max: number;
     solo_incrementos: boolean;
     poblacion?: number;
     generaciones_max?: number;

@@ -545,14 +545,14 @@ function Paso3() {
         </p>
         <Defs>
           <Def t="BPTT (recomendado)">
-            <T a="bptt">Gradiente exacto</T> a través de las iteraciones del FCM y optimizador <T a="lbfgsb" /> con W en [−1, 1]. Es el más preciso (72 %
+            <T a="bptt">Gradiente exacto</T> a través de las iteraciones del FCM y optimizador <T a="lbfgsb" /> con W en [−1, 1]. Es el más preciso (79 %
             en el dataset del proyecto) y el más lento.
           </Def>
           <Def t="Regresión Ridge">
-            <T a="ridge">Regresión lineal con penalización L2</T> por concepto dinámico; <T a="tanh">tanh</T> trunca los pesos a (−1, 1). Instantánea; 71 %.
+            <T a="ridge">Regresión lineal con penalización L2</T> por concepto dinámico; <T a="tanh">tanh</T> trunca los pesos a (−1, 1). Instantánea; 77 %.
           </Def>
           <Def t="Regresión Lasso">
-            <T a="lasso">Penalización L1</T>: anula los pesos débiles y deja un mapa más simple. Instantánea; 71 %.
+            <T a="lasso">Penalización L1</T>: anula los pesos débiles y deja un mapa más simple. Instantánea; 77 %.
           </Def>
           <Def t="Correlación parcial">
             Cada peso es la <T a="correlacion-parcial">correlación parcial</T> del par, dados los demás. Describe la estructura, pero no calibra la inferencia: 48 %.
@@ -581,8 +581,8 @@ function Paso3() {
           <li>«Permitir todas» las vuelve a marcar; «Quitar inmutables hacia el objetivo» desmarca de una vez las de los inmutables.</li>
         </Pasos>
         <Aviso tipo="aviso">
-          Una arista excluida queda con peso 0 y los demás pesos se reajustan sin ella. Como la regla no tiene <T a="sesgo">sesgo</T>, quitar inmutables suele
-          bajar la exactitud. Vea <Entradas a={['mascara']} />.
+          Una arista excluida queda con peso 0 y los demás pesos se reajustan sin ella. El <T a="sesgo">sesgo</T> no es una arista: no se puede excluir.
+          Con sesgo, quitar inmutables casi no cambia la exactitud; sin sesgo la bajaba. Vea <Entradas a={['mascara']} />.
         </Aviso>
       </Bloque>
 
@@ -607,7 +607,7 @@ function Paso3() {
             artículos.
           </Def>
           <Def t="Penalización del esfuerzo (β)">
-            De 0 a 5; 0,05 por defecto. 0,05 busca el máximo efecto; 0,4 da cambios moderados. Vea <Entradas a={['beta']} />.
+            De 0 a 5; 0,4 por defecto, que da cambios moderados y distintos para cada estudiante. 0,05 busca el máximo efecto. Vea <Entradas a={['beta']} />.
           </Def>
           <Def t="Cambio máximo por acción">
             Fracción del rango de cada acción, de 0 a 1. Vacío: sin límite. Vea <Entradas a={['cambio-maximo']} />.
@@ -658,7 +658,10 @@ function Paso3() {
           <Def t="Bosque aleatorio">
             Exactitud del modelo externo de referencia. Vea <Entradas a={['bosque']} />.
           </Def>
-          <Def t="Método de W">Método usado y, debajo, si se equilibraron los niveles y cuántas aristas se excluyeron («Sin máscara» si ninguna).</Def>
+          <Def t="Método de W">
+            Método usado y, debajo, si el modelo tiene <T a="sesgo">sesgo</T> («Con sesgo» o «Sin sesgo», en los entrenados antes de que la regla lo tuviera),
+            si se equilibraron los niveles y cuántas aristas se excluyeron («Sin máscara» si ninguna).
+          </Def>
           <Def t="λ y α">Valores elegidos.</Def>
           <Def t="Entrenamiento y prueba">
             Registros de cada parte y <T a="perfiles-compartidos">perfiles compartidos</T>.
@@ -687,8 +690,8 @@ function Paso3() {
           <li>«Continuar al paso 4: motor prescriptivo», si el modelo en pantalla es el activo.</li>
         </Lista>
         <Aviso tipo="aviso">
-          Los inmutables con pesos grandes suelen compensar la falta de <T a="sesgo">sesgo</T> de la regla: no son causas. Lea los pesos como{' '}
-          <T a="asociacion">asociaciones</T>.
+          Los pesos de los inmutables describen diferencias entre grupos, no causas. En un modelo sin <T a="sesgo">sesgo</T>, además, suelen ser grandes
+          porque hacen su papel. Lea los pesos como <T a="asociacion">asociaciones</T>.
         </Aviso>
       </Bloque>
 
@@ -785,7 +788,8 @@ function Paso4() {
           </li>
           <li>
             «Prescripción con el algoritmo genético»: elija la <T a="meta">meta</T>, la penalización del esfuerzo (de 0 a 1; 0,4 por defecto) y el cambio
-            máximo (a la derecha, sin límite), y pulse «Prescribir». Las reducciones siguen la opción del entrenamiento.
+            máximo (a la derecha, sin límite), y pulse «Prescribir». Las reducciones siguen la opción del entrenamiento. Con ausentismo alto se aplica además el
+            <T a="tope-ausentismo">tope por ausentismo</T>.
           </li>
           <li>Con el resultado, «Probar en el simulador» copia las acciones recomendadas a los controles.</li>
           <li>«Preguntar al asistente por este estudiante» abre el Asistente con la pregunta ya enviada.</li>
@@ -818,7 +822,7 @@ function Paso4() {
         </Pasos>
         <Aviso tipo="info">
           Sirve para preguntas del tipo «¿qué necesitaría un estudiante con muchas ausencias para llegar al mejor nivel?»: cargue un perfil, cambie las
-          ausencias y calcule.
+          ausencias y calcule. Con más de 7 ausencias, el <T a="tope-ausentismo">tope por ausentismo</T> limita cuánto sube cada acción.
         </Aviso>
       </Bloque>
 
@@ -827,6 +831,10 @@ function Paso4() {
           <Def t="Medidores">«FCM con las acciones actuales» y «FCM con las acciones prescritas»: activación final y nivel.</Def>
           <Def t="Meta del AG">
             Nivel meta, su activación ± la <T a="tolerancia">tolerancia</T>, si la prescripción la alcanza, las generaciones que usó el AG y β.
+          </Def>
+          <Def t="Aviso de ausentismo">
+            Si el estudiante tiene ausentismo alto, un aviso con triángulo explica que cada acción solo pudo subir hasta un 15 % de su rango. Vea{' '}
+            <Entradas a={['tope-ausentismo']} />.
           </Def>
           <Def t="Tabla de acciones">
             «Acción (C_P)», «Actual», «Recomendada», «Cambio» en unidades originales y «Del rango» (vea <Entradas a={['del-rango']} />). «igual» indica que no
@@ -843,7 +851,8 @@ function Paso4() {
             mejores acciones de esa generación. Si el AG se detuvo antes del máximo, lo indica. Vea <Entradas a={['evolucion-ag']} />.
           </Def>
           <Def t="Qué empuja al objetivo">
-            <T a="aporte">Aporte</T> de cada concepto con las acciones actuales y con el plan.
+            <T a="aporte">Aporte</T> de cada concepto con las acciones actuales y con el plan. Si el modelo tiene <T a="sesgo">sesgo</T>, la fila «Sesgo del
+            objetivo (k1·b)» muestra su aporte: una constante que no cambia con el plan.
           </Def>
           <Def t="Recomendación redactada con IA">
             Pulse «Redactar con qwen2.5» para convertir la prescripción en prácticas concretas. Vea <Entradas a={['redaccion']} />.
@@ -979,7 +988,8 @@ function Asistente() {
           ))}
         </Defs>
         <p>
-          En las tarjetas de un estudiante, el <T a="plan">plan moderado</T> usa β = 0,4 y el plan máximo, el β del entrenamiento.
+          En las tarjetas de un estudiante, el <T a="plan">plan moderado</T> usa β = 0,4 y el plan máximo, β = 0,05. Si se aplicó el{' '}
+          <T a="tope-ausentismo">tope por ausentismo</T>, la tarjeta lo avisa.
         </p>
       </Bloque>
 
@@ -1068,7 +1078,10 @@ function Graficas() {
           <li>Formas: un cuadrado oscuro es una acción, un círculo hueco un mutable y un punto gris un inmutable. Los mutables dinámicos van en un anillo interior.</li>
           <li>El grosor de cada flecha es la fuerza del peso hacia el objetivo y su color, el signo: azul acerca al mejor nivel y rojo aleja.</li>
           <li>Pase el cursor o recorra los conceptos con la tecla Tab: el texto de abajo da el peso exacto y su sentido.</li>
-          <li>«Ver tabla» lista los pesos hacia el objetivo, del más fuerte al más débil.</li>
+          <li>
+            Bajo el objetivo, «b = …» es su <T a="sesgo">sesgo</T>; un mutable dinámico lo lleva bajo su nombre. Sin sesgo (modelos antiguos) no aparece.
+          </li>
+          <li>«Ver tabla» lista los sesgos y los pesos hacia el objetivo, del más fuerte al más débil.</li>
         </Lista>
       </Bloque>
 
@@ -1093,7 +1106,8 @@ function Graficas() {
           </Def>
           <Def t="Inferencia paso a paso">
             Eje horizontal: la iteración t; vertical: la activación del objetivo, de 0 a 1, sobre las bandas de los niveles. Azul con las acciones
-            actuales, naranja con las del simulador; la línea vertical marca la iteración cuya cuenta se muestra debajo.
+            actuales, naranja con las del simulador; la línea vertical marca la iteración cuya cuenta se muestra debajo. La cuenta separa memoria,
+            influencia de las acciones, influencia del resto y, si el modelo lo tiene, el sesgo k1·b, igual en todas las iteraciones.
           </Def>
           <Def t="Acciones actuales y prescritas">
             Una pareja de barras por acción: la actual (azul) y la prescrita o la mejor de la generación elegida (naranja), como fracción del rango de la
@@ -1124,29 +1138,31 @@ function Formulas() {
       </Bloque>
 
       <Bloque id="formulas-inferencia" titulo="Inferencia del FCM">
-        <Formula lectura="Regla de Kosko modificada: solo los conceptos dinámicos se actualizan; los demás quedan fijos. k1 = k2 = 1.">
-          A_i(t+1) = f( k2·A_i(t) + k1·Σ_j w_ji·A_j(t) )
+        <Formula lectura="Regla de Kosko modificada: solo los conceptos dinámicos se actualizan; los demás quedan fijos. k1 = k2 = 1. b_i es el sesgo, en [−1, 1]; vale 0 en los modelos sin sesgo.">
+          A_i(t+1) = f( k2·A_i(t) + k1·(Σ_j w_ji·A_j(t) + b_i) )
         </Formula>
         <Formula lectura="Sigmoide con pendiente λ.">f(x) = 1 / (1 + e^(−λx))</Formula>
         <Formula lectura="Convergencia: se detiene cuando ningún cambio supera 0,00001, o a las 100 iteraciones.">máx_i |A_i(t+1) − A_i(t)| {'<'} 0,00001</Formula>
         <Formula lectura="Nivel predicho: el nivel cuyo valor normalizado está más cerca de la activación final.">nivel = argmin_nivel |A*_T − valor(nivel)|</Formula>
-        <Formula lectura="Cuenta de «Inferencia paso a paso»: la entrada del objetivo en cada iteración se separa en memoria, influencia de las acciones (constante, porque las acciones quedan fijas) e influencia del resto de conceptos.">
-          x_T(t) = k2·A_T(t−1) + k1·Σ_acciones w·a + k1·Σ_resto w·A(t−1),   A_T(t) = f(x_T(t))
+        <Formula lectura="Cuenta de «Inferencia paso a paso»: la entrada del objetivo en cada iteración se separa en memoria, influencia de las acciones (constante, porque las acciones quedan fijas), influencia del resto de conceptos y sesgo (constante).">
+          x_T(t) = k2·A_T(t−1) + k1·Σ_acciones w·a + k1·Σ_resto w·A(t−1) + k1·b_T,   A_T(t) = f(x_T(t))
         </Formula>
       </Bloque>
 
       <Bloque id="formulas-pesos" titulo="Aprendizaje de W">
-        <Formula lectura="BPTT: error cuadrático ponderado del objetivo tras 30 iteraciones más la penalización L2; L-BFGS-B mantiene cada peso en [−1, 1].">
-          L(W) = media_r [ v_r · (A_T,r − y_r)² ] + α · Σ w²
+        <Formula lectura="BPTT: error cuadrático ponderado del objetivo tras 30 iteraciones más la penalización L2, que incluye el sesgo; L-BFGS-B mantiene cada peso y cada sesgo en [−1, 1].">
+          L(W, b) = media_r [ v_r · (A_T,r − y_r)² ] + α · (Σ w² + Σ b²)
         </Formula>
-        <Formula lectura="Ridge y Lasso: z es lo que debe sumar la influencia para que el valor observado y sea un punto fijo de la regla; y se recorta antes a [0,05; 0,95].">
-          z = ( logit(y)/λ − k2·y ) / k1 ≈ Σ_j w_ji·x_j
+        <Formula lectura="Ridge y Lasso: z es lo que deben sumar la influencia y el sesgo para que el valor observado y sea un punto fijo de la regla; y se recorta antes a [0,05; 0,95].">
+          z = ( logit(y)/λ − k2·y ) / k1 ≈ Σ_j w_ji·x_j + c
         </Formula>
-        <Formula lectura="Penalizaciones: Ridge (L2) y Lasso (L1), sin intercepto; n es el número de registros.">
-          Ridge: ‖z − X·w‖² + α·n·‖w‖²     Lasso: ‖z − X·w‖² / (2n) + α·‖w‖₁
+        <Formula lectura="Penalizaciones: Ridge (L2) y Lasso (L1); el intercepto c no se penaliza; n es el número de registros.">
+          Ridge: ‖z − X·w − c‖² + α·n·‖w‖²     Lasso: ‖z − X·w − c‖² / (2n) + α·‖w‖₁
         </Formula>
-        <Formula lectura="Truncamiento de los coeficientes de la regresión al rango de un peso.">w_ji = tanh(β_j) ∈ (−1, 1)</Formula>
-        <Formula lectura="Correlación parcial: P es la inversa de la matriz de covarianzas, con contracción de Ledoit-Wolf.">w_ji = −P_ji / √(P_jj · P_ii)</Formula>
+        <Formula lectura="Truncamiento de los coeficientes y del intercepto de la regresión al rango de un peso: el intercepto truncado es el sesgo.">
+          w_ji = tanh(β_j) ∈ (−1, 1),   b_i = tanh(c)
+        </Formula>
+        <Formula lectura="Correlación parcial: P es la inversa de la matriz de covarianzas, con contracción de Ledoit-Wolf. No tiene sesgo (b = 0).">w_ji = −P_ji / √(P_jj · P_ii)</Formula>
         <Formula lectura="Pesos de los registros al equilibrar los niveles: n registros, k niveles y n_nivel registros del nivel del registro.">
           v_r = n / (k · n_nivel), con media 1
         </Formula>
@@ -1239,10 +1255,12 @@ function Problemas() {
       <Bloque id="problemas-prescripcion" titulo="Prescripciones">
         <Defs>
           <Def t="El AG lleva todas las acciones al máximo">
-            β es bajo. Súbalo (0,4 da planes moderados) o fije un cambio máximo por acción.
+            β es bajo (el entrenamiento usaba 0,05 por defecto antes). Súbalo (0,4, el valor por defecto, da planes moderados) o fije un cambio máximo por acción.
           </Def>
           <Def t="«El algoritmo genético no encontró un cambio en las acciones»">
-            Las acciones pesan poco en el mapa (revise sus pesos), β es alto o el estudiante ya está en la meta. Pruebe una meta intermedia, baje β o
+            Ningún cambio acerca a la meta lo bastante para compensar el esfuerzo: las acciones pesan poco en el mapa (revise sus pesos), β es alto, el
+            estudiante ya está en la meta o, con ausentismo alto, el <T a="tope-ausentismo">tope por ausentismo</T> deja subir tan poco que el avance no
+            compensa. Pruebe una meta intermedia, baje β o
             permita reducciones. Las variables que casi determinan el objetivo, como notas parciales, restan peso a las acciones.
           </Def>
           <Def t="No alcanza la meta">
@@ -1293,7 +1311,7 @@ function Consejos() {
           <li>Compare siempre la exactitud con la clase mayoritaria y con el bosque aleatorio.</li>
           <li>Con niveles desbalanceados, mire la exactitud equilibrada y el recall del nivel de riesgo.</li>
           <li>Use la cifra del bosque aleatorio como estimación prudente del éxito.</li>
-          <li>Lea los pesos como asociaciones; los de los inmutables, además, compensan la falta de sesgo.</li>
+          <li>Lea los pesos como asociaciones; los de los inmutables describen diferencias entre grupos, no causas.</li>
         </Lista>
       </Bloque>
       <Bloque id="consejos-recomendar" titulo="Al recomendar">
