@@ -432,6 +432,25 @@ def test_reporte_individual_traduce_los_deltas_a_frases():
     assert numero(1234.5) == "1.234,5" and numero(-0.0001, 2) == "0" and numero(40.0) == "40"
 
 
+def test_reporte_agrupa_las_acciones_binarias():
+    def campana(n, antes, despues):
+        return {"columna": f"AcceptedCmp{n}", "nombre": f"Campaña {n}", "min": 0, "max": 1, "categorias": ["0", "1"],
+                "actual": {"valor": float(antes), "categoria": str(antes)}, "recomendada": {"valor": float(despues), "categoria": str(despues)},
+                "cambio": float(despues - antes)}
+
+    prescripcion = {
+        "acciones": [campana(1, 0, 1), campana(2, 0, 0), campana(3, 1, 1), campana(4, 0, 0), campana(5, 0, 1)],
+        "base": {"activacion": 0.2, "nivel": "0"},
+        "prescrito": {"activacion": 0.7, "nivel": "1"},
+        "meta": {"valor": 1.0, "nivel": "1", "tolerancia": 0.5},
+    }
+    reporte = reporte_individual(prescripcion, "Respuesta", "este cliente")
+    assert reporte["plan"].startswith("Para este cliente se recomienda activar Campaña 1 y Campaña 5.")
+    assert "no activar Campaña 2 y Campaña 4" in reporte["plan"] and "mantener activa Campaña 3" in reporte["plan"]
+    assert "esfuerzo de cambiarlas." in reporte["plan"]
+    assert reporte["acciones"] == ["Activar Campaña 1 y Campaña 5."]
+
+
 def test_resumen_de_prescripciones_del_conjunto_de_prueba(entrenado):
     r, modelo, _ = entrenado
     resumen = resumen_prescripciones(r.recomendaciones, modelo.acciones(), "Deserción", "No", "desercion", r.reporte())

@@ -21,7 +21,7 @@ from prvfcm.prescripcion import PrescriptorPRVFCM
 from prvfcm.preprocesamiento import Preprocesador, cargar_datos, dividir_entrenamiento_prueba, grupos_por_perfil
 from prvfcm.seleccion import validacion_cruzada_fcm
 
-RUTA_DATOS = Path(__file__).resolve().parents[1] / "data" / "xAPI-Edu-Data-expanded-4800.csv"
+RUTA_DATOS = Path(__file__).resolve().parents[1] / "data" / "xAPI-Edu-Data.csv"
 sin_datos = pytest.mark.skipif(not RUTA_DATOS.exists(), reason="dataset no disponible")
 
 
@@ -290,6 +290,26 @@ def test_tope_condicionado_solo_limita_si_la_condicion_esta_activa():
     assert prescriptor_pequeno(beta_esfuerzo=0.0).limites(activo)[1][0] == 1.0
 
 
+def test_acciones_discretas_solo_toman_valores_de_su_rejilla():
+    prescriptor = prescriptor_pequeno(beta_esfuerzo=0.0)
+    prescriptor.rejillas = [np.array([0.0, 1.0])]  # C1 se activa o no.
+    resultado = prescriptor.prescribir(np.array([0.4, 0.0, 0.5, 0.3]), np.random.default_rng(0))
+    assert resultado.acciones_recomendadas[0] == 1.0  # Activarla acerca el objetivo.
+    assert set(np.unique(resultado.historial_acciones)) <= {0.0, 1.0}
+    # Cada evaluación del costo ve el gen ya redondeado: 0.37 cuesta lo mismo que 0.
+    costo = prescriptor.funcion_costo(np.array([0.4, 0.0, 0.5, 0.3]))
+    np.testing.assert_allclose(costo(np.array([[0.37]])), costo(np.array([[0.0]])))
+    # Con un esfuerzo alto, no activarla cuesta menos: queda en 0, no en un valor intermedio.
+    caro = prescriptor_pequeno(beta_esfuerzo=5.0)
+    caro.rejillas = [np.array([0.0, 1.0])]
+    assert caro.prescribir(np.array([0.4, 0.0, 0.5, 0.3]), np.random.default_rng(0)).acciones_recomendadas[0] == 0.0
+    # Con un tope, el valor admitido más cercano dentro de los límites es el actual.
+    np.testing.assert_allclose(caro.discretizar(np.array([[0.9]]), np.array([0.4, 0.0, 0.5, 0.3])), [[1.0]])
+    tope = prescriptor_pequeno(delta_max=0.3)
+    tope.rejillas = [np.array([0.0, 1.0])]
+    np.testing.assert_allclose(tope.discretizar(np.array([[0.3]]), np.array([0.4, 0.0, 0.5, 0.3])), [[0.0]])
+
+
 def test_metricas():
     deseado, obtenido = np.ones(4), np.array([0.9, 0.8, 0.5, 1.0])
     assert mae(deseado, obtenido) == pytest.approx(0.2)
@@ -316,7 +336,7 @@ def test_division_agrupada_separa_perfiles_y_estratifica():
 
 @sin_datos
 def test_validacion_cruzada_devuelve_una_fila_por_combinacion():
-    datos = cargar_datos(RUTA_DATOS).sample(900, random_state=0)
+    datos = cargar_datos(RUTA_DATOS)
     config = ConfigSeleccion(pliegues=3, rejilla_lambda=(1.0, 10.0), rejilla_alpha=(1e-3,))
     tabla = validacion_cruzada_fcm(datos, grupos_por_perfil(datos), config=config, semilla=0)
     assert len(tabla) == 2 and set(tabla["lambda"]) == {1.0, 10.0}

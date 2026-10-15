@@ -101,6 +101,10 @@ test('analizar_estudiante acepta "id" como alias de id_estudiante', async () => 
   // Los dos planes llevan β explícito: con el β del modelo (0.4 por defecto) serían iguales.
   const betas = llamadas.filter(([metodo]) => metodo === 'prescribir').map(([, params]) => params.beta);
   assert.deepEqual(betas.sort(), [0.05, 0.4]);
+  // Un modelo entrenado con un β mayor (marketing, β = 1) lo conserva en el plan moderado.
+  llamadas.length = 0;
+  await ejecutarHerramienta('analizar_estudiante', { id: 14 }, { ...ctx, resultados: { metricas: { configuracion: { prescripcion: { beta_esfuerzo: 1 } } } } });
+  assert.deepEqual(llamadas.filter(([metodo]) => metodo === 'prescribir').map(([, params]) => params.beta).sort(), [0.05, 1]);
 
   prescripcion.restriccion = { columna: 'StudentAbsenceDays', nombre: 'Ausencias', delta_max: 0.15, texto: 'Con más de 7 ausencias, cada acción sube como máximo 15 %.' };
   const conRestriccion = await ejecutarHerramienta('analizar_estudiante', { id: 14 }, ctx);

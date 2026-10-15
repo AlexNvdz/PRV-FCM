@@ -231,7 +231,8 @@ class PrescriptorAG:
         estado_deseado = {m.pre.indice(c): v for c, v in config.estado_deseado.items()}
         pesos = {m.pre.indice(c): v for c, v in config.pesos_objetivo.items()}
         prescriptor = PrescriptorPRVFCM(
-            m.fcm, m.pre.indices_accion, estado_deseado, pesos, m.config_ag, config, indice_condicion(m.pre, config)
+            m.fcm, m.pre.indices_accion, estado_deseado, pesos, m.config_ag, config, indice_condicion(m.pre, config),
+            m.pre.rejillas_accion(),
         )
         return prescriptor, meta
 

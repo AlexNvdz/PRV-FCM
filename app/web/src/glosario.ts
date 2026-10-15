@@ -90,7 +90,7 @@ export const GLOSARIO = {
       'Peso que la función de costo del algoritmo genético da al tamaño del cambio en las acciones. Con β pequeño (0,05) el AG busca el máximo efecto y suele llevar las acciones al tope; con β mayor prefiere cambios pequeños aunque el avance sea algo menor. Con 0,4, el valor por defecto, los planes son moderados y distintos para cada estudiante. No se confunde con β_j de la fórmula w_ji = tanh(β_j), que es un coeficiente de la regresión.',
     formula: 'costo(a) = |A*_T(a) − D_T| + β · media_k |a_k − a_k,actual|',
     donde:
-      'Paso 3 («Penalización del esfuerzo (β)», de 0 a 5; 0,4 por defecto) y paso 4 («Costo de intervención (β)» o «Penalización del esfuerzo», de 0 a 1; 0,4 por defecto).',
+      'Paso 3 («Penalización del esfuerzo (β)», de 0 a 5; 0,4 por defecto) y paso 4 («Costo de intervención (β)» o «Penalización del esfuerzo», de 0 a 1, o hasta el β del modelo si es mayor; parten del β con que se entrenó el modelo, 0,4 si no lo guarda).',
     ver: ['funcion-costo', 'plan', 'cambio-maximo'],
     claves: 'beta esfuerzo costo de intervencion penalizacion',
     simbolo: true,
@@ -163,8 +163,16 @@ export const GLOSARIO = {
     definicion:
       'Variable que la institución o el estudiante pueden cambiar directamente: horas de estudio, participación, recursos consultados, tutorías, becas. Es lo único que el algoritmo genético modifica. Debe ser numérica u ordinal, porque el AG necesita poder aumentarla o reducirla; una columna nominal o one-hot no sirve. Se necesita al menos una.',
     donde: 'Paso 2 (rol «Acción (C_P)»), paso 4 (tabla por estudiante, simulador y perfil de riesgo) e Informe.',
-    ver: ['c-p', 'cromosoma', 'permitir-reducciones'],
+    ver: ['c-p', 'cromosoma', 'permitir-reducciones', 'accion-binaria'],
     claves: 'acciones prescriptivo intervencion',
+  },
+  'accion-binaria': {
+    termino: 'Acción binaria',
+    definicion:
+      'Acción ordinal de dos categorías, por ejemplo cada campaña de marketing (0 = no activada, 1 = activada). El AG solo propone una de sus dos categorías, nunca un valor intermedio: la activa o no. La tabla de acciones muestra el valor actual como «Activa» o «No activa» y el recomendado como «Activar», «No activar», «Mantener activa» o «Desactivar»; en los formularios se elige «Activa» o «No activa».',
+    donde: 'Paso 2 (acción ordinal con orden de dos categorías), tabla de acciones de una prescripción, tabla por registro del paso 4, simulador, perfil de riesgo, Consulta (también su seguimiento) y tarjetas del Asistente.',
+    ver: ['accion', 'ordinal', 'cromosoma'],
+    claves: 'binaria activar desactivar campaña campana marketing dos categorias',
   },
   activacion: {
     termino: 'Activación',
@@ -425,9 +433,9 @@ export const GLOSARIO = {
   },
   'dataset-proyecto': {
     termino: 'Dataset del proyecto',
-    expansion: 'xAPI-Edu-Data expandido a 4800 registros',
+    expansion: 'xAPI-Edu-Data, 480 registros',
     definicion:
-      'Dataset de ejemplo que se registra, con su esquema ya confirmado, cuando el servidor arranca sin ningún dataset: los 480 estudiantes originales de xAPI-Edu-Data (Kaggle) más 4320 variantes sintéticas. El objetivo es Class, con los niveles L (bajo), M (medio) y H (alto), y las acciones son manos levantadas, recursos visitados, anuncios consultados y grupos de discusión. Por las variantes conviene la división agrupada.',
+      'Dataset de ejemplo que se registra, con su esquema ya confirmado, cuando el servidor arranca sin ningún dataset: los 480 estudiantes de xAPI-Edu-Data (Kaggle). El objetivo es Class, con los niveles L (bajo), M (medio) y H (alto), y las acciones son manos levantadas, recursos visitados, anuncios consultados y grupos de discusión. Varios estudiantes comparten perfil inmutable (277 perfiles), por eso conviene la división agrupada.',
     donde: 'Datos (marcado como «dataset del proyecto»).',
     ver: ['xapi', 'division-agrupada'],
     claves: 'ejemplo kaggle class',
@@ -1107,7 +1115,7 @@ export const GLOSARIO = {
   plan: {
     termino: 'Plan moderado y plan máximo',
     definicion:
-      'Dos prescripciones que el asistente muestra para un estudiante. El plan moderado usa β = 0,4, el valor por defecto: cambios pequeños, preferibles para recomendar. El plan máximo usa β = 0,05 y busca el mayor efecto posible; sirve de techo. Con ausentismo alto, el tope por ausentismo limita a los dos.',
+      'Dos prescripciones que el asistente muestra para un estudiante. El plan moderado usa β = 0,4, el valor por defecto, o el β del modelo si es mayor: cambios pequeños, preferibles para recomendar. El plan máximo usa β = 0,05 y busca el mayor efecto posible; sirve de techo. Con ausentismo alto, el tope por ausentismo limita a los dos.',
     donde: 'Tarjetas del asistente (columnas «Actual», «Moderado» y «Máximo»).',
     ver: ['beta', 'asistente', 'tope-ausentismo'],
   },

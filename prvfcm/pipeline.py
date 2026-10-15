@@ -350,7 +350,7 @@ def reconstruir(
     prescritas = []
     for k, (estado, semilla_k) in enumerate(zip(estados, semillas), start=1):
         deseado = {int(i): float(estado[i]) for i in pre.indices_dinamicos}
-        prescriptor = PrescriptorPRVFCM(fcm, pre.indices_accion, deseado, None, config_ag, config)
+        prescriptor = PrescriptorPRVFCM(fcm, pre.indices_accion, deseado, None, config_ag, config, rejillas=pre.rejillas_accion())
         prescritas.append(prescriptor.prescribir(estado, np.random.default_rng(semilla_k)).acciones_recomendadas)
         if al_avanzar is not None:
             al_avanzar(k, len(estados))
@@ -537,7 +537,7 @@ def ejecutar(
             )
     r.prescriptor = PrescriptorPRVFCM(
         r.fcm, pre.indices_accion, estado_deseado, pesos_objetivo, r.config_ag, config_presc,
-        indice_condicion(pre, config_presc),
+        indice_condicion(pre, config_presc), pre.rejillas_accion(),
     )
     avisar("prescripcion", r)
     r.resultados = r.prescriptor.prescribir_lote(

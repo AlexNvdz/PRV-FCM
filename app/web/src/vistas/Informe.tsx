@@ -13,7 +13,7 @@ import { RedaccionIA } from '../componentes/RedaccionIA';
 import { Aviso, Cargando, Encabezado, estiloControl, NivelChip, Seccion, Vacio } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import { useModelo } from '../hooks';
-import { entero, mayuscula, NOMBRE_METODO, num, pct, sujetoDe } from '../utilidades';
+import { entero, filaMancuerna, mayuscula, NOMBRE_METODO, num, pct, pctDe, sujetoDe } from '../utilidades';
 import type { Reconstruccion } from '../tipos';
 import { DetalleEstudiante } from './DetalleEstudiante';
 
@@ -152,6 +152,7 @@ export function Informe() {
   const figuras = g.figuras ?? [];
   const r = resumen.data;
   const rangos = new Map(g.acciones.map((a) => [a.columna, a]));
+  const binaria = (columna: string) => (g.acciones_info ?? []).find((i) => i.columna === columna)?.categorias?.length === 2;
   const s = sujetoDe(modelo.data.sujeto);
 
   return (
@@ -207,8 +208,8 @@ export function Informe() {
                   {r.acciones.map((a) => (
                     <tr key={a.columna} className="border-t border-linea">
                       <th scope="row" className="py-1.5 text-left font-normal">{a.nombre}</th>
-                      <td className="py-1.5 text-right">{num(a.actual_media, a.decimales)}</td>
-                      <td className="py-1.5 text-right font-medium">{num(a.recomendada_media, a.decimales)}</td>
+                      <td className="py-1.5 text-right">{binaria(a.columna) ? `${pctDe(a.actual_media, 0)} activa` : num(a.actual_media, a.decimales)}</td>
+                      <td className="py-1.5 text-right font-medium">{binaria(a.columna) ? `${pctDe(a.recomendada_media, 0)} activa` : num(a.recomendada_media, a.decimales)}</td>
                       <td className="py-1.5 text-right">{pct(a.pct_aumenta, 0)}</td>
                       <td className="py-1.5 text-right">{pct(a.pct_igual, 0)}</td>
                     </tr>
@@ -259,14 +260,14 @@ export function Informe() {
               <GraficaMancuernas
                 titulo={nivel ? `Acciones del nivel ${nivel}: media actual y recomendada` : 'Acciones: media actual y recomendada'}
                 descripcion="Unidades originales del dataset."
-                filas={r.acciones.map((a) => ({ nombre: a.nombre, desde: a.actual_media, hasta: a.recomendada_media, min: rangos.get(a.columna)?.min, max: rangos.get(a.columna)?.max }))}
+                filas={r.acciones.map((a) => filaMancuerna({ ...a, min: rangos.get(a.columna)?.min, max: rangos.get(a.columna)?.max }, (g.acciones_info ?? []).find((i) => i.columna === a.columna)?.categorias))}
               />
               <RedaccionIA
                 key={nivel}
                 modeloId={modelo.data.id}
                 pedido={{ tipo: 'poblacion', nivel: nivel || null }}
                 titulo="Recomendaciones institucionales con IA"
-                descripcion="qwen2.5 redacta un plan para docentes y directivos a partir de este resumen. Revíselo antes de compartirlo."
+                descripcion="qwen2.5 redacta un plan de acción a partir de este resumen. Revíselo antes de compartirlo."
               />
             </div>
           </div>

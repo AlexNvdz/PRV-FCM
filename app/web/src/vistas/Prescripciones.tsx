@@ -12,7 +12,7 @@ import { Aviso, Boton, Cargando, Clase, Encabezado, estiloControl, Formula, Nive
 import { useDatasetActivo } from '../contexto';
 import { useDataset, useModelo } from '../hooks';
 import type { Graficas, Metricas } from '../tipos';
-import { clase, entero, firmado, mayuscula, num, pct, pctDe, sujetoDe, sujetoDeDataset, type SujetoTexto } from '../utilidades';
+import { clase, entero, esBinaria, filaMancuerna, firmado, mayuscula, num, pct, pctDe, recomendacionAccion, sujetoDe, sujetoDeDataset, type SujetoTexto } from '../utilidades';
 import { DetalleEstudiante } from './DetalleEstudiante';
 import { PerfilRiesgo } from './PerfilRiesgo';
 
@@ -79,6 +79,7 @@ function Recomendaciones({ modeloId, g, m, s, alElegir }: { modeloId: string; g:
   const [orden, setOrden] = useState<{ columna: string; desc: boolean }>({ columna: `${g.objetivo}_fcm_base`, desc: false });
   const cantidad = 20;
   const niveles = Object.entries(g.niveles).sort((a, b) => a[1] - b[1]).map(([n]) => n);
+  const categorias = Object.fromEntries((g.acciones_info ?? []).map((a) => [a.columna, a.categorias]));
   const consulta = useQuery({
     queryKey: ['recomendaciones', modeloId, desde, clasePrescrita, exito, orden],
     queryFn: () => api.recomendaciones(modeloId, { desde, cantidad, clase: clasePrescrita || undefined, exito: exito === '' ? null : exito === '1', orden: orden.columna, desc: orden.desc }),
@@ -155,6 +156,20 @@ function Recomendaciones({ modeloId, g, m, s, alElegir }: { modeloId: string; g:
                   </td>
                   {g.acciones.map((a) => {
                     const cambio = Number(f[`${a.columna}_cambio`]);
+                    const accion = { categorias: categorias[a.columna] };
+                    if (esBinaria(accion)) {
+                      // La decisión (Activar, Mantener activa…) ya dice el estado actual y el cambio.
+                      const valor = (sufijo: string) => {
+                        const x = Number(f[`${a.columna}_${sufijo}`]);
+                        return { valor: x, categoria: accion.categorias?.[Math.round(x)] };
+                      };
+                      const decision = recomendacionAccion({ ...accion, actual: valor('actual'), recomendada: valor('recomendado') });
+                      return (
+                        <td key={a.columna} className="whitespace-nowrap px-3 py-2 text-right">
+                          {Math.abs(cambio) < 1e-6 ? <span className="text-tinta-2">{decision}</span> : <strong>{decision}</strong>}
+                        </td>
+                      );
+                    }
                     return (
                       <td key={a.columna} className="whitespace-nowrap px-3 py-2 text-right">
                         {num(Number(f[`${a.columna}_actual`]))} → <strong>{num(Number(f[`${a.columna}_recomendado`]))}</strong>
@@ -238,7 +253,7 @@ export function Prescripciones() {
           <GraficaMancuernas
             titulo="Acciones: nivel medio actual y recomendado"
             descripcion="Unidades originales del dataset."
-            filas={g.acciones.map((a) => ({ nombre: a.nombre, desde: a.actual_media, hasta: a.recomendada_media, min: a.min, max: a.max }))}
+            filas={g.acciones.map((a) => filaMancuerna(a, (g.acciones_info ?? []).find((i) => i.columna === a.columna)?.categorias))}
           />
           {segmentos.length > 0 && (
             <GraficaMancuernas

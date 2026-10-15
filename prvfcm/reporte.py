@@ -57,8 +57,39 @@ def _valor(accion: dict, clave: str) -> str:
     return numero(dato["valor"], decimales_de(accion.get("min", 0.0), accion.get("max", 100.0)))
 
 
+def es_binaria(accion: dict) -> bool:
+    """Acción que se activa o no (ordinal de dos categorías, como una campaña): el AG solo le da esos dos valores."""
+    return len(accion.get("categorias") or []) == 2
+
+
+# Verbos de las frases de acciones binarias; ``agrupar`` junta las que comparten verbo.
+VERBOS_BINARIOS = ("activar", "desactivar", "no activar", "mantener activa")
+
+
+def agrupar(frases: list[str]) -> list[str]:
+    """Junta las acciones binarias con el mismo verbo: «activar A» y «activar B» pasan a «activar A y B»."""
+    grupos: dict[str, list[str]] = {}
+    salida: list[str] = []
+    for frase in frases:
+        verbo = next((v for v in VERBOS_BINARIOS if frase.startswith(v + " ")), None)
+        if verbo is None:
+            salida.append(frase)
+            continue
+        if verbo not in grupos:
+            grupos[verbo] = []
+            salida.append(verbo)
+        grupos[verbo].append(frase[len(verbo) + 1:])
+    return [f"{f} {unir(grupos[f])}" if f in grupos else f for f in salida]
+
+
 def frase_accion(accion: dict) -> tuple[str, bool]:
     """Frase de una acción y si cambia. ``accion`` sigue el formato de ``ModeloPRVFCM.prescribir``."""
+    if es_binaria(accion):
+        apagada = accion["categorias"][0]
+        antes, despues = accion["actual"].get("categoria") != apagada, accion["recomendada"].get("categoria") != apagada
+        if antes == despues:
+            return f"{'mantener activa' if antes else 'no activar'} {accion['nombre']}", False
+        return f"{'desactivar' if antes else 'activar'} {accion['nombre']}", True
     rango = (accion.get("max", 1.0) - accion.get("min", 0.0)) or 1.0
     fraccion = accion["cambio"] / rango
     actual, recomendada = _valor(accion, "actual"), _valor(accion, "recomendada")
@@ -89,8 +120,8 @@ def reporte_individual(prescripcion: dict, nombre_objetivo: str, sujeto: str = "
     texto completo y sus partes.
     """
     frases = [frase_accion(a) for a in prescripcion["acciones"]]
-    cambios = [f for f, cambia in frases if cambia]
-    mantener = [f for f, cambia in frases if not cambia]
+    cambios = agrupar([f for f, cambia in frases if cambia])
+    mantener = agrupar([f for f, cambia in frases if not cambia])
     base, prescrito, meta = prescripcion["base"], prescripcion["prescrito"], prescripcion["meta"]
 
     if cambios:
@@ -98,7 +129,7 @@ def reporte_individual(prescripcion: dict, nombre_objetivo: str, sujeto: str = "
     else:
         plan = f"Para {sujeto} el algoritmo genético no encontró un cambio en las acciones cuyo avance hacia la meta compense el esfuerzo."
     if mantener and cambios:
-        plan += f" Además, {unir(mantener)}: el modelo no espera un beneficio que compense el esfuerzo de cambiarla{'s' if len(mantener) > 1 else ''}."
+        plan += f" Además, {unir(mantener)}: el modelo no espera un beneficio que compense el esfuerzo de cambiarla{'s' if sum(not cambia for _, cambia in frases) > 1 else ''}."
 
     llega = abs(prescrito["activacion"] - meta["valor"]) <= meta["tolerancia"] + 1e-9
     resultado = (
@@ -225,14 +256,27 @@ def resumen_prescripciones(
                 f"Con sus acciones actuales lo logra el {porcentaje(p['PSR_base'])}. Un bosque aleatorio independiente "
                 f"confirma el mejor nivel para el {porcentaje(e['PSR_externo'])} (antes {porcentaje(e['PSR_externo_base'])}): es la cifra prudente."
             )
+    articulo = "las" if femenino else "los"
+    binarias = {a["columna"] for a in acciones if es_binaria(a)}
+    activadas = [
+        f"{a['nombre']} al {porcentaje(a['pct_aumenta'], 0)}"
+        for a in sorted(filas_acciones, key=lambda f: -f["pct_aumenta"])
+        if a["columna"] in binarias and a["pct_aumenta"] > 0
+    ]
+    if activadas:
+        partes.append(f"Se prescribe activar {unir(activadas)} de {articulo} {plural}.")
+    elif binarias:
+        partes.append(f"El algoritmo genético no activa ninguna de {unir([a['nombre'] for a in acciones if a['columna'] in binarias])}.")
     frases = []
     for a in sorted(filas_acciones, key=lambda f: -f["pct_aumenta"]):
+        if a["columna"] in binarias:
+            continue
         if a["pct_aumenta"] >= 50:
             frases.append(
-                f"aumentar {a['nombre']} (al {porcentaje(a['pct_aumenta'], 0)} de {'las' if femenino else 'los'} {plural}; de {numero(a['actual_media'], a['decimales'])} "
+                f"aumentar {a['nombre']} (al {porcentaje(a['pct_aumenta'], 0)} de {articulo} {plural}; de {numero(a['actual_media'], a['decimales'])} "
                 f"a {numero(a['recomendada_media'], a['decimales'])} en promedio)"
             )
-    iguales = [a["nombre"] for a in filas_acciones if a["pct_igual"] >= 50]
+    iguales = [a["nombre"] for a in filas_acciones if a["pct_igual"] >= 50 and a["columna"] not in binarias]
     if frases:
         partes.append(f"La recomendación más frecuente es {unir(frases)}.")
     if iguales:

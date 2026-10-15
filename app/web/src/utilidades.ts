@@ -1,5 +1,5 @@
 // Formatos y ayudas compartidas.
-import { SUJETO_POR_DEFECTO, type Activacion, type Codificacion, type DatasetResumen, type MetodoPesos, type PerfilModelo, type ReglaInferencia, type Rol, type Sujeto } from './tipos';
+import { SUJETO_POR_DEFECTO, type Activacion, type Codificacion, type DatasetResumen, type MetodoPesos, type PerfilModelo, type ReglaInferencia, type Rol, type Sujeto, type ValorOriginal } from './tipos';
 
 const numero = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
 
@@ -141,10 +141,36 @@ export function pasoAccion(accion: RangoAccion) {
   return rango > 20 ? 1 : rango > 2 ? 0.1 : 0.01;
 }
 
-/** Valor de una acción en unidades originales; si es ordinal, la categoría que le corresponde. */
+/** Acción ordinal de dos categorías (campañas): la primera es «no activada» y la segunda «activada». */
+export const esBinaria = (accion: RangoAccion) => accion.categorias?.length === 2;
+const activa = (accion: RangoAccion, v: ValorOriginal) => v.categoria === accion.categorias?.[1];
+
+/** Fila de la gráfica de mancuernas: la media de una acción binaria es la proporción de registros con ella activa, y se grafica en %. */
+export function filaMancuerna(a: { nombre: string; actual_media: number; recomendada_media: number; min?: number; max?: number }, categorias?: string[]) {
+  return categorias?.length === 2
+    ? { nombre: `${a.nombre} (% activa)`, desde: 100 * a.actual_media, hasta: 100 * a.recomendada_media, min: 0, max: 100 }
+    : { nombre: a.nombre, desde: a.actual_media, hasta: a.recomendada_media, min: a.min, max: a.max };
+}
+
+/** Valor de una acción en unidades originales; si es ordinal, la categoría que le corresponde, y si es binaria, Activa o No activa. */
 export function etiquetaAccion(accion: RangoAccion, valor: number) {
+  if (esBinaria(accion)) return Math.round(valor) >= 1 ? 'Activa' : 'No activa';
   if (accion.categorias) return accion.categorias[Math.round(valor)] ?? num(valor);
   return num(valor, pasoAccion(accion) < 1 ? 2 : 0);
+}
+
+/** Valor de una acción tal como lo devuelve el motor (actual o recomendado); si es binaria, Activa o No activa. */
+export function textoAccion(accion: RangoAccion, v: ValorOriginal) {
+  if (esBinaria(accion)) return activa(accion, v) ? 'Activa' : 'No activa';
+  return v.categoria ?? num(v.valor);
+}
+
+/** Valor recomendado de una acción; si es binaria, la decisión frente al actual. */
+export function recomendacionAccion(accion: RangoAccion & { actual: ValorOriginal; recomendada: ValorOriginal }) {
+  if (!esBinaria(accion)) return textoAccion(accion, accion.recomendada);
+  const antes = activa(accion, accion.actual);
+  if (activa(accion, accion.recomendada)) return antes ? 'Mantener activa' : 'Activar';
+  return antes ? 'Desactivar' : 'No activar';
 }
 
 /** Color de cada nivel del objetivo: rampa ordinal azul (del peor al mejor). */

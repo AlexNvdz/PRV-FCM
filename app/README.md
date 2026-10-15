@@ -143,7 +143,7 @@ app/
 
 El motor Python se usa con `python -m prvfcm.servicio` (proceso persistente de
 consultas y un proceso por entrenamiento). La primera vez se registra el
-dataset `data/xAPI-Edu-Data-expanded-4800.csv` con su esquema. Cada
+dataset `data/xAPI-Edu-Data.csv` (480 registros) con su esquema. Cada
 entrenamiento guarda sus figuras en `almacen/modelos/<id>/figuras/`.
 
 Además del dataset del proyecto, se probó con
@@ -152,7 +152,8 @@ de UCI (4424 estudiantes, separador punto y coma, objetivo Dropout < Enrolled <
 Graduate). Allí conviene marcar como acciones, por ejemplo, la beca y la
 matrícula al día. También se probó fuera de la educación con
 `data/heart.csv` (pacientes) y `data/marketing_campaign.csv` (clientes); sus
-esquemas de referencia están en `data/esquemas/`.
+esquemas se definen en el paso 2 y cada modelo guarda el suyo en
+`almacen/modelos/<id>/esquema.json`.
 
 ## Pruebas
 

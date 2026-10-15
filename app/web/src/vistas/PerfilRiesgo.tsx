@@ -8,7 +8,7 @@ import { api } from '../api';
 import { ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, Clase, estiloControl } from '../componentes/ui';
 import type { ColumnaEsquema, Dataset, ModeloDetalle } from '../tipos';
-import { mayuscula, num, sujetoDe } from '../utilidades';
+import { etiquetaAccion, mayuscula, num, sujetoDe } from '../utilidades';
 
 type Valores = Record<string, string | number>;
 
@@ -22,7 +22,7 @@ export function opcionesDe(columna: ColumnaEsquema, dataset: Dataset | undefined
   return null;
 }
 
-/** Campo de una columna del esquema: lista para categorías, texto para fechas y número para el resto. `vacio` es el texto de un valor sin elegir. */
+/** Campo de una columna del esquema: lista para categorías (una acción binaria se lee Activa o No activa), texto para fechas y número para el resto. `vacio` es el texto de un valor sin elegir. */
 export function Campo({
   columna,
   valor,
@@ -48,9 +48,9 @@ export function Campo({
       {opciones ? (
         <select id={id} className={estiloControl} value={valor === undefined ? '' : String(valor)} onChange={(e) => alCambiar(e.target.value)}>
           {!opciones.includes(String(valor ?? '')) && <option value={String(valor ?? '')}>{String(valor ?? '') || vacio || 'Elija un valor'}</option>}
-          {opciones.map((o) => (
+          {opciones.map((o, i) => (
             <option key={o} value={o}>
-              {o}
+              {columna.rol === 'accion' ? etiquetaAccion({ categorias: opciones }, i) : o}
             </option>
           ))}
         </select>
@@ -77,7 +77,8 @@ export function PerfilRiesgo({ modelo, dataset }: { modelo: ModeloDetalle; datas
   const [origen, setOrigen] = useState('');
   const [estudiante, setEstudiante] = useState('');
   const [meta, setMeta] = useState(niveles.at(-1) ?? '');
-  const [beta, setBeta] = useState(0.4);
+  const betaModelo = modelo.metricas?.configuracion.prescripcion.beta_esfuerzo ?? 0.4;
+  const [beta, setBeta] = useState(betaModelo);
   const [delta, setDelta] = useState<number | null>(null);
   const [reducir, setReducir] = useState(false);
 
@@ -168,7 +169,7 @@ export function PerfilRiesgo({ modelo, dataset }: { modelo: ModeloDetalle; datas
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-tinta">Costo de intervención (β): {num(beta, 2)}</span>
-            <input type="range" min={0} max={1} step={0.05} value={beta} onChange={(e) => setBeta(Number(e.target.value))} className="accent-[var(--pizarra)]" />
+            <input type="range" min={0} max={Math.max(1, betaModelo)} step={0.05} value={beta} onChange={(e) => setBeta(Number(e.target.value))} className="accent-[var(--pizarra)]" />
             <span className="text-xs text-tinta-3">Mayor, cambios más pequeños.</span>
           </label>
           <label className="flex flex-col gap-1 text-sm">

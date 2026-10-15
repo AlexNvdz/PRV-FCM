@@ -10,7 +10,7 @@ export const RAIZ_APP = path.resolve(aqui, '..');
 export const RAIZ_PROYECTO = path.resolve(RAIZ_APP, '..');
 export const ALMACEN = process.env.PIZARRA_ALMACEN ?? path.join(RAIZ_APP, 'almacen');
 export const WEB_DIST = path.join(RAIZ_APP, 'web', 'dist');
-export const DATASET_EJEMPLO = path.join(RAIZ_PROYECTO, 'data', 'xAPI-Edu-Data-expanded-4800.csv');
+export const DATASET_EJEMPLO = path.join(RAIZ_PROYECTO, 'data', 'xAPI-Edu-Data.csv');
 
 // Solo escucha en la máquina local.
 export const HOST = process.env.HOST ?? '127.0.0.1';

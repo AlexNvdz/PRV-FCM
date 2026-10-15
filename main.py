@@ -1,6 +1,6 @@
 """
 PRV-FCM (PRescriptiVe Fuzzy Cognitive Maps con algoritmos genéticos) aplicado
-al rendimiento académico con el dataset xAPI-Edu-Data expandido a 4800 registros.
+al rendimiento académico con el dataset xAPI-Edu-Data (480 registros).
 
 Etapas:
     1. Preprocesamiento: división 70/30 agrupada por perfil inmutable (C1-C8),
@@ -25,7 +25,7 @@ Uso:
     python main.py --sin-sesgo                             # regla sin sesgo b_i
     python main.py --sin-tope-ausentismo                   # sin el tope de acciones con más de 7 ausencias
     python main.py --perfil articulo --datos data/xAPI-Edu-Data.csv --binarizar-objetivo M   # como PRV-FCM (2023)
-    python main.py --esquema data/esquemas/heart.json --datos data/heart.csv --permitir-reducciones
+    python main.py --esquema app/almacen/modelos/<id>/esquema.json --datos data/heart.csv --permitir-reducciones
     python experimentos.py                                 # ablación de perfiles y métodos (resultados_experimentos/)
     python main.py --help
 """
@@ -55,11 +55,11 @@ def parsear_argumentos() -> argparse.Namespace:
     """Argumentos de la línea de comandos. Las opciones del modelo valen None si no se dan: entonces manda el perfil."""
     parser = argparse.ArgumentParser(description="PRV-FCM: prescripción de acciones para el rendimiento académico.")
     parser.add_argument(
-        "--datos", type=Path, default=RAIZ / "data" / "xAPI-Edu-Data-expanded-4800.csv", help="ruta del CSV"
+        "--datos", type=Path, default=RAIZ / "data" / "xAPI-Edu-Data.csv", help="ruta del CSV"
     )
     parser.add_argument(
         "--esquema", type=Path,
-        help="esquema JSON de otro dataset (formato de la aplicación, ver data/esquemas/); por defecto, xAPI-Edu-Data",
+        help="esquema JSON de otro dataset (formato de la aplicación, por ejemplo app/almacen/modelos/<id>/esquema.json); por defecto, xAPI-Edu-Data",
     )
     parser.add_argument("--salida", type=Path, default=RAIZ / "resultados", help="carpeta de resultados")
     parser.add_argument(

@@ -8,9 +8,11 @@ import { z } from 'zod';
 // del motor: en xAPI el éxito del FCM no baja y los cambios son menores y distintos
 // por estudiante (README). El máximo usa 0.05, el β por defecto anterior, que lleva
 // las acciones casi al tope: sirve de techo. Se pasan explícitos para que los dos
-// planes no coincidan cuando el modelo se entrenó con β = 0.4.
+// planes no coincidan cuando el modelo se entrenó con β = 0.4. Si el modelo se entrenó
+// con un β mayor (marketing usa 1 para no activar 4 o 5 campañas), el moderado usa ese.
 export const BETA_MODERADO = 0.4;
 export const BETA_MAXIMO = 0.05;
+const betaModerado = (ctx) => Math.max(BETA_MODERADO, ctx.resultados?.metricas?.configuracion?.prescripcion?.beta_esfuerzo ?? 0);
 
 const redondear = (valor, decimales = 3) =>
   typeof valor === 'number' && Number.isFinite(valor) ? Number(valor.toFixed(decimales)) : valor;
@@ -237,7 +239,7 @@ const HERRAMIENTAS = {
       const [estudiante, maxima, moderada] = await Promise.all([
         ctx.motor.llamar('estudiante', base),
         ctx.motor.llamar('prescribir', { ...base, beta: BETA_MAXIMO }),
-        ctx.motor.llamar('prescribir', { ...base, beta: BETA_MODERADO }),
+        ctx.motor.llamar('prescribir', { ...base, beta: betaModerado(ctx) }),
       ]);
       ctx.emitir({ tipo: 'estudiante', id, estudiante, prescripcion: moderada, prescripcionMaxima: maxima });
       const plan = (p) => ({
@@ -287,7 +289,7 @@ const HERRAMIENTAS = {
       const prescripcion = await ctx.motor.llamar('prescribir_perfil', {
         modelo: ctx.rutaModelo,
         perfil,
-        beta: BETA_MODERADO,
+        beta: betaModerado(ctx),
         nivel_meta: nivel_meta || null,
       });
       ctx.emitir({ tipo: 'perfil', origen: base.origen, cambios, prescripcion });

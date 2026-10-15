@@ -100,7 +100,7 @@ function Introduccion() {
       <Bloque id="introduccion-recorrido" titulo="Recorrido rápido con el dataset del proyecto">
         <Pasos>
           <li>
-            Abra «Datos». El <T a="dataset-proyecto">dataset del proyecto</T> (xAPI-Edu-Data, 4800 registros) ya está registrado y con su esquema
+            Abra «Datos». El <T a="dataset-proyecto">dataset del proyecto</T> (xAPI-Edu-Data, 480 registros) ya está registrado y con su esquema
             confirmado. Pulse su nombre para leer el reporte inicial.
           </li>
           <li>
@@ -805,7 +805,7 @@ function Paso4() {
             Cada estudiante ordenado por su activación actual (línea azul) y su activación con la prescripción (puntos naranjas). Sobre la línea
             horizontal queda en el mejor nivel.
           </Def>
-          <Def t="Acciones: nivel medio actual y recomendado">Media de cada acción, en unidades originales.</Def>
+          <Def t="Acciones: nivel medio actual y recomendado">Media de cada acción, en unidades originales; una acción binaria (una campaña) se muestra como % de registros con ella activa.</Def>
           <Def t="Estudiantes que llegan a…, por grupo">
             Solo si definió un <T a="segmento">segmento</T>: el porcentaje que llega al mejor nivel en cada grupo, según el FCM y según el bosque.
           </Def>
@@ -826,7 +826,8 @@ function Paso4() {
           </Def>
           <Def t="Columnas">
             Estudiante (su <T a="id-estudiante">id</T>), nivel observado, cada acción como «actual → recomendado» con el cambio debajo, «FCM actual» y
-            «FCM prescrito» (activación y nivel predicho).
+            «FCM prescrito» (activación y nivel predicho). Una <T a="accion-binaria">acción binaria</T> muestra solo la decisión: «Activar», «No activar»,
+            «Mantener activa» o «Desactivar».
           </Def>
           <Def t="Ordenar">Pulse un encabezado para ordenar; otra vez, para invertir el orden.</Def>
           <Def t="Abrir un estudiante">Pulse una fila o el número del estudiante para abrir su panel.</Def>
@@ -848,7 +849,7 @@ function Paso4() {
             Elija una iteración con las flechas, el control deslizante o un clic en la gráfica para ver su cuenta. Vea <Entradas a={['inferencia-paso-a-paso']} />.
           </li>
           <li>
-            «Prescripción con el algoritmo genético»: elija la <T a="meta">meta</T>, la penalización del esfuerzo (de 0 a 1; 0,4 por defecto) y el cambio
+            «Prescripción con el algoritmo genético»: elija la <T a="meta">meta</T>, la penalización del esfuerzo (de 0 a 1; parte del β del modelo) y el cambio
             máximo (a la derecha, sin límite), y pulse «Prescribir». Las reducciones siguen la opción del entrenamiento. Con ausentismo alto se aplica además el
             <T a="tope-ausentismo">tope por ausentismo</T>.
           </li>
@@ -876,7 +877,7 @@ function Paso4() {
             categorías se eligen de una lista y los números se escriben (un campo vacío muestra el rango observado).
           </li>
           <li>
-            Elija la «Meta en el objetivo», el «Costo de intervención (β)» (de 0 a 1; 0,4 por defecto; mayor da cambios más pequeños), el «Cambio máximo
+            Elija la «Meta en el objetivo», el «Costo de intervención (β)» (de 0 a 1; parte del β con que se entrenó el modelo; mayor da cambios más pequeños), el «Cambio máximo
             por acción» (al extremo derecho, sin límite) y si quiere «Permitir reducir acciones».
           </li>
           <li>Pulse «Calcular la prescripción». El resultado aparece a la derecha (o debajo, en pantallas angostas).</li>
@@ -899,7 +900,8 @@ function Paso4() {
           </Def>
           <Def t="Tabla de acciones">
             «Acción (C_P)», «Actual», «Recomendada», «Cambio» en unidades originales y «Del rango» (vea <Entradas a={['del-rango']} />). «igual» indica que no
-            cambia.
+            cambia. Una <T a="accion-binaria">acción binaria</T>, como una campaña, se lee «Activa» o «No activa» en «Actual» y «Activar», «No activar»,
+            «Mantener activa» o «Desactivar» en «Recomendada»; su «Cambio» y su «Del rango» quedan en «—».
           </Def>
           <Def t="Reporte prescriptivo">
             Frases con cada cambio, las acciones sin cambio, el resultado estimado, los <T a="frenos">factores que frenan</T> y la nota de causalidad.
@@ -949,7 +951,7 @@ function Paso5() {
           <li>«Estudiantes con más mejora»: los cinco con mayor aumento de activación; pulse uno para abrir su panel.</li>
           <li>A la derecha, las acciones medias actual y recomendada en una gráfica.</li>
           <li>
-            «Recomendaciones institucionales con IA»: qwen2.5 redacta un plan para docentes y directivos a partir del resumen (del nivel elegido). Revíselo
+            «Recomendaciones institucionales con IA»: qwen2.5 redacta un plan de acción a partir del resumen (del nivel elegido). Revíselo
             antes de compartirlo.
           </li>
         </Lista>
@@ -1121,7 +1123,7 @@ function Asistente() {
           ))}
         </Defs>
         <p>
-          En las tarjetas de un estudiante, el <T a="plan">plan moderado</T> usa β = 0,4 y el plan máximo, β = 0,05. Si se aplicó el{' '}
+          En las tarjetas de un estudiante, el <T a="plan">plan moderado</T> usa β = 0,4, o el β del modelo si es mayor (marketing se entrena con 1), y el plan máximo, β = 0,05. Si se aplicó el{' '}
           <T a="tope-ausentismo">tope por ausentismo</T>, la tarjeta lo avisa.
         </p>
       </Bloque>
@@ -1376,8 +1378,8 @@ function Problemas() {
       <Bloque id="problemas-modelo" titulo="Entrenamiento y calidad">
         <Defs>
           <Def t="El entrenamiento tarda mucho">
-            Use la validación «Rápida» o un método de regresión (Ridge o Lasso). La completa con BPTT tarda uno o dos minutos con 4800 registros, y más
-            con datasets grandes.
+            Use la validación «Rápida» o un método de regresión (Ridge o Lasso). La completa con BPTT tarda unos segundos con los 480 registros de xAPI, y
+            minutos con datasets grandes.
           </Def>
           <Def t="El modelo casi siempre predice el nivel frecuente">
             Marque «Equilibrar los niveles del objetivo» y mire la exactitud equilibrada y el recall del nivel de riesgo.

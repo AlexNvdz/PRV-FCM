@@ -8,6 +8,7 @@ import { api } from '../api';
 import { TrayectoriaInferencia } from '../componentes/inferencia';
 import { Medidor, ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, estiloControl, NivelChip } from '../componentes/ui';
+import { useModelo } from '../hooks';
 import type { Graficas } from '../tipos';
 import { etiquetaAccion, mayuscula, num, pasoAccion, type SujetoTexto } from '../utilidades';
 
@@ -18,7 +19,9 @@ export function DetalleEstudiante({ modeloId, id, graficas, s, alCerrar }: { mod
   const niveles = useMemo(() => Object.entries(graficas.niveles).sort((a, b) => a[1] - b[1]).map(([n]) => n), [graficas.niveles]);
   const estudiante = useQuery({ queryKey: ['estudiante', modeloId, id], queryFn: () => api.estudiante(modeloId, id) });
   const [valores, setValores] = useState<Record<string, number>>({});
-  const [beta, setBeta] = useState(0.4);
+  // β parte del valor con que se entrenó el modelo (en caché: la vista que abre el panel ya lo cargó).
+  const betaModelo = useModelo(modeloId).data?.metricas?.configuracion.prescripcion.beta_esfuerzo ?? 0.4;
+  const [beta, setBeta] = useState(betaModelo);
   const [delta, setDelta] = useState<number | null>(null);
   const [meta, setMeta] = useState(niveles.at(-1) ?? '');
   const cerrar = useRef<HTMLButtonElement>(null);
@@ -141,7 +144,7 @@ export function DetalleEstudiante({ modeloId, id, graficas, s, alCerrar }: { mod
               <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                 <label className="flex flex-col gap-1">
                   <span className="text-tinta">Penalización del esfuerzo: {num(beta, 2)}</span>
-                  <input type="range" min={0} max={1} step={0.05} value={beta} onChange={(e) => setBeta(Number(e.target.value))} className="accent-[var(--pizarra)]" />
+                  <input type="range" min={0} max={Math.max(1, betaModelo)} step={0.05} value={beta} onChange={(e) => setBeta(Number(e.target.value))} className="accent-[var(--pizarra)]" />
                   <span className="text-xs text-tinta-3">Mayor, cambios más pequeños.</span>
                 </label>
                 <label className="flex flex-col gap-1">

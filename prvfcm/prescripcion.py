@@ -120,6 +120,11 @@ class PrescriptorPRVFCM:
     indice_condicion:
         Índice del concepto de ``config.condicion_columna`` (None si el esquema
         no lo tiene: no hay tope condicionado).
+    rejillas:
+        Por acción, los valores normalizados que admite (por ejemplo, 0 y 1 en
+        una campaña que se activa o no) o None si es continua. El AG sigue
+        trabajando con genes reales; cada gen discreto se lleva al valor
+        admitido más cercano dentro de sus límites antes de evaluarlo.
     """
 
     def __init__(
@@ -131,9 +136,11 @@ class PrescriptorPRVFCM:
         config_ag: ConfigAG = ConfigAG(),
         config: ConfigPrescripcion = ConfigPrescripcion(),
         indice_condicion: int | None = None,
+        rejillas: list[np.ndarray | None] | None = None,
     ):
         self.fcm = fcm
         self.indices_accion = np.asarray(indices_accion, dtype=int)
+        self.rejillas = rejillas or [None] * len(self.indices_accion)
         self.indices_objetivo = np.array(list(estado_deseado.keys()), dtype=int)
         self.valores_deseados = np.array(list(estado_deseado.values()), dtype=float)
         pesos_objetivo = pesos_objetivo or {}
@@ -160,6 +167,22 @@ class PrescriptorPRVFCM:
         if self.condicion_activa(estado_actual):
             superior = np.minimum(superior, acciones_actuales + self.config.condicion_delta_max)
         return inferior, superior
+
+    def discretizar(self, acciones: np.ndarray, estado_actual: np.ndarray) -> np.ndarray:
+        """Lleva cada gen discreto al valor admitido más cercano dentro de sus límites (las acciones continuas no cambian)."""
+        acciones = np.array(acciones, dtype=float)
+        if all(r is None for r in self.rejillas):
+            return acciones
+        inferior, superior = self.limites(estado_actual)
+        for k, rejilla in enumerate(self.rejillas):
+            if rejilla is None:
+                continue
+            admitidos = rejilla[(rejilla >= inferior[k] - 1e-9) & (rejilla <= superior[k] + 1e-9)]
+            if not len(admitidos):
+                admitidos = rejilla
+            columna = acciones[..., k]
+            acciones[..., k] = admitidos[np.abs(columna[..., None] - admitidos).argmin(axis=-1)]
+        return acciones
 
     def error_objetivo(self, estados_finales: np.ndarray) -> np.ndarray:
         """Error absoluto ponderado entre estados finales y estado deseado."""
@@ -188,6 +211,7 @@ class PrescriptorPRVFCM:
         acciones_actuales = estado_actual[self.indices_accion]
 
         def costo(poblacion: np.ndarray) -> np.ndarray:
+            poblacion = self.discretizar(poblacion, estado_actual)
             finales = self.fcm.inferir(self.estados_con_acciones(estado_actual, poblacion)).estados
             esfuerzo = np.mean(np.abs(poblacion - acciones_actuales), axis=1)
             return self.aptitud(estado_actual, finales) + self.config.beta_esfuerzo * esfuerzo
@@ -210,11 +234,15 @@ class PrescriptorPRVFCM:
         inferior, superior = self.limites(estado_actual)
 
         ag = AlgoritmoGenetico(self.funcion_costo(estado_actual), inferior, superior, self.config_ag, rng)
+        aviso = al_generar
+        if al_generar is not None:
+            def aviso(generacion, mejor, medio, cromosoma):
+                al_generar(generacion, mejor, medio, self.discretizar(cromosoma, estado_actual))
         # Las acciones actuales se siembran en la población inicial: con elitismo,
         # la prescripción nunca es peor que mantener la situación actual. PRV-FCM no siembra.
-        resultado = ag.ejecutar(semillas=acciones_actuales if self.config.sembrar else None, al_generar=al_generar)
+        resultado = ag.ejecutar(semillas=acciones_actuales if self.config.sembrar else None, al_generar=aviso)
 
-        recomendadas = resultado.mejor_cromosoma
+        recomendadas = self.discretizar(resultado.mejor_cromosoma, estado_actual)
         estado_nuevo = estado_actual.copy()
         estado_nuevo[self.indices_accion] = recomendadas
         estado_base = self.fcm.inferir(estado_actual).estados
@@ -230,7 +258,7 @@ class PrescriptorPRVFCM:
             historial_costo=resultado.historial_mejor,
             generaciones=resultado.generaciones,
             historial_promedio=resultado.historial_promedio,
-            historial_acciones=resultado.historial_cromosoma,
+            historial_acciones=None if resultado.historial_cromosoma is None else self.discretizar(resultado.historial_cromosoma, estado_actual),
         )
 
     def prescribir_lote(

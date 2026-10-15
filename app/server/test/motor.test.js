@@ -40,7 +40,7 @@ test('estructura, correlaciones y dispersión con el dataset xAPI', async () => 
   const estructura = await motor.llamar('estructura', { esquema });
   assert.equal(estructura.aristas.length, 15); // Las 15 fuentes fijas apuntan a Class.
   assert.ok(estructura.aristas.every((a) => a.destino === 'Class'));
-  const ruta = path.join(RAIZ_PROYECTO, 'data', 'xAPI-Edu-Data-expanded-4800.csv');
+  const ruta = path.join(RAIZ_PROYECTO, 'data', 'xAPI-Edu-Data.csv');
   const corr = await motor.llamar('correlaciones', { ruta, esquema, metodo: 'spearman' });
   assert.equal(corr.matriz.length, 16);
   const dispersion = await motor.llamar('dispersion', { ruta, esquema, x: 'VisITedResources', y: 'raisedhands', max_puntos: 300 });

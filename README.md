@@ -3,7 +3,7 @@
 Implementación en Python de **PRV-FCM** (*PRescriptiVe Fuzzy Cognitive Maps* con
 algoritmos genéticos; Hoyos, Aguilar y Toro, 2023) sobre el dataset
 [Student Academic Performance (xAPI-Edu-Data)](https://www.kaggle.com/datasets/aljarah/xAPI-Edu-Data),
-en su versión expandida a 4800 registros.
+con sus 480 estudiantes originales.
 
 Un Mapa Cognitivo Difuso (FCM) aprende de los datos cómo influyen los conceptos
 del estudiante en su rendimiento académico. Después, un algoritmo genético (AG)
@@ -25,10 +25,9 @@ modelo-prescriptivo/
 ├── main.py                    Pipeline completo (etapas 1-4) y línea de comandos
 ├── experimentos.py            Ablación de perfiles y métodos de W en varios datasets
 ├── data/
-│   ├── xAPI-Edu-Data-expanded-4800.csv   Dataset expandido (4800 registros, 17 columnas)
-│   ├── xAPI-Edu-Data.csv      Dataset original (480 registros)
-│   ├── marketing_campaign.csv, heart.csv  Datasets de los experimentos
-│   └── esquemas/              Esquemas JSON de marketing, heart y deserción
+│   ├── xAPI-Edu-Data.csv      Dataset por defecto (480 registros, 17 columnas)
+│   ├── marketing_campaign.csv, heart.csv  Datasets de los experimentos (su esquema se define en la aplicación)
+│   └── ObesityDataSet_raw_and_data_sinthetic.csv, winequality-white.csv  Datasets nuevos, sin esquema todavía
 ├── prvfcm/
 │   ├── configuracion.py       Conceptos C1-C16, codificación e hiperparámetros
 │   ├── preprocesamiento.py    Etapa 1: carga (CSV o Excel), división agrupada, codificación, Min-Max, segmentación
@@ -47,9 +46,9 @@ modelo-prescriptivo/
 │   └── servicio.py            Motor para la aplicación web (JSON por stdin/stdout)
 ├── app/                       Aplicación web local (Node.js + React), ver app/README.md
 ├── tests/                     Pruebas unitarias (pytest)
-├── resultados/                Salidas de la última ejecución (dataset expandido)
+├── resultados/                Salidas de la última ejecución (dataset por defecto, 480)
 ├── resultados_experimentos/   Ablación: resumen.csv, acciones.csv y resumen.md
-└── resultados_480/            Salidas anteriores con el dataset original (480), como referencia
+└── resultados_480/            Salidas antiguas con el dataset original (80/20 aleatoria, sin sesgo), como referencia
 ```
 
 ## Aplicación web (Pizarra)
@@ -85,8 +84,7 @@ python -m venv .venv
 .venv\Scripts\activate          # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 
-python main.py                                        # configuración por defecto (dataset expandido)
-python main.py --datos data/xAPI-Edu-Data.csv         # dataset original (480), si se copia a data/
+python main.py                                        # configuración por defecto (xAPI-Edu-Data, 480)
 python main.py --sin-cv --lambda 1 --alpha-l2 0.001   # sin validación cruzada
 python main.py --division aleatoria                   # división sin agrupar (sobrestima las métricas)
 python main.py --sin-sesgo                            # regla sin sesgo, la del artículo
@@ -98,15 +96,21 @@ python main.py --excluir gender Class                 # máscara causal: elimina
 python main.py --equilibrar-niveles                   # cada nivel del objetivo pesa lo mismo (objetivos desbalanceados)
 python main.py --perfil articulo --datos data/xAPI-Edu-Data.csv --binarizar-objetivo M   # como PRV-FCM (2023)
 python main.py --metodo-pesos pso                     # W por enjambre de partículas (también: expertos con --expertos m.json)
-python main.py --esquema data/esquemas/heart.json --datos data/heart.csv --permitir-reducciones   # otro dataset
+python main.py --esquema app/almacen/modelos/<id>/esquema.json --datos data/heart.csv --permitir-reducciones   # otro dataset
 python experimentos.py                                # ablación de perfiles y métodos (resultados_experimentos/)
 python main.py --help                                 # todas las opciones
 python -m pytest                                      # pruebas
 ```
 
-La ejecución por defecto tarda cerca de un minuto; casi todo es la validación
+La ejecución por defecto tarda unos 15 segundos; casi todo es la validación
 cruzada, que reparte pliegues y combinaciones entre los núcleos (joblib). Con
 `--sin-cv` tarda unos 10 segundos.
+
+Para otro dataset, `--esquema` recibe un esquema JSON con el formato de la
+aplicación. Los esquemas de marketing, heart y deserción que había en
+`data/esquemas/` se retiraron en octubre de 2026 (siguen en el historial de
+git): ahora cada esquema se define en el paso 2 de la aplicación y se guarda
+con cada modelo en `app/almacen/modelos/<id>/esquema.json`.
 
 Opciones principales: `--perfil {mejorado,articulo}` (ver Perfiles);
 `--metodo-pesos`, `--expertos`, `--inferencia`, `--activacion`, `--excluir`,
@@ -164,43 +168,22 @@ como en xAPI, el estado final no depende de ese valor de partida. `al_progresar`
 no consume números aleatorios: con la misma semilla, el resultado es idéntico
 con aviso o sin él.
 
-## Dataset expandido
+## Dataset expandido (retirado)
 
-`data/xAPI-Edu-Data-expanded-4800.csv` tiene las mismas 17 columnas que el
-original y exactamente 10 veces sus registros por clase:
+Hasta octubre de 2026 el dataset por defecto era `xAPI-Edu-Data-expanded-4800.csv`:
+los 480 estudiantes originales más 4320 variantes sintéticas (cada clase ×10,
+con el mismo perfil categórico y conteos de participación variados). Se retiró
+porque esas variantes no son estudiantes nuevos. El dataset por defecto es ahora
+el original (`data/xAPI-Edu-Data.csv`).
 
-| Class | Original | Expandido |
-|---|---|---|
-| L | 127 | 1270 |
-| M | 211 | 2110 |
-| H | 142 | 1420 |
+La división sigue agrupada por perfil inmutable: los 480 estudiantes tienen 277
+combinaciones distintas de C1-C8, así que la agrupación todavía evita que un
+mismo perfil quede en entrenamiento y en prueba.
 
-No es una muestra nueva de estudiantes:
-
-* Las filas del original aparecen tal cual (comprobado con las cinco primeras).
-* Los registros nuevos repiten el perfil categórico de un estudiante real y
-  varían sus conteos de participación. Dentro de un mismo perfil, la desviación
-  estándar de las acciones es de 12 a 14; en todo el dataset, de 22 a 30.
-
-Por eso una división aleatoria pone variantes del mismo estudiante en
-entrenamiento y en prueba, y las métricas de prueba miden en parte memoria, no
-generalización.
-
-**División agrupada.** Cada registro pertenece a un perfil inmutable: su
-combinación de C1-C8 (277 perfiles). Cada perfil queda completo en
-entrenamiento o en prueba. La división es 70/30, como en los dos artículos, y
-estratificada por Class.
-
-| Semilla 42 | División aleatoria | División agrupada (defecto) |
-|---|---|---|
-| Perfiles en entrenamiento y en prueba | 271 de 277 | 0 |
-| Exactitud del bosque aleatorio | 94.2 % | 82.9 % |
-| Exactitud del FCM | 80.1 % | 78.9 % |
-
-Con la división agrupada, el bosque aleatorio queda cerca de la exactitud que
-tenía con el dataset original (81.2 %). Agrupar con claves más gruesas (por ejemplo,
-sin la nacionalidad) no la baja más: con C1-C8 ya no se detecta fuga. El FCM,
-con solo 15 pesos y un sesgo, gana menos con la fuga: 1.2 puntos, frente a 11.3 del bosque.
+Las cifras de Metodología (métodos de W, β, tope por ausentismo, sesgo), de la
+decisión sobre C13-C15 y de Limitaciones se obtuvieron con el dataset expandido;
+falta repetirlas con el original. Las de «Resultados de referencia» ya son del
+original.
 
 ## Metodología
 
@@ -499,49 +482,50 @@ de esas frases para redactar recomendaciones pedagógicas; no calcula cifras.
 
 ## Resultados de referencia (semilla 42, configuración por defecto)
 
-**Predicción** (1411 estudiantes de prueba). Exactitud del FCM: 78.9 % (F1 macro
-79.4 %; clase mayoritaria: 44.2 %; bosque aleatorio: 82.9 %). El FCM nunca
-confunde L con H. El sesgo de C16 queda en −1.
+**Predicción** (156 estudiantes de prueba; λ = 2 y α = 0.0001, exactitud de
+validación 76.9 % ± 4.8). Exactitud del FCM: 72.4 % (F1 macro 72.9 %; clase
+mayoritaria: 41.7 %; bosque aleatorio: 75.0 %). El FCM confunde L con H una
+sola vez. El sesgo de C16 queda en −0.88.
 
 | Nivel | Precisión | Recall | F1 |
 |---|---|---|---|
-| L | 79.2 % | 81.8 % | 80.5 % |
-| M | 76.0 % | 76.3 % | 76.2 % |
-| H | 82.9 % | 80.2 % | 81.5 % |
+| L | 71.9 % | 87.2 % | 78.8 % |
+| M | 70.2 % | 61.5 % | 65.6 % |
+| H | 76.2 % | 72.7 % | 74.4 % |
 
-**Prescripción** (982 estudiantes con rendimiento L o M; β = 0.4 y tope por
+**Prescripción** (112 estudiantes con rendimiento L o M; β = 0.4 y tope por
 ausentismo de 0.15):
 
 | Métrica | Acciones actuales | PRV-FCM |
 |---|---|---|
-| MAE | 0.598 | 0.463 |
-| MSE | 0.410 | 0.298 |
-| RMSE | 0.641 | 0.546 |
-| Tasa de éxito (FCM) | 7.2 % | 46.4 % |
-| Clasificados H por el bosque aleatorio | 8.1 % | 32.5 % |
+| MAE | 0.668 | 0.591 |
+| MSE | 0.505 | 0.431 |
+| RMSE | 0.710 | 0.657 |
+| Tasa de éxito (FCM) | 8.9 % | 15.2 % |
+| Clasificados H por el bosque aleatorio | 1.8 % | 8.9 % |
 
 | Estudiantes que llegan a H | n | FCM | Bosque aleatorio |
 |---|---|---|---|
-| Más de 7 ausencias | 522 | 0.0 % → 0.8 % | 1.1 % → 1.1 % |
-| 7 ausencias o menos | 460 | 15.4 % → 98.3 % | 16.1 % → 68.0 % |
+| Más de 7 ausencias | 70 | 0.0 % → 0.0 % | 0.0 % → 0.0 % |
+| 7 ausencias o menos | 42 | 23.8 % → 40.5 % | 4.8 % → 23.8 % |
 
-**Comparación con el dataset original:**
+**Comparación con el dataset expandido (retirado):**
 
-| | Original (480; 80/20 aleatoria) | Expandido (4800; 70/30 agrupada) |
+| | Original (480, defecto) | Expandido (4800, retirado) |
 |---|---|---|
-| Estudiantes de prueba / con prescripción | 96 / 67 | 1411 / 982 |
+| Estudiantes de prueba / con prescripción | 156 / 112 | 1411 / 982 |
 | λ y α elegidos | 2 y 0.0001 | 1 y 0.001 |
-| Exactitud del FCM | 70.8 % | 78.9 % |
-| Exactitud del bosque aleatorio | 81.2 % | 82.9 % |
-| Tasa de éxito del FCM | 16.4 % → 35.8 % | 7.2 % → 46.4 % |
-| Clasificados H por el bosque aleatorio | 7.5 % → 22.4 % | 8.1 % → 32.5 % |
+| Exactitud del FCM | 72.4 % | 78.9 % |
+| Exactitud del bosque aleatorio | 75.0 % | 82.9 % |
+| Tasa de éxito del FCM | 8.9 % → 15.2 % | 7.2 % → 46.4 % |
+| Clasificados H por el bosque aleatorio | 1.8 % → 8.9 % | 8.1 % → 32.5 % |
 
-Las conclusiones se mantienen: con los dos datasets el FCM promete H a unos 14
-puntos más de estudiantes de los que confirma el bosque. Con el tope por
-ausentismo, esa distancia ya no está en los estudiantes con más de 7 ausencias
-sino en los que tienen 7 o menos: el FCM lleva a H al 98.3 % y el bosque al
-68.0 %. La exactitud del FCM es 8.1 puntos mayor con el dataset expandido
-(variación entre pliegues: ± 4.7).
+Con el original, el FCM promete H a 6.3 puntos más de estudiantes de los que
+confirma el bosque (14 con el expandido). Ninguno de los 70 estudiantes con más
+de 7 ausencias llega a H, ni con el FCM ni con el bosque: en el dataset solo 4
+de los 191 con más de 7 ausencias tienen H, y el tope por ausentismo (calibrado
+con el expandido) limita cada acción a +0.15. La mejora está en los 42 con 7
+ausencias o menos.
 
 ## Decisión de modelado: C13-C15 observados
 
@@ -595,8 +579,8 @@ frente a M+H) y se pide con `--binarizar-objetivo M`.
 
 * SMOTE solo en el entrenamiento de cada pliegue, no antes de dividir (ver
   Preprocesamiento).
-* División agrupada por perfil inmutable cuando hay variantes (xAPI 4800); con
-  perfiles únicos (480 originales, heart, marketing) equivale a una aleatoria.
+* División agrupada por perfil inmutable (en xAPI, 277 perfiles para 480
+  estudiantes); con perfiles únicos (heart, marketing) equivale a una aleatoria.
 * Un solo α (0.001) en la rejilla, por tiempo, y λ en {0.5, 1, 2, 3, 5, 10} en
   lugar de valores aleatorios.
 * La validación cruzada elige los hiperparámetros con 40 iteraciones de PSO
@@ -611,26 +595,25 @@ frente a M+H) y se pide con `--binarizar-objetivo M`.
   y evita que las partículas salgan del rango.
 * La búsqueda aleatoria del AG se evalúa en registros de entrenamiento (el
   artículo no dice en cuáles) y prueba 8 combinaciones.
-* El perfil «articulo» se corre con xAPI de 480 registros, como el artículo: en
-  4800, el PSO con 10 pliegues y la grilla de reglas no cabe en tiempo
-  razonable.
 
 ## Ablación: «articulo» frente a «mejorado» (`experimentos.py`)
 
 Cinco datasets con objetivos de dos niveles, para que los dos perfiles
 resuelvan la misma tarea:
 
-* xAPI binarizado en M (L frente a M+H, como el artículo), con 480 y 4800
-  registros.
-* marketing (`Response`).
+* xAPI binarizado en M (L frente a M+H, como el artículo), con 480 registros
+  (las filas xapi4800 son del dataset expandido, ya retirado).
+* marketing (`Response`). Estas filas usan el esquema anterior, con los
+  contadores de compras como acciones; el actual usa las campañas (ver la
+  sección siguiente).
 * heart (`target`, con el supuesto 1 = sin enfermedad: ese grupo tiene mayor
   frecuencia cardiaca máxima y menos depresión del ST, angina y vasos
   afectados). Sus acciones (presión y colesterol) pueden bajar.
 * deserción (`Final_Grade` ≥ 10, que es exactamente «no desertó»; la columna
   `Dropped_Out` se excluye porque es la definición del objetivo).
 
-Cada perfil se corre con PSO, BPTT y Ridge; en xAPI 4800, solo el perfil
-«mejorado». Semilla 42; los CSV completos y las Tablas 11 y 12 por acción
+Cada perfil se corre con PSO, BPTT y Ridge; en xAPI 4800 (retirado), solo el
+perfil «mejorado». Semilla 42; los CSV completos y las Tablas 11 y 12 por acción
 están en `resultados_experimentos/`.
 
 | Dataset | Perfil, método | Exactitud (mayoritaria) | Tasa de éxito | Bosque: mejor nivel | Rec. MAE | R² | PSR ec. 19 | Acciones con p > 0,05 |
@@ -696,6 +679,80 @@ están en `resultados_experimentos/`.
   acciones observadas bajas que la prescripción sube. El texto del artículo no
   explica cómo obtuvo errores tan pequeños.
 
+## Marketing: las campañas como acciones
+
+En el esquema de marketing, las acciones eran los contadores de compras
+(`NumDealsPurchases`, `NumCatalogPurchases`, `NumWebPurchases`,
+`NumWebVisitsMonth`): el AG le pedía al cliente comprar más por catálogo para
+que respondiera, algo que la empresa no controla. Ahora:
+
+* **Acciones:** `AcceptedCmp1`-`AcceptedCmp5` («Campaña 1» a «Campaña 5»),
+  ordinales 0/1.
+* **Mutables dinámicos:** los cuatro contadores. Los gastos (`Mnt*`),
+  `Recency` y `NumStorePurchases` siguen como mutables fijos.
+
+**Acciones discretas.** Una acción ordinal solo admite los valores de sus
+categorías (`Preprocesador.rejillas_accion`). El AG sigue con genes reales, pero
+cada gen se lleva al valor admitido más cercano dentro de sus límites antes de
+evaluarlo, así que una campaña se activa o no (nunca 0,37). El reporte lo dice
+así: «Para este cliente se recomienda activar Campaña 1 y Campaña 3».
+
+**Qué miden estas acciones.** `AcceptedCmpN` vale 1 si el cliente aceptó la
+oferta de la campaña N, no si la empresa se la envió. Usarla como palanca
+supone que la empresa decide a quién dirige cada campaña y que dirigirla
+equivale a que el cliente la acepte. El peso de una campaña sobre `Response`
+mide propensión (quien aceptó antes responde más), no el efecto de enviarla.
+Los pesos de las campañas sobre los contadores quedan cerca de 0 (|w| ≤ 0.14):
+el efecto va directo a `Response`.
+
+**Penalización del esfuerzo.** Activar una de las 5 campañas cuesta β/5. Con
+β = 0.4 (el valor general), el AG activaba 4 o 5 campañas a 221 de 573 clientes.
+BPTT, semilla 42, λ = 2 sin validación cruzada, 573 clientes de prueba con
+`Response` = 0:
+
+| β | Campañas por cliente | Clientes con 4 o 5 | Tasa de éxito (FCM) | Bosque: `Response` = 1 |
+|---|---|---|---|---|
+| 0.4 | 3.28 | 221 | 99.8 % | 28.8 % |
+| 0.6 | 2.91 | 104 | 99.1 % | 25.0 % |
+| 0.8 | 2.45 | 23 | 94.1 % | 19.0 % |
+| 1.0 | 1.86 | 0 | 81.8 % | 15.0 % |
+| 1.5 | 0.18 | 0 | 17.8 % | 4.9 % |
+| 2.0 | 0 | 0 | 1.9 % | 1.4 % |
+
+Para marketing se usa β = 1. El valor depende del método y de λ: con Ridge
+(λ = 0.5), β = 1 no activa ninguna campaña y β = 0.6 activa 2.43 por cliente
+(éxito 92 %, bosque 22.7 %).
+
+Con β = 1, los clientes que ya están cerca de la meta (`Response` de partida
+≥ 0.35, 10 de 573) no reciben ninguna campaña. Se probó medir el error solo
+hasta el umbral de éxito (una bisagra: más allá de 0.5 activar campañas no
+rinde nada). Así se activan menos campañas (0.89 por cliente con margen 0.5,
+1.92 con 0.3), pero el bosque confirma menos respuestas (10.1 % frente a
+4.5-6.8 %): no se adoptó. BPTT, λ = 5 sin validación cruzada, semilla 42.
+
+**Regla de inferencia.** Con Kosko modificada y λ = 5, el objetivo es
+biestable: su propia activación entra en la sigmoide con pendiente λ/4 > 1.
+Las campañas pesan solo 0.06-0.09 sobre `Response`, pero bastan para cruzar
+el umbral, y `Response` salta de 0.06 a 0.7 o más en 571 de 573 clientes
+(ninguno queda entre 0.3 y 0.7). Con `inferencia: kosko` (sin memoria; la
+validación cruzada vuelve a elegir λ = 5, β = 1):
+
+| Regla | Pesos de las campañas | Campañas por cliente (máx.) | Éxito FCM | Bosque |
+|---|---|---|---|---|
+| Kosko modificada | 0.06-0.09 | 2.33 (4) | 99.7 % | 14.1 % |
+| Kosko | 0.08-0.33 | 2.15 (3) | 88.1 % | 21.8 % |
+
+La exactitud no cambia (89.0 % frente a 88.7 %). Para marketing se usa Kosko.
+
+**Referencia** (`python main.py --esquema <esquema de marketing> --datos
+data/marketing_campaign.csv --beta 1`; BPTT, la validación cruzada elige
+λ = 5). Exactitud del FCM: 89.5 % (clase mayoritaria: 85.0 %; F1 macro 74.1 %).
+Tasa de éxito: 1.7 % → 98.6 %; el bosque aleatorio la confirma en 1.4 % → 10.1 %.
+2.3 campañas por cliente en promedio (ninguno recibe las 5); las combinaciones
+más frecuentes son Campañas 1 y 3 (168 clientes), 1, 3 y 5 (158) y la 1 sola
+(69). La Campaña 4 no se prescribe. La distancia entre el FCM y el bosque es
+grande: el FCM promete la respuesta a casi todos, el bosque a uno de cada diez.
+
 ## Comparación con los artículos
 
 | Aspecto | PRV-FCM (Hoyos et al., 2023) | García et al. (2025) | Este proyecto |
@@ -733,10 +790,9 @@ estado deseado y se contrasta con un modelo independiente.
 
 ## Limitaciones
 
-* **Datos sintéticos.** 4320 de los 4800 registros son variantes de los 480
-  estudiantes reales. Dan estimaciones más estables, no información
-  independiente: las métricas de prueba se calculan con perfiles no vistos, pero
-  las conclusiones siguen apoyadas en 480 estudiantes.
+* **Muestra pequeña.** 480 estudiantes y 156 de prueba: la exactitud varía
+  ± 4.8 puntos entre pliegues. Las cifras de esta sección son del dataset
+  expandido (retirado) y falta repetirlas con el original.
 * **Esfuerzo y personalización.** El FCM es monótono en las cuatro acciones y
   `Class = 1` es inalcanzable (la activación prescrita máxima es 0.89). Con un
   β pequeño, el AG sube las acciones casi al máximo y la prescripción se parece

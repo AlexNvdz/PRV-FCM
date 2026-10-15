@@ -17,7 +17,7 @@ const trabajos = new Trabajos({ almacen, python, cwd: RAIZ_PROYECTO });
 async function sembrarEjemplo() {
   if ((await almacen.listarDatasets()).length || !fs.existsSync(DATASET_EJEMPLO)) return;
   const dataset = await almacen.crearDataset({
-    nombre: 'xAPI-Edu-Data (4800 registros)',
+    nombre: 'xAPI-Edu-Data (480 registros)',
     archivo: DATASET_EJEMPLO,
     origen: 'copiar',
     ejemplo: true,
@@ -30,7 +30,7 @@ async function sembrarEjemplo() {
   const validacion = await motor.llamar('validar_esquema', { ruta, esquema });
   await almacen.guardarDataset({
     ...dataset,
-    archivo: 'xAPI-Edu-Data-expanded-4800.csv',
+    archivo: 'xAPI-Edu-Data.csv',
     filas: perfil.filas,
     columnas: perfil.columnas,
     perfil,
@@ -38,7 +38,7 @@ async function sembrarEjemplo() {
     esquemaConfirmado: validacion.ok,
     validacion,
   });
-  console.log('Dataset de ejemplo registrado: xAPI-Edu-Data (4800 registros).');
+  console.log('Dataset de ejemplo registrado: xAPI-Edu-Data (480 registros).');
 }
 
 try {

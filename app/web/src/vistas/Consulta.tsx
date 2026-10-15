@@ -11,7 +11,7 @@ import { ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, Clase, Encabezado, estiloControl, NivelChip, Seccion, Vacio } from '../componentes/ui';
 import { nivelesDe, useDataset, useModelo } from '../hooks';
 import type { ColumnaEsquema, Dataset, Esquema, MetodoPesos, ModeloDetalle, ModeloListo, Prescripcion } from '../tipos';
-import { descargarCsv, fecha, mayuscula, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num, sujetoDe } from '../utilidades';
+import { descargarCsv, etiquetaAccion, fecha, mayuscula, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num, sujetoDe } from '../utilidades';
 import { Campo } from './PerfilRiesgo';
 
 type Valores = Record<string, string | number>;
@@ -242,7 +242,10 @@ function FormularioConsulta({ modelo, dataset, tema }: { modelo: ModeloDetalle; 
   const valorTipico = (c: ColumnaEsquema) => tipico.data?.valores[c.columna];
   const textoTipico = (c: ColumnaEsquema) => {
     const t = valorTipico(c);
-    return t === undefined ? undefined : `Típico: ${typeof t === 'number' ? num(t, 2) : t}`;
+    if (t === undefined) return undefined;
+    // Una acción ordinal se nombra como en su lista (una binaria, Activa o No activa).
+    const i = c.rol === 'accion' && c.orden ? c.orden.indexOf(String(t)) : -1;
+    return `Típico: ${i >= 0 ? etiquetaAccion({ categorias: c.orden }, i) : typeof t === 'number' ? num(t, 2) : t}`;
   };
   const sinDato = columnas.filter((c) => vacio(valores[c.columna]));
   const grupos = [

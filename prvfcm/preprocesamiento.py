@@ -415,6 +415,14 @@ class Preprocesador:
         minimo, maximo = self.minimos[columna], self.maximos[columna]
         return np.asarray(valores) * (maximo - minimo) + minimo
 
+    def rejillas_accion(self) -> list[np.ndarray | None]:
+        """Valores normalizados que admite cada acción: los de sus categorías si es ordinal (None si es continua)."""
+        rejillas = []
+        for i in self.indices_accion:
+            mapa = self.esquema.codificacion_ordinal.get(self.columnas[i])
+            rejillas.append(None if mapa is None else np.unique(self.normalizar(list(mapa.values()), self.columnas[i])))
+        return rejillas
+
     def etiquetas(self, df: pd.DataFrame) -> np.ndarray:
         """Nivel observado del objetivo con la normalización de entrenamiento."""
         if self.esquema.objetivo in self.esquema.codificacion_ordinal:

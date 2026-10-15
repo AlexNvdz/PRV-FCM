@@ -34,10 +34,11 @@ RAIZ = Path(__file__).resolve().parent
 SALIDA = RAIZ / "resultados_experimentos"
 
 # Dataset -> (CSV, esquema JSON o None para xAPI, opciones comunes a todas las configuraciones).
+# Los esquemas de data/esquemas/ se retiraron en octubre de 2026 (siguen en el historial de git):
+# un dataset sin su CSV o sin su esquema se omite.
 # Todos se binarizan (dos niveles), como en PRV-FCM: así las dos configuraciones resuelven la misma tarea.
 DATASETS = {
     "xapi480": (RAIZ / "data" / "xAPI-Edu-Data.csv", None, {"binarizar_objetivo": "M"}),
-    "xapi4800": (RAIZ / "data" / "xAPI-Edu-Data-expanded-4800.csv", None, {"binarizar_objetivo": "M"}),
     "marketing": (RAIZ / "data" / "marketing_campaign.csv", RAIZ / "data" / "esquemas" / "marketing.json", {}),
     # Presión y colesterol deben poder bajar.
     "heart": (RAIZ / "data" / "heart.csv", RAIZ / "data" / "esquemas" / "heart.json", {"permitir_reducciones": True}),
@@ -49,8 +50,6 @@ DATASETS = {
     ),
 }
 CONFIGURACIONES = ["articulo/pso", "articulo/bptt", "articulo/ridge", "mejorado/bptt", "mejorado/ridge", "mejorado/pso"]
-# En 4800 el perfil "articulo" (PSO con 10 pliegues y grilla de reglas) no cabe en tiempo; el artículo usó las 480 filas.
-SOLO_MEJORADO = {"xapi4800"}
 
 
 def correr(nombre: str, configuracion: str) -> tuple[dict, list[dict]]:
@@ -167,11 +166,12 @@ def main() -> None:
         previas = pd.read_csv(SALIDA / "resumen.csv")
         hechas = set(zip(previas["dataset"], previas["perfil"] + "/" + previas["metodo"]))
     for nombre in args.datasets:
-        if not DATASETS[nombre][0].exists():
-            print(f"{nombre}: no está {DATASETS[nombre][0]}; se omite.")
+        faltan = [ruta for ruta in DATASETS[nombre][:2] if ruta is not None and not ruta.exists()]
+        if faltan:
+            print(f"{nombre}: no está {faltan[0]}; se omite.")
             continue
         for configuracion in args.configuraciones:
-            if (nombre, configuracion) in hechas or (nombre in SOLO_MEJORADO and configuracion.startswith("articulo")):
+            if (nombre, configuracion) in hechas:
                 continue
             print(f"{nombre} {configuracion} ...", flush=True)
             fila, acciones = correr(nombre, configuracion)

@@ -12,7 +12,7 @@ import { Aviso, Boton, NivelChip } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import { nivelesDe, useModelo } from '../hooks';
 import type { EventoChat, Prescripcion, Simulacion } from '../tipos';
-import { clase, firmado, mayuscula, num, sujetoDeDataset, type SujetoTexto } from '../utilidades';
+import { clase, firmado, mayuscula, num, recomendacionAccion, sujetoDeDataset, textoAccion, type SujetoTexto } from '../utilidades';
 
 type Artefacto = Extract<EventoChat, { tipo: 'grafica' | 'estudiante' | 'simulacion' | 'perfil' }>;
 type Consulta = { nombre: string; argumentos: Record<string, unknown>; ok?: boolean; error?: string };
@@ -82,7 +82,6 @@ function TablaAcciones({ filas, antes, despues }: { filas: { nombre: string; cel
 }
 
 function TarjetaEstudiante({ id, prescripcion, maxima, niveles, s }: { id: number; prescripcion: Prescripcion; maxima?: Prescripcion; niveles: string[]; s: SujetoTexto }) {
-  const valor = (v: { valor: number; categoria?: string }) => v.categoria ?? num(v.valor);
   return (
     <div className="rounded-xl border border-linea bg-hoja p-4">
       <p className="text-sm font-semibold">{mayuscula(s.singular)} {id}</p>
@@ -103,7 +102,7 @@ function TarjetaEstudiante({ id, prescripcion, maxima, niveles, s }: { id: numbe
             const m = maxima?.acciones[i];
             return {
               nombre: a.nombre,
-              celdas: [valor(a.actual), valor(a.recomendada), ...(m ? [valor(m.recomendada)] : [])],
+              celdas: [textoAccion(a, a.actual), recomendacionAccion(a), ...(m ? [recomendacionAccion(m)] : [])],
               igual: [true, Math.abs(a.cambio) < 1e-6, ...(m ? [Math.abs(m.cambio) < 1e-6] : [])],
             };
           })}
@@ -142,7 +141,6 @@ function TarjetaSimulacion({ id, simulacion, niveles, s }: { id: number; simulac
 }
 
 function TarjetaPerfil({ origen, cambios, prescripcion, niveles }: { origen: string; cambios: Record<string, string | number>; prescripcion: Prescripcion; niveles: string[] }) {
-  const valor = (v: { valor: number; categoria?: string }) => v.categoria ?? num(v.valor);
   const listaCambios = Object.entries(cambios);
   return (
     <div className="rounded-xl border border-linea bg-hoja p-4">
@@ -162,7 +160,7 @@ function TarjetaPerfil({ origen, cambios, prescripcion, niveles }: { origen: str
       <div className="mt-3">
         <TablaAcciones
           antes={['Actual', 'Recomendada']}
-          filas={prescripcion.acciones.map((a) => ({ nombre: a.nombre, celdas: [valor(a.actual), valor(a.recomendada)], igual: [true, Math.abs(a.cambio) < 1e-6] }))}
+          filas={prescripcion.acciones.map((a) => ({ nombre: a.nombre, celdas: [textoAccion(a, a.actual), recomendacionAccion(a)], igual: [true, Math.abs(a.cambio) < 1e-6] }))}
         />
       </div>
       {prescripcion.restriccion && (

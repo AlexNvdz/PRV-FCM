@@ -8,7 +8,7 @@ import { MapaFCM } from '../componentes/MapaFCM';
 import { Aviso, Cargando, Dato, Vacio } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import { nivelesDe, useEstadisticas, useModelo } from '../hooks';
-import { entero, fecha, num, pct, pctDe, sujetoDeDataset } from '../utilidades';
+import { entero, fecha, filaMancuerna, num, pct, pctDe, sujetoDeDataset } from '../utilidades';
 
 const enlacePrincipal = 'inline-flex h-10 items-center gap-2 rounded-md bg-boton px-4 text-sm font-medium text-boton-texto hover:opacity-90';
 const enlaceSecundario = 'inline-flex h-10 items-center gap-2 rounded-md border border-linea bg-hoja px-4 text-sm font-medium text-tinta hover:bg-hoja-2';
@@ -123,7 +123,7 @@ export function Resumen() {
           <GraficaMancuernas
             titulo="Qué cambia la prescripción, en promedio"
             descripcion="Nivel medio de cada acción: actual y recomendado (unidades originales)."
-            filas={graficas.acciones.map((a) => ({ nombre: a.nombre, desde: a.actual_media, hasta: a.recomendada_media, min: a.min, max: a.max }))}
+            filas={graficas.acciones.map((a) => filaMancuerna(a, (graficas.acciones_info ?? []).find((i) => i.columna === a.columna)?.categorias))}
           />
           <GraficaDivergente
             titulo={`Qué más influye en ${graficas.objetivo}`}

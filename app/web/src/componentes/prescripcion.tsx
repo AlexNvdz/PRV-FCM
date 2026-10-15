@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 
 import type { EstadoPrediccion, Prescripcion, ReporteIndividual } from '../tipos';
-import { clase, colorNivel, firmado, num, pct } from '../utilidades';
+import { clase, colorNivel, esBinaria, firmado, num, pct, recomendacionAccion, textoAccion } from '../utilidades';
 import { EvolucionAG } from './evolucion';
 import { GraficaMancuernas } from './graficas';
 import { RedaccionIA } from './RedaccionIA';
@@ -60,7 +60,6 @@ export function ReporteTexto({ reporte, titulo = 'Reporte prescriptivo' }: { rep
 }
 
 export function TablaPrescripcion({ prescripcion }: { prescripcion: Prescripcion }) {
-  const valor = (v: { valor: number; categoria?: string }) => v.categoria ?? num(v.valor);
   return (
     <table className="tabular w-full text-sm">
       <thead className="text-left text-xs text-tinta-3">
@@ -75,14 +74,16 @@ export function TablaPrescripcion({ prescripcion }: { prescripcion: Prescripcion
       <tbody>
         {prescripcion.acciones.map((a) => {
           const igual = Math.abs(a.cambio) < 1e-6;
+          // En una binaria la decisión ya dice el cambio.
+          const binaria = esBinaria(a);
           const rango = a.max !== undefined && a.min !== undefined ? a.max - a.min : null;
           return (
             <tr key={a.columna} className="border-t border-linea">
               <th scope="row" className="py-1.5 text-left font-normal">{a.nombre}</th>
-              <td className="py-1.5 text-right">{valor(a.actual)}</td>
-              <td className="py-1.5 text-right font-medium">{valor(a.recomendada)}</td>
-              <td className={clase('py-1.5 text-right', igual && 'text-tinta-3')}>{igual ? 'igual' : firmado(a.cambio, 1)}</td>
-              <td className={clase('py-1.5 text-right', igual && 'text-tinta-3')}>{igual || !rango ? '—' : pct((100 * a.cambio) / rango, 0)}</td>
+              <td className="py-1.5 text-right">{textoAccion(a, a.actual)}</td>
+              <td className="py-1.5 text-right font-medium">{recomendacionAccion(a)}</td>
+              <td className={clase('py-1.5 text-right', igual && 'text-tinta-3')}>{binaria ? '—' : igual ? 'igual' : firmado(a.cambio, 1)}</td>
+              <td className={clase('py-1.5 text-right', igual && 'text-tinta-3')}>{binaria || igual || !rango ? '—' : pct((100 * a.cambio) / rango, 0)}</td>
             </tr>
           );
         })}
