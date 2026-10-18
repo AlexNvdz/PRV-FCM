@@ -59,6 +59,18 @@ def discretizar_rendimiento(valores: np.ndarray, niveles: dict[str, float] = NIV
     return etiquetas[np.argmin(distancias, axis=-1)]
 
 
+def nivel_siguiente(nivel: str, niveles: dict[str, float]) -> str:
+    """El nivel inmediatamente mejor que ``nivel`` (el mismo si ya es el mejor): la meta escalonada."""
+    mejores = sorted((v, n) for n, v in niveles.items() if v > niveles[nivel])
+    return mejores[0][1] if mejores else nivel
+
+
+def alcanza_meta(activaciones: np.ndarray, metas: np.ndarray, niveles: dict[str, float]) -> np.ndarray:
+    """True si el nivel de cada activación es su meta o uno mejor."""
+    obtenidos = discretizar_rendimiento(np.asarray(activaciones, dtype=float), niveles)
+    return np.array([niveles[o] >= niveles[m] for o, m in zip(obtenidos, metas)], dtype=bool)
+
+
 def exito_prescriptivo(
     estados_objetivo: np.ndarray, valores_deseados: np.ndarray, tolerancia: float = 0.25
 ) -> np.ndarray:
@@ -156,6 +168,8 @@ def validacion_externa(
     semilla: int | None = None,
     segmentos: dict[str, np.ndarray] | None = None,
     etiqueta_mejor: str = "H",
+    metas: np.ndarray | None = None,
+    niveles: dict[str, float] | None = None,
 ) -> dict:
     """Evalúa las prescripciones con un bosque aleatorio independiente del FCM.
 
@@ -163,15 +177,21 @@ def validacion_externa(
     actuales y con las recomendadas; el resto de variables no cambia.
     ``segmentos`` ({nombre: máscara booleana sobre esos estudiantes}) añade el
     porcentaje clasificado en el mejor nivel dentro de cada segmento. En las
-    claves, H designa el mejor nivel (``etiqueta_mejor``).
+    claves, H designa el mejor nivel (``etiqueta_mejor``). Con ``metas`` (un
+    nivel por registro, meta escalonada) y ``niveles``, el éxito es llegar a la
+    meta propia o a un nivel mejor; las probabilidades siguen siendo del mejor nivel.
     """
     modelo = RandomForestClassifier(n_estimators=500, random_state=semilla, n_jobs=-1)
     modelo.fit(X_entrenamiento, clases_entrenamiento)
     if etiqueta_mejor not in modelo.classes_:
         raise ValueError(f"El entrenamiento no tiene registros del mejor nivel ({etiqueta_mejor}).")
     indice_h = list(modelo.classes_).index(etiqueta_mejor)
-    es_h_base = modelo.predict(X_base) == etiqueta_mejor
-    es_h_prescrito = modelo.predict(X_prescrito) == etiqueta_mejor
+    if metas is None:
+        es_h_base = modelo.predict(X_base) == etiqueta_mejor
+        es_h_prescrito = modelo.predict(X_prescrito) == etiqueta_mejor
+    else:
+        llega = lambda clases: np.array([niveles[c] >= niveles[m] for c, m in zip(clases, metas)], dtype=bool)  # noqa: E731
+        es_h_base, es_h_prescrito = llega(modelo.predict(X_base)), llega(modelo.predict(X_prescrito))
     return {
         "exactitud_prueba": float(modelo.score(X_prueba, clases_prueba)),
         "PSR_externo_base": float(100.0 * np.mean(es_h_base)),

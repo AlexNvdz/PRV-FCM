@@ -359,6 +359,9 @@ class ConfigPrescripcion:
     tolerancia_exito: float = 0.25
     # Clases observadas de los estudiantes que reciben prescripción.
     clases_a_prescribir: tuple[str, ...] = ("L", "M")
+    # Meta escalonada: cada registro apunta al nivel siguiente al suyo (L -> M, M -> H), no al
+    # mejor de una vez; el éxito es llegar a esa meta o a uno mejor. False: todos apuntan al mejor.
+    meta_escalonada: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +397,7 @@ PERFILES: dict[str, dict] = {
         "condicion_delta_max": None,
         "sembrar": False,
         "permitir_reducciones": True,
+        "meta_escalonada": False,
         "aptitud": "tabla4",
         "busqueda_ag": True,
         # Configuración del AG que el artículo reporta para el rendimiento académico, sin parada temprana.

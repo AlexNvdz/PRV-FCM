@@ -139,7 +139,7 @@ export const GLOSARIO = {
     termino: 'D_T',
     expansion: 'Estado deseado del objetivo (meta)',
     definicion:
-      'Valor normalizado al que el algoritmo genético quiere llevar el objetivo: 1 para el mejor nivel, o el valor del nivel elegido como meta (por ejemplo, 0,5 para el nivel del medio cuando hay tres).',
+      'Valor normalizado al que el algoritmo genético quiere llevar el objetivo: 1 para el mejor nivel, el del nivel siguiente al observado con la meta escalonada, o el valor del nivel elegido como meta (por ejemplo, 0,5 para el nivel del medio cuando hay tres).',
     ver: ['meta', 'tolerancia'],
     claves: 'dt estado deseado',
     simbolo: true,
@@ -267,7 +267,7 @@ export const GLOSARIO = {
   'cambio-maximo': {
     termino: 'Cambio máximo por acción',
     definicion:
-      'Límite de cuánto puede moverse cada acción en una prescripción, como fracción de su rango: 0,2 permite moverla como máximo un 20 % de la distancia entre su mínimo y su máximo observados. Vacío o «sin límite»: la acción puede llegar al extremo de su rango. Sirve para pedir planes realistas.',
+      'Límite de cuánto puede moverse cada acción en una prescripción, como fracción de su rango: 0,2 permite moverla como máximo un 20 % de la distancia entre su mínimo y su máximo observados. Vacío o «sin límite»: la acción puede llegar al extremo de su rango. Sirve para pedir planes realistas: sin él, a quien está lejos de su meta el AG le pide casi todo el rango. Una acción discreta (una campaña) siempre puede moverse una categoría aunque el tope sea menor que su paso. Los controles del panel y del perfil de riesgo parten del tope del modelo.',
     donde: 'Paso 3 (campo «Cambio máximo por acción») y paso 4 (controles del panel del estudiante y del perfil de riesgo).',
     ver: ['beta', 'rango', 'del-rango', 'tope-ausentismo'],
     claves: 'delta maximo limite',
@@ -355,9 +355,9 @@ export const GLOSARIO = {
   'convergencia-ag': {
     termino: 'Convergencia del AG',
     definicion:
-      'Cómo baja el costo generación tras generación. En el paso 4 y en el Informe, la línea es la mediana del mejor costo de cada generación entre los estudiantes y la banda, su rango intercuartílico. En una prescripción individual se ven el mejor costo y el costo medio de la población («Costo por generación»). Cuando la curva se aplana, el AG ya no encuentra mejoras.',
+      'Cómo mejora la población generación tras generación, desde la población inicial (generación 0). En el paso 4 y en el Informe se ve por defecto la aptitud normalizada: el mejor individuo (élite, naranja) arranca alto y el promedio de la población (azul) sube hacia él; cuanto más arriba, mejor. El selector «Ver» cambia al costo: la mediana del mejor costo de cada generación entre los estudiantes, con su rango intercuartílico, y la del costo medio de la población; ahí menor es mejor. Los modelos entrenados antes de este cambio solo muestran el mejor costo desde la generación 1. En una prescripción individual se ven el mejor costo y el costo medio («Costo por generación»). Cuando las curvas se aplanan, el AG ya no encuentra mejoras. Si el mejor ya vale 1 en la generación 0, la población inicial contenía la solución (pasa con pocas combinaciones, como cinco campañas binarias) y solo sube el promedio.',
     donde: 'Paso 4, Informe y resultado de una prescripción individual.',
-    ver: ['generacion', 'costo-medio', 'cuartiles', 'parada-temprana', 'evolucion-ag'],
+    ver: ['aptitud-normalizada', 'generacion', 'costo-medio', 'cuartiles', 'parada-temprana', 'evolucion-ag'],
   },
   convergencia: {
     termino: 'Convergencia del FCM',
@@ -380,12 +380,21 @@ export const GLOSARIO = {
     donde: 'Paso 3 (método de W) y método «Parcial» del mapa de calor de correlaciones.',
     ver: ['correlacion', 'covarianza', 'ledoit-wolf'],
   },
+  'aptitud-normalizada': {
+    termino: 'Aptitud normalizada',
+    definicion:
+      'Escala de la convergencia del AG en la que más arriba es mejor. El AG minimiza el costo; para comparar estudiantes con costos de escalas distintas, el costo de cada uno se pasa a una escala propia: 0 es el costo medio de su población inicial y 1, su mejor costo final. Luego se toma la mediana entre estudiantes de dos curvas: el mejor individuo (élite) y el promedio de la población. La élite arranca alta, porque la población inicial ya trae buenas soluciones, y el promedio sube hacia ella.',
+    formula: 'aptitud(g) = (costo medio inicial − costo(g)) / (costo medio inicial − mejor costo final)',
+    donde: 'Convergencia del algoritmo genético en el paso 4 y en el Informe (vista «Aptitud normalizada»).',
+    ver: ['convergencia-ag', 'costo-medio', 'funcion-costo', 'generacion'],
+    claves: 'fitness aptitud elite promedio poblacion normalizada progreso',
+  },
   'costo-medio': {
     termino: 'Costo medio de la población',
     definicion:
       'Promedio del costo de todas las combinaciones de una generación del algoritmo genético. Baja a medida que la población se concentra cerca de la mejor solución.',
-    donde: 'Convergencia de una prescripción individual (línea naranja).',
-    ver: ['convergencia-ag', 'poblacion'],
+    donde: 'Convergencia de una prescripción individual y vista «Costo» de la convergencia del paso 4 y del Informe (en ambas, línea azul; en la segunda, mediana entre estudiantes).',
+    ver: ['convergencia-ag', 'aptitud-normalizada', 'poblacion'],
   },
   covarianza: {
     termino: 'Covarianza',
@@ -538,7 +547,7 @@ export const GLOSARIO = {
   'evolucion-ag': {
     termino: 'Evolución del algoritmo genético',
     definicion:
-      'Panel de una prescripción individual que reproduce el historial real del AG, generación por generación. «Reproducir», «Pausar», «Ir al final» y el control deslizante eligen la generación. Muestra el mejor costo, el costo medio, la activación del objetivo con el mejor individuo, la curva del costo hasta esa generación y, en barras, las acciones actuales frente a las mejores de esa generación; en la última, las prescritas. El AG de un estudiante tarda milisegundos: por eso se reproduce su historial en lugar de mostrarlo en vivo.',
+      'Panel de una prescripción individual que reproduce el historial real del AG, generación por generación, desde la población inicial (generación 0). «Reproducir», «Pausar», «Ir al final» y el control deslizante eligen la generación. Muestra el mejor costo, el costo medio, la activación del objetivo con el mejor individuo, la curva del costo hasta esa generación y, en barras, las acciones actuales frente a las mejores de esa generación; en la última, las prescritas. El AG de un estudiante tarda milisegundos: por eso se reproduce su historial en lugar de mostrarlo en vivo.',
     donde: 'Resultado de una prescripción individual: panel del estudiante y perfil de riesgo.',
     ver: ['convergencia-ag', 'generacion', 'funcion-costo', 'elitismo'],
     claves: 'fitness aptitud progreso generaciones reproducir',
@@ -670,9 +679,9 @@ export const GLOSARIO = {
   generacion: {
     termino: 'Generación',
     definicion:
-      'Una ronda del algoritmo genético: seleccionar padres, cruzarlos, mutar a las hijas y formar la nueva población. «Generaciones medias del AG» es el promedio de generaciones que necesitó cada estudiante antes de detenerse (100 como máximo por defecto).',
-    donde: 'Paso 3 (campo «Generaciones») y paso 4.',
-    ver: ['ag', 'parada-temprana'],
+      'Una ronda del algoritmo genético: seleccionar padres, cruzarlos, mutar a las hijas y formar la nueva población. La generación 0 es la población inicial, antes del primer cruce: incluye las acciones actuales. «Generaciones medias del AG» es el promedio de generaciones que necesitó cada estudiante antes de detenerse (100 como máximo por defecto).',
+    donde: 'Paso 3 (campo «Generaciones»), paso 4 y gráficas de convergencia (eje «Generación», desde 0).',
+    ver: ['ag', 'parada-temprana', 'aptitud-normalizada'],
   },
   gradiente: {
     termino: 'Gradiente',
@@ -870,9 +879,9 @@ export const GLOSARIO = {
   'mejor-nivel': {
     termino: 'Mejor nivel y peor nivel',
     definicion:
-      'Los extremos del orden del objetivo definido en el paso 2. El mejor nivel vale 1 en la escala normalizada y es la meta por defecto; los registros de prueba que están en otros niveles reciben prescripción.',
+      'Los extremos del orden del objetivo definido en el paso 2. El mejor nivel vale 1 en la escala normalizada y es la meta por defecto (con la meta escalonada, cada registro apunta antes al nivel siguiente al suyo); los registros de prueba que están en otros niveles reciben prescripción.',
     donde: 'Paso 2 (orden «Peor … Mejor»), paso 4 y gráficas.',
-    ver: ['nivel', 'meta', 'tolerancia'],
+    ver: ['nivel', 'meta', 'meta-escalonada', 'tolerancia'],
   },
   memoria: {
     termino: 'Memoria',
@@ -884,10 +893,20 @@ export const GLOSARIO = {
     termino: 'Meta',
     expansion: 'Estado deseado del objetivo',
     definicion:
-      'Nivel del objetivo al que se quiere llevar a un estudiante o perfil. Por defecto es el mejor nivel; en el panel del estudiante y en el perfil de riesgo puede elegir uno intermedio como meta más realista. Se alcanza si la activación final queda a menos de la tolerancia del valor de ese nivel.',
+      'Nivel del objetivo al que se quiere llevar a un estudiante o perfil. Por defecto es el mejor nivel, o el siguiente al suyo con la meta escalonada; en el panel del estudiante y en el perfil de riesgo puede elegir uno intermedio como meta más realista. Se alcanza si la activación final queda a menos de la tolerancia del valor de ese nivel.',
     donde: 'Paso 4 («Meta (estado deseado del objetivo)» y «Meta en el objetivo»).',
-    ver: ['d-t', 'tolerancia', 'mejor-nivel'],
+    ver: ['d-t', 'tolerancia', 'mejor-nivel', 'meta-escalonada'],
     claves: 'estado deseado',
+  },
+  'meta-escalonada': {
+    termino: 'Meta escalonada',
+    definicion:
+      'Cada registro apunta al nivel siguiente al suyo en vez de saltar al mejor: uno en L apunta a M y uno en M, a H. Así la meta es alcanzable con cambios moderados. Es la opción del perfil mejorado; el del artículo apunta siempre al mejor nivel. Con un objetivo de dos niveles no cambia nada, porque el siguiente ya es el mejor. La tasa de éxito cuenta a quien llega a su meta o a un nivel mejor; la probabilidad del mejor nivel según el bosque sigue midiendo el mejor nivel. En una prescripción individual, «Nivel siguiente (meta escalonada)» toma el siguiente al nivel observado del registro o, en un perfil, al que infiere el FCM.',
+    formula: 'D_T = valor del nivel siguiente al observado;   éxito ⇔ nivel(A*_T) ≥ meta',
+    donde:
+      'Paso 3 (casilla «Meta escalonada»), paso 4 (frase principal, tabla de métricas, filtro «Llega a su meta», columna «Meta», gráfica antes y después, selector de meta), Resumen, Informe y Consulta.',
+    ver: ['meta', 'mejor-nivel', 'psr', 'perfil-entrenamiento'],
+    claves: 'escalonada nivel siguiente intermedia gradual L M H',
   },
   'modelo-activo': {
     termino: 'Modelo activo',
@@ -1051,9 +1070,9 @@ export const GLOSARIO = {
   'perfil-entrenamiento': {
     termino: 'Perfil de entrenamiento',
     definicion:
-      '«Artículo» reproduce el protocolo de Hoyos, Aguilar y Toro (2023): PSO, sin sesgo, β = 0, sin tope por ausentismo, SMOTE, mutables dinámicos, 10 pliegues, aptitud de la Tabla 4, AG sin siembra de las acciones actuales y búsqueda de los parámetros del AG; la validación cruzada elige la regla de inferencia y la activación. «Mejorado» es lo que este proyecto validó: BPTT, Kosko modificada con sigmoide, sesgo, β = 0,4 y tope por ausentismo. Cada opción que usted cambie manda sobre el perfil; los valores exactos se leen del motor y se muestran junto al selector.',
+      '«Artículo» reproduce el protocolo de Hoyos, Aguilar y Toro (2023): PSO, sin sesgo, β = 0, sin tope por ausentismo, SMOTE, mutables dinámicos, 10 pliegues, aptitud de la Tabla 4, AG sin siembra de las acciones actuales y búsqueda de los parámetros del AG; la validación cruzada elige la regla de inferencia y la activación. «Mejorado» es lo que este proyecto validó: BPTT, Kosko modificada con sigmoide, sesgo, β = 0,4, tope por ausentismo y meta escalonada. Cada opción que usted cambie manda sobre el perfil; los valores exactos se leen del motor y se muestran junto al selector.',
     donde: 'Paso 3, «Perfil de entrenamiento».',
-    ver: ['pso', 'regla-inferencia', 'smote', 'beta', 'sesgo', 'tope-ausentismo'],
+    ver: ['pso', 'regla-inferencia', 'smote', 'beta', 'sesgo', 'tope-ausentismo', 'meta-escalonada'],
     claves: 'articulo mejorado protocolo',
   },
   'perfil-inmutable': {
@@ -1182,11 +1201,11 @@ export const GLOSARIO = {
     termino: 'Tasa de éxito prescriptivo',
     expansion: 'PSR en las métricas del motor',
     definicion:
-      'Porcentaje de estudiantes prescritos cuya activación final del objetivo queda dentro de la tolerancia de la meta: los que el FCM ubica en el mejor nivel. Se calcula con las acciones actuales y con las prescritas; la diferencia es la mejora que el FCM atribuye a la prescripción. La cifra equivalente del bosque aleatorio es la estimación prudente.',
+      'Porcentaje de estudiantes prescritos cuya activación final del objetivo queda dentro de la tolerancia de la meta: los que el FCM ubica en el mejor nivel o, con la meta escalonada, en su meta o en un nivel mejor. Se calcula con las acciones actuales y con las prescritas; la diferencia es la mejora que el FCM atribuye a la prescripción. La cifra equivalente del bosque aleatorio es la estimación prudente.',
     formula: 'tasa de éxito = % de estudiantes con |A*_T − D_T| ≤ tolerancia',
     donde: 'Resumen, paso 4 («Tasa de éxito prescriptivo (FCM)»), Informe y asistente.',
     ver: ['tolerancia', 'bosque', 'mae', 'psr-ec19'],
-    claves: 'exito prescriptivo tasa llega al mejor nivel',
+    claves: 'exito prescriptivo tasa llega al mejor nivel llega a su meta',
   },
   'psr-ec19': {
     termino: 'PSR (ecuación 19)',
@@ -1521,7 +1540,7 @@ export const GLOSARIO = {
   'validacion-externa': {
     termino: 'Validación externa',
     definicion:
-      'Comprobación de las prescripciones con un modelo independiente, el bosque aleatorio, para no depender solo del FCM que las generó: se le pasan los mismos estudiantes con sus acciones actuales y con las prescritas, y se cuenta cuántos clasifica en el mejor nivel.',
+      'Comprobación de las prescripciones con un modelo independiente, el bosque aleatorio, para no depender solo del FCM que las generó: se le pasan los mismos estudiantes con sus acciones actuales y con las prescritas, y se cuenta cuántos clasifica en el mejor nivel (con la meta escalonada, en su meta o en uno mejor).',
     donde: 'Paso 4 y Resumen.',
     ver: ['bosque', 'psr', 'prob-mejor'],
   },

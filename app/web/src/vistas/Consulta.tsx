@@ -11,7 +11,7 @@ import { ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, Clase, Encabezado, estiloControl, NivelChip, Seccion, Vacio } from '../componentes/ui';
 import { nivelesDe, useDataset, useModelo } from '../hooks';
 import type { ColumnaEsquema, Dataset, Esquema, MetodoPesos, ModeloDetalle, ModeloListo, Prescripcion } from '../tipos';
-import { descargarCsv, etiquetaAccion, fecha, mayuscula, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num, sujetoDe } from '../utilidades';
+import { descargarCsv, esEscalonada, etiquetaAccion, fecha, mayuscula, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num, sujetoDe } from '../utilidades';
 import { Campo } from './PerfilRiesgo';
 
 type Valores = Record<string, string | number>;
@@ -231,7 +231,9 @@ function FormularioConsulta({ modelo, dataset, tema }: { modelo: ModeloDetalle; 
   const tipico = useQuery({ queryKey: ['perfil-base', modelo.id, null], queryFn: () => api.perfilBase(modelo.id, null), staleTime: Infinity });
   const [valores, setValores] = useState<Valores>({});
   const [deseados, setDeseados] = useState<Valores>({});
-  const [meta, setMeta] = useState(niveles.at(-1) ?? '');
+  // Con meta escalonada, '' (null) deja que el motor elija el nivel siguiente al que infiere el FCM.
+  const escalonada = esEscalonada(modelo.metricas, g.niveles);
+  const [meta, setMeta] = useState(escalonada ? '' : (niveles.at(-1) ?? ''));
   const [enviado, setEnviado] = useState<{ perfil: Valores; cuando: string } | null>(null);
   const prescribir = useMutation({
     mutationFn: (datos: { perfil: Valores; deseados?: Valores; nivelMeta: string | null }) => api.prescribirPerfil(modelo.id, datos),
@@ -319,6 +321,7 @@ function FormularioConsulta({ modelo, dataset, tema }: { modelo: ModeloDetalle; 
                   Nivel deseado del objetivo <Clase letra="T" />
                 </span>
                 <select className={estiloControl} value={meta} onChange={(e) => setMeta(e.target.value)}>
+                  {escalonada && <option value="">Nivel siguiente (meta escalonada)</option>}
                   {[...niveles].reverse().map((n) => (
                     <option key={n} value={n}>
                       {n}

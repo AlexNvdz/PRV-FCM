@@ -219,11 +219,15 @@ export interface Metricas {
     prescripcion: {
       beta_esfuerzo: number;
       delta_max: number | null;
+      /** False si el entrenamiento permitió reducir acciones. */
+      solo_incrementos?: boolean;
       tolerancia_exito: number;
       clases_a_prescribir: string[];
       /** Tope de las acciones por ausentismo: columna que lo activa (null = desactivado) y cambio máximo en [0, 1]. Faltan en modelos antiguos. */
       condicion_columna?: string | null;
       condicion_delta_max?: number;
+      /** Cada registro apunta al nivel siguiente al observado. Falta en modelos antiguos (equivale a false). */
+      meta_escalonada?: boolean;
     };
     mutables_dinamicos: string[];
     aristas_excluidas?: [string, string][];
@@ -250,6 +254,8 @@ export interface Metricas {
     PSR_base: number;
     cambio_medio_por_accion: number;
     generaciones_medias_ag: number;
+    /** Registros por nivel meta, por ejemplo {"M": 47, "H": 65}. Falta en modelos antiguos. */
+    metas?: Record<string, number>;
   };
   exito_por_segmento: Record<string, { n: number; PSR_base: number; PSR: number }>;
   /** Validación del artículo (Tablas 11 y 12): qué tan cerca quedan las acciones prescritas de las reales. Falta en modelos viejos. */
@@ -319,8 +325,14 @@ export interface AccionInfo {
 }
 
 export interface Graficas {
-  convergencia: { generacion: number[]; q1: number[]; mediana: number[]; q3: number[] };
-  antes_despues: { id: number; base: number; prescrito: number }[];
+  /**
+   * Por generación (0 = población inicial): cuartiles y mediana del mejor costo entre registros. `medio` (mediana del
+   * costo medio de la población) y `progreso` (aptitud normalizada por registro: 0 = costo medio de su población
+   * inicial, 1 = su mejor costo final; mediana entre registros) faltan en modelos antiguos, que empiezan en la generación 1.
+   */
+  convergencia: { generacion: number[]; q1: number[]; mediana: number[]; q3: number[]; medio?: number[]; progreso?: { mejor: number[]; medio: number[] } };
+  /** `meta` y `umbral_meta` (activación desde la que alcanza su meta) faltan en modelos antiguos. */
+  antes_despues: { id: number; base: number; prescrito: number; meta?: string; umbral_meta?: number }[];
   acciones: { id: string; columna: string; nombre: string; actual_media: number; recomendada_media: number; min: number; max: number }[];
   umbral_mejor: number;
   objetivo: string;
@@ -540,7 +552,7 @@ export interface ResumenPrescripciones {
     pct_igual: number;
     decimales: number;
   }[];
-  por_nivel: { nivel: string; n: number; pct_exito: number; activacion_base: number; activacion_prescrita: number }[];
+  por_nivel: { nivel: string; n: number; pct_exito: number; activacion_base: number; activacion_prescrita: number; meta?: string }[];
   ejemplos: { id_estudiante: number; nivel_observado: string; activacion_base: number; activacion_prescrita: number; nivel_prescrito: string }[];
   texto: string;
   nota?: string;
@@ -567,6 +579,7 @@ export interface DefectosPerfil {
   beta: number;
   condicion_delta_max?: number | null;
   permitir_reducciones: boolean;
+  meta_escalonada?: boolean;
   mutables_dinamicos?: boolean;
   smote: boolean;
   binarizar_objetivo?: string | number | null;
@@ -579,7 +592,7 @@ export interface DefectosPerfil {
 export type Perfiles = Record<PerfilModelo, DefectosPerfil>;
 
 /** Opciones que dependen del perfil: sin valor, el motor usa la del perfil elegido. */
-export type OpcionDePerfil = 'proporcion_prueba' | 'pliegues' | 'metodo_pesos' | 'inferencia' | 'activacion' | 'beta' | 'permitir_reducciones' | 'smote' | 'busqueda_ag' | 'binarizar_objetivo';
+export type OpcionDePerfil = 'proporcion_prueba' | 'pliegues' | 'metodo_pesos' | 'inferencia' | 'activacion' | 'beta' | 'permitir_reducciones' | 'meta_escalonada' | 'smote' | 'busqueda_ag' | 'binarizar_objetivo';
 
 export interface OpcionesEntrenamiento {
   perfil: PerfilModelo;
@@ -601,6 +614,7 @@ export interface OpcionesEntrenamiento {
   beta?: number;
   delta_max: number | null;
   permitir_reducciones?: boolean;
+  meta_escalonada?: boolean;
   semilla: number;
   ag: Partial<{ tam_poblacion: number; generaciones: number; tasa_cruce: number; tasa_mutacion: number; tipo_cruce: 'uniforme' | 'un_punto' }>;
 }

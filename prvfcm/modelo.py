@@ -74,6 +74,7 @@ class ModeloPRVFCM:
         self.medias_dinamicos = np.array(datos["medias_dinamicos"], dtype=float)
         self.config_ag = ConfigAG(**datos["config_ag"])
         presc = dict(datos["config_prescripcion"])
+        presc.setdefault("meta_escalonada", False)  # Modelos anteriores: todos apuntaban al mejor nivel.
         presc["clases_a_prescribir"] = tuple(presc["clases_a_prescribir"])
         self.config_prescripcion = ConfigPrescripcion(**presc)
         self.ids_prueba = set(datos.get("ids_prueba", []))
@@ -183,15 +184,15 @@ class ModeloPRVFCM:
     def describir_final(self, final: np.ndarray, meta: float = 1.0) -> dict:
         """Activación y nivel del objetivo en un estado ya convergido.
 
-        ``exito`` indica si el objetivo queda a menos de la tolerancia de la
-        meta (por defecto 1, el mejor nivel).
+        ``exito`` indica si el objetivo llega a la meta (por defecto 1, el mejor
+        nivel) menos la tolerancia: la meta o un nivel mejor.
         """
         objetivo = self.pre.indice_objetivo
         activacion = float(final[objetivo])
         return {
             "activacion": activacion,
             "nivel": discretizar_rendimiento(activacion, self.esquema.niveles).item(),
-            "exito": bool(abs(activacion - meta) <= self.config_prescripcion.tolerancia_exito + 1e-9),
+            "exito": bool(activacion >= meta - self.config_prescripcion.tolerancia_exito - 1e-9),
             "dinamicos": {self.pre.columnas[i]: float(final[i]) for i in self.pre.indices_dinamicos},
         }
 

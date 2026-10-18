@@ -8,7 +8,7 @@ import { MapaFCM } from '../componentes/MapaFCM';
 import { Aviso, Cargando, Dato, Vacio } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import { nivelesDe, useEstadisticas, useModelo } from '../hooks';
-import { entero, fecha, filaMancuerna, num, pct, pctDe, sujetoDeDataset } from '../utilidades';
+import { entero, esEscalonada, fecha, filaMancuerna, num, pct, pctDe, sujetoDeDataset } from '../utilidades';
 
 const enlacePrincipal = 'inline-flex h-10 items-center gap-2 rounded-md bg-boton px-4 text-sm font-medium text-boton-texto hover:opacity-90';
 const enlaceSecundario = 'inline-flex h-10 items-center gap-2 rounded-md border border-linea bg-hoja px-4 text-sm font-medium text-tinta hover:bg-hoja-2';
@@ -81,7 +81,8 @@ export function Resumen() {
             <>
               <h1 className="mt-3 font-serif text-[2.35rem] font-semibold leading-[1.14] tracking-[-0.015em]">
                 Con las acciones prescritas, <span className="resaltado">{pct(metricas.prescripcion.PSR, 0)}</span> de los{' '}
-                {entero(metricas.prescripcion.n_estudiantes)} {s.plural} de prueba por debajo de {mejor} llegaría a {mejor} según el FCM.
+                {entero(metricas.prescripcion.n_estudiantes)} {s.plural} de prueba por debajo de {mejor}{' '}
+                {esEscalonada(metricas, graficas.niveles) ? 'subiría a su nivel meta (el siguiente)' : `llegaría a ${mejor}`} según el FCM.
               </h1>
               <p className="mt-5 max-w-[60ch] text-[1.02rem] text-tinta-2">
                 Hoy lo logra el {pct(metricas.prescripcion.PSR_base)}. Un bosque aleatorio independiente confirma la mejora para el{' '}

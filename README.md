@@ -197,7 +197,11 @@ original.
   `SectionID`, `Topic`) se codifican con la media suavizada del rendimiento por
   categoría: `(n_c·media_c + 10·media_global) / (n_c + 10)`.
 * **Min-Max a [0, 1]** para todas las variables (la "fuzzificación":
-  `x' = (x − mín) / (máx − mín)`). Mínimos, máximos y medias por categoría se
+  `x' = (x − mín) / (máx − mín)`). En las columnas numéricas, una cola que pasa
+  de 3 rangos intercuartílicos y reúne como mucho el 1 % de los registros se
+  recorta a esa cerca (`limites_robustos`): en marketing, un ingreso de 666 666
+  dejaba al 98 % de los clientes en el 13 % inferior de la escala, y en vino la
+  densidad y el SO2 libre ocupaban el 22-26 %. xAPI no tiene atípicos y no cambia. Mínimos, máximos y medias por categoría se
   ajustan solo con el conjunto de entrenamiento; en prueba los valores se
   recortan a [0, 1].
 * **Otros datasets** (aplicación web): CSV o Excel, y además de las
@@ -493,21 +497,26 @@ sola vez. El sesgo de C16 queda en −0.88.
 | M | 70.2 % | 61.5 % | 65.6 % |
 | H | 76.2 % | 72.7 % | 74.4 % |
 
-**Prescripción** (112 estudiantes con rendimiento L o M; β = 0.4 y tope por
-ausentismo de 0.15):
+**Prescripción** (112 estudiantes con rendimiento L o M; β = 0.4, tope por
+ausentismo de 0.15 y meta escalonada: los 47 en L apuntan a M y los 65 en M a H;
+ver la sección siguiente):
 
 | Métrica | Acciones actuales | PRV-FCM |
 |---|---|---|
-| MAE | 0.668 | 0.591 |
-| MSE | 0.505 | 0.431 |
-| RMSE | 0.710 | 0.657 |
-| Tasa de éxito (FCM) | 8.9 % | 15.2 % |
-| Clasificados H por el bosque aleatorio | 1.8 % | 8.9 % |
+| MAE (respecto a la meta de cada uno) | 0.461 | 0.395 |
+| MSE | 0.257 | 0.205 |
+| RMSE | 0.506 | 0.453 |
+| Tasa de éxito (FCM): llega a su meta | 14.3 % | 21.4 % |
+| En su meta según el bosque aleatorio | 11.6 % | 19.6 % |
 
-| Estudiantes que llegan a H | n | FCM | Bosque aleatorio |
+| Estudiantes que llegan a su meta | n | FCM | Bosque aleatorio |
 |---|---|---|---|
-| Más de 7 ausencias | 70 | 0.0 % → 0.0 % | 0.0 % → 0.0 % |
-| 7 ausencias o menos | 42 | 23.8 % → 40.5 % | 4.8 % → 23.8 % |
+| Más de 7 ausencias | 70 | 0.0 % → 0.0 % | 5.7 % → 5.7 % |
+| 7 ausencias o menos | 42 | 38.1 % → 57.1 % | 21.4 % → 42.9 % |
+
+Por nivel: de L a M llega el 17.0 % y de M a H el 24.6 %. Con todos apuntando a
+H (`--sin-meta-escalonada`, como antes) la tasa de éxito era 8.9 % → 15.2 % y el
+bosque 1.8 % → 8.9 %.
 
 **Comparación con el dataset expandido (retirado):**
 
@@ -517,8 +526,8 @@ ausentismo de 0.15):
 | λ y α elegidos | 2 y 0.0001 | 1 y 0.001 |
 | Exactitud del FCM | 72.4 % | 78.9 % |
 | Exactitud del bosque aleatorio | 75.0 % | 82.9 % |
-| Tasa de éxito del FCM | 8.9 % → 15.2 % | 7.2 % → 46.4 % |
-| Clasificados H por el bosque aleatorio | 1.8 % → 8.9 % | 8.1 % → 32.5 % |
+| Tasa de éxito del FCM (todos a H) | 8.9 % → 15.2 % | 7.2 % → 46.4 % |
+| Clasificados H por el bosque aleatorio (todos a H) | 1.8 % → 8.9 % | 8.1 % → 32.5 % |
 
 Con el original, el FCM promete H a 6.3 puntos más de estudiantes de los que
 confirma el bosque (14 con el expandido). Ninguno de los 70 estudiantes con más
@@ -526,6 +535,28 @@ de 7 ausencias llega a H, ni con el FCM ni con el bosque: en el dataset solo 4
 de los 191 con más de 7 ausencias tienen H, y el tope por ausentismo (calibrado
 con el expandido) limita cada acción a +0.15. La mejora está en los 42 con 7
 ausencias o menos.
+
+## Meta escalonada (perfil «mejorado»)
+
+Pedido del profesor: un estudiante en L primero debe pasar a M, no saltar a H, y
+uno en M busca H. Con `meta_escalonada` (por defecto en «mejorado»; «articulo»
+la desactiva, y `main.py --sin-meta-escalonada` también) cada registro apunta al
+nivel siguiente al observado: el valor deseado del objetivo en el costo del AG
+es el de ese nivel, así que pasarse a H no reduce el error de un L. El éxito es
+llegar a la meta propia o a un nivel mejor, para el FCM y para el bosque
+aleatorio. En una prescripción individual sin meta elegida, la meta es el nivel
+siguiente al observado (un perfil hipotético usa el nivel que infiere el FCM).
+Con un objetivo de dos niveles no cambia nada. `recomendaciones.csv` lleva la
+columna `nivel_meta` y `metricas.json` el conteo `prescripcion.metas`.
+
+En el objetivo, el costo solo cuenta lo que falta para la meta, max(D − A, 0):
+pasarse no es un error. Con |A − D|, si el FCM ya ubicaba al registro por encima
+de su meta, el AG lo empujaba hacia abajo (en vino, los 6 de calidad 3 recibían
+menos alcohol y 94 de 1470 bajaban). Si el FCM ya lo ubica en su meta o más
+arriba, el plan no cambia nada y el reporte lo explica: en vino, el FCM ve a los
+de calidad 3 en 4-6 (su activación media, 0.41, es la misma que la de los de
+calidad 5), así que no puede prescribir «de 3 a 4». Equilibrar niveles no lo
+corrige (exactitud 40.7 %).
 
 ## Decisión de modelado: C13-C15 observados
 
@@ -752,6 +783,69 @@ Tasa de éxito: 1.7 % → 98.6 %; el bosque aleatorio la confirma en 1.4 % → 1
 más frecuentes son Campañas 1 y 3 (168 clientes), 1, 3 y 5 (158) y la 1 sola
 (69). La Campaña 4 no se prescribe. La distancia entre el FCM y el bosque es
 grande: el FCM promete la respuesta a casi todos, el bosque a uno de cada diez.
+
+## Modelos de la aplicación (octubre de 2026)
+
+Un modelo por dataset, entrenado en la aplicación con validación cruzada y meta
+escalonada. Los esquemas viven en la app (`app/almacen/modelos/<id>/esquema.json`).
+«Trazo» es la correlación de Spearman entre la activación del objetivo antes y
+después de prescribir: cerca de 1, la curva prescrita sigue a la actual por
+encima, sin saltos de todo o nada.
+
+| Dataset | Esquema y opciones | Exactitud FCM (mayoritaria) | Éxito FCM | Bosque | Trazo |
+|---|---|---|---|---|---|
+| xAPI (L/M/H) | el de la app, mutables fijos; β = 0.4; tope 0.3 | 73.5 % (40.6 %) | 15.3 → 29.7 % | 10.8 → 27.0 % | 1.00 |
+| heart | acciones `trestbps`, `chol` y `thalach` (pueden bajar); mutables dinámicos; Kosko; β = 0.1; tope 0.3 | 88.9 % (53.3 %) | 16.7 → 35.7 % | 11.9 → 16.7 % | 1.00 |
+| marketing | campañas; contadores dinámicos; Kosko; β = 1.25; λ ≤ 1.5 | 88.9 % (85.0 %) | 1.9 → 57.6 % | 1.2 → 10.5 % | 0.90 |
+| obesidad | hábitos como acciones (orden: subir = hábito sano), `Weight` dinámico, éxito = peso normal o menos; β = 1; λ ≤ 1.5; tope 0.3 | 86.9 % (73.5 %) | 4.5 → 25.7 % | 0.6 → 0.9 % | 0.88 |
+| vino blanco | alcohol, azúcar, sulfatos, cítrico y SO2 libre como acciones; densidad, pH y SO2 total dinámicos; calidad 3-9; β = 1; λ ≤ 1.5; tope 0.3 | 52.4 % (44.9 %) | 23.9 → 57.8 % | 18.0 → 38.9 % | 0.87 |
+
+«λ ≤ 1.5» es la rejilla `rejilla_lambda: [0.5, 1, 1.5]` de la validación cruzada
+(opción de la API de entrenamiento; la interfaz no la muestra). «Tope 0.3» es el
+cambio máximo por acción (`delta_max`, 30 % del rango).
+
+* **Acciones disparadas.** Sin tope, a quien está lejos de su meta el AG le pedía
+  casi todo el rango (en xAPI, el estudiante 98, de M a H: raisedhands 10 → 100
+  y VisITedResources 3 → 99). Con el tope de 0.3 ninguna acción continua cambia
+  más del 30 % de su rango y el trazo sube (xAPI 0.97 → 1.00, vino 0.49 → 0.87),
+  a cambio de una tasa de éxito menor (xAPI 40.5 → 29.7 %, bosque 36.9 → 27.0 %):
+  quien no llega en un paso queda en camino, como pide la meta escalonada. Una
+  acción discreta siempre puede moverse una categoría aunque el tope sea menor
+  que su paso (activar una campaña o un hábito es pasar de 0 a 1), así que en
+  marketing el tope no cambia nada.
+
+* **80 % de exactitud.** xAPI con tres niveles no llega: el bosque aleatorio
+  tampoco (75.5 %). Binarizado (L frente a M o H) pasa del 87 %, pero entonces
+  no hay meta escalonada. En vino, con siete niveles, el bosque llega a 57 %;
+  binarizado en 7 el FCM da 79.7-80.0 %, apenas sobre la clase mayoritaria
+  (78.4 %), y la subida es un salto (trazo 0.2-0.5): se dejó la calidad 3-9.
+* **Efecto dominó.** Con mutables dinámicos las acciones influyen sobre ellos y
+  ellos sobre el objetivo (en heart, `trestbps` aporta −0.11 por esa vía). En
+  xAPI, hacer dinámicos C13-C15 baja la exactitud a 61-67 %, así que siguen fijos.
+* **Trazo en marketing.** Con β = 1 la tasa de éxito era 88.1 % y el bosque
+  21.8 %, pero el trazo bajaba a 0.58 (saltos de 0.1 a 0.9); con β = 1.5 el
+  trazo es 0.95 y el éxito 33.9 %. β = 1.25 queda entre los dos.
+* **Heart.** Con solo `trestbps` y `chol` como acciones, el 79 % de los
+  pacientes quedaba igual aun con β = 0.1: sus pesos hacia `target` son
+  pequeños (−0.22 y −0.08), así que β no era el problema. Con `thalach`
+  (frecuencia cardiaca máxima, que sube con el entrenamiento aeróbico) como
+  acción, todos reciben un cambio pequeño y el bosque confirma 11.9 → 19.0 %.
+* **λ ≤ 1.5.** En marketing sube el trazo (0.84 → 0.91) con el mismo bosque; en
+  vino el bosque pasa de 35.1 % a 45.0 %; en obesidad los que no cambian bajan
+  del 62 % al 22 % (exactitud 90.4 → 86.9 %, trazo 0.93 → 0.77). En xAPI y
+  heart la validación cruzada ya elegía λ ≤ 1.5 o el resultado no cambia.
+* **SMOTE no ayuda.** Exactitud: heart 87.8 → 85.6 %, xAPI 73.5 → 71.6 %, vino
+  53.2 → 49.8 %. En marketing elige λ = 0.5 y no prescribe nada; en obesidad sube
+  la tasa de éxito (84 %) a costa de saltos de 0.62. Sirve para objetivos
+  desbalanceados cuando el FCM no detecta la clase minoritaria, no como paso
+  obligatorio.
+* **Bandas del vino.** Con la meta escalonada, cada vino se detiene en el valor
+  de su nivel meta (6 → 0.50, 7 → 0.67, 8 → 0.77): las bandas son las metas, no
+  un error.
+* **Obesidad.** La clase sale de `Weight` y `Height` (IMC), y el FCM lineal no
+  la reproduce con siete niveles (23.5 %); por eso se binarizó. El bosque no
+  confirma la mejora porque solo cambia las acciones y no el peso, que es el
+  mediador. El 77 % de los registros es sintético (SMOTE, según UCI).
 
 ## Comparación con los artículos
 

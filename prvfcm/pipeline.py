@@ -40,11 +40,13 @@ from .configuracion import (
     con_mutables_dinamicos,
 )
 from .evaluacion import (
+    alcanza_meta,
     discretizar_rendimiento,
     evaluar_prediccion,
     evaluar_prescripciones,
     evaluar_reconstruccion,
     exito_prescriptivo,
+    nivel_siguiente,
     validacion_externa,
 )
 from .fcm import (
@@ -144,6 +146,7 @@ class ResultadoPipeline:
     config_prescripcion: ConfigPrescripcion | None = None
     prescriptor: PrescriptorPRVFCM | None = None
     seleccion: np.ndarray | None = None  # Registros de prueba que reciben prescripción.
+    metas: np.ndarray | None = None  # Nivel meta de cada uno (el siguiente al suyo o el mejor).
     resultados: list[ResultadoPrescripcion] = field(default_factory=list)
     metricas: dict | None = None
     externa: dict | None = None
@@ -212,12 +215,23 @@ class ResultadoPipeline:
         objetivo = self.pre.indice_objetivo
         historiales = [r.historial_costo for r in self.resultados]
         largo = max(len(h) for h in historiales)
+        # Las corridas detenidas antes conservan su último valor.
         matriz = np.array([np.pad(h, (0, largo - len(h)), mode="edge") for h in historiales])
         q1, mediana, q3 = np.percentile(matriz, [25, 50, 75], axis=0)
+        medios = np.array([np.pad(r.historial_promedio, (0, largo - len(r.historial_promedio)), mode="edge") for r in self.resultados])
+        # Aptitud normalizada por registro: 0 = costo medio de su población inicial, 1 = su mejor costo final.
+        # Con la mediana del costo crudo la curva se ve plana: cada registro tiene otra escala.
+        inicio, final = medios[:, :1], matriz[:, -1:]
+        rango = (inicio - final)[:, 0]
+        validos = rango > 1e-9
+        progreso_mejor = np.median((inicio - matriz)[validos] / rango[validos, None], axis=0) if validos.any() else np.zeros(largo)
+        progreso_medio = np.median((inicio - medios)[validos] / rango[validos, None], axis=0) if validos.any() else np.zeros(largo)
         base = np.array([r.estado_base[objetivo] for r in self.resultados])
         prescrito = np.array([r.estado_prescrito[objetivo] for r in self.resultados])
         orden = np.argsort(base, kind="stable")
         ids = self.prueba.index[self.seleccion].to_numpy()
+        metas = self.metas if self.metas is not None else np.full(len(base), self.esquema.mejor_nivel)
+        tolerancia = self.config_prescripcion.tolerancia_exito
         acciones = []
         for k, i in enumerate(self.pre.indices_accion):
             columna = self.pre.columnas[i]
@@ -237,13 +251,20 @@ class ResultadoPipeline:
             )
         return {
             "convergencia": {
-                "generacion": list(range(1, largo + 1)),
+                "generacion": list(range(largo)),  # 0 = población inicial.
                 "q1": q1.tolist(),
                 "mediana": mediana.tolist(),
                 "q3": q3.tolist(),
+                "medio": np.median(medios, axis=0).tolist(),  # Costo medio de la población (mediana entre registros).
+                "progreso": {"mejor": progreso_mejor.tolist(), "medio": progreso_medio.tolist()},
             },
+            # meta: nivel al que apunta cada registro; umbral_meta: activación desde la que lo alcanza.
             "antes_despues": [
-                {"id": int(ids[j]), "base": float(base[j]), "prescrito": float(prescrito[j])} for j in orden
+                {
+                    "id": int(ids[j]), "base": float(base[j]), "prescrito": float(prescrito[j]), "meta": str(metas[j]),
+                    "umbral_meta": float(self.esquema.niveles[str(metas[j])] - tolerancia),
+                }
+                for j in orden
             ],
             "acciones": acciones,
             "umbral_mejor": 1.0 - self.config_prescripcion.tolerancia_exito,
@@ -256,6 +277,7 @@ def tabla_recomendaciones(
     pre: Preprocesador,
     exito: np.ndarray,
     etiquetas: np.ndarray,
+    metas: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """Recomendaciones por estudiante en unidades originales del dataset.
 
@@ -265,7 +287,8 @@ def tabla_recomendaciones(
     objetivo = pre.indice_objetivo
     numerico = esquema.objetivo not in esquema.codificacion_ordinal
     filas = []
-    for (id_estudiante, fila), r, ok, etiqueta in zip(estudiantes.iterrows(), resultados, exito, etiquetas):
+    metas = [esquema.mejor_nivel] * len(resultados) if metas is None else metas
+    for (id_estudiante, fila), r, ok, etiqueta, meta in zip(estudiantes.iterrows(), resultados, exito, etiquetas, metas):
         registro = {"id_estudiante": id_estudiante, "clase_observada": etiqueta}
         if numerico:
             registro[f"{esquema.objetivo}_observado"] = fila[esquema.objetivo]
@@ -282,6 +305,7 @@ def tabla_recomendaciones(
             registro[f"{columna}_fcm_prescrito"] = round(float(r.estado_prescrito[i]), 4)
         registro["nivel_base"] = discretizar_rendimiento(r.estado_base[objetivo], esquema.niveles).item()
         registro["nivel_prescrito"] = discretizar_rendimiento(r.estado_prescrito[objetivo], esquema.niveles).item()
+        registro["nivel_meta"] = str(meta)
         registro["exito"] = bool(ok)
         filas.append(registro)
     return pd.DataFrame(filas)
@@ -537,16 +561,24 @@ def ejecutar(
             )
     r.prescriptor = PrescriptorPRVFCM(
         r.fcm, pre.indices_accion, estado_deseado, pesos_objetivo, r.config_ag, config_presc,
-        indice_condicion(pre, config_presc), pre.rejillas_accion(),
+        indice_condicion(pre, config_presc), pre.rejillas_accion(), pre.indice_objetivo,
     )
+    # Meta escalonada: cada registro apunta al nivel siguiente al observado (L -> M, M -> H).
+    escalonada = config_presc.meta_escalonada and len(esquema.niveles) > 2
+    r.metas = np.array(
+        [nivel_siguiente(e, esquema.niveles) if escalonada else esquema.mejor_nivel for e in etiquetas_prueba[r.seleccion]]
+    )
+    deseados = np.array([[esquema.niveles[m]] for m in r.metas]) if escalonada else None
     avisar("prescripcion", r)
     r.resultados = r.prescriptor.prescribir_lote(
-        r.X_pru[r.seleccion], semilla=opciones.semilla, mostrar_progreso=False, al_avanzar=progreso("prescripcion")
+        r.X_pru[r.seleccion], semilla=opciones.semilla, mostrar_progreso=False, al_avanzar=progreso("prescripcion"),
+        deseados=deseados,
     )
 
     # 4. Evaluación ---------------------------------------------------------
     r.metricas = evaluar_prescripciones(
-        r.resultados, r.prescriptor.indices_objetivo, r.prescriptor.valores_deseados, config_presc.tolerancia_exito
+        r.resultados, r.prescriptor.indices_objetivo,
+        r.prescriptor.valores_deseados if deseados is None else deseados, config_presc.tolerancia_exito,
     )
     estudiantes = prueba[r.seleccion]
     segmentos = opciones.segmento.mascaras(estudiantes) if opciones.segmento else {}
@@ -564,17 +596,26 @@ def ejecutar(
         semilla=opciones.semilla,
         segmentos=segmentos,
         etiqueta_mejor=esquema.mejor_nivel,
+        metas=r.metas if escalonada else None,
+        niveles=esquema.niveles,
     )
     valores_deseados = r.prescriptor.valores_deseados
     indices_objetivo = r.prescriptor.indices_objetivo
-    r.exito = exito_prescriptivo(
-        np.array([res.estado_prescrito[indices_objetivo] for res in r.resultados]), valores_deseados,
-        config_presc.tolerancia_exito,
-    )
-    exito_base = exito_prescriptivo(
-        np.array([res.estado_base[indices_objetivo] for res in r.resultados]), valores_deseados,
-        config_presc.tolerancia_exito,
-    )
+    if escalonada:
+        # Llegar a la meta propia o a un nivel mejor: con |A - D| un L que llega a H contaría como fracaso.
+        r.exito = alcanza_meta([res.estado_prescrito[objetivo] for res in r.resultados], r.metas, esquema.niveles)
+        exito_base = alcanza_meta([res.estado_base[objetivo] for res in r.resultados], r.metas, esquema.niveles)
+        r.metricas["PSR"], r.metricas["PSR_base"] = float(100.0 * r.exito.mean()), float(100.0 * exito_base.mean())
+    else:
+        r.exito = exito_prescriptivo(
+            np.array([res.estado_prescrito[indices_objetivo] for res in r.resultados]), valores_deseados,
+            config_presc.tolerancia_exito,
+        )
+        exito_base = exito_prescriptivo(
+            np.array([res.estado_base[indices_objetivo] for res in r.resultados]), valores_deseados,
+            config_presc.tolerancia_exito,
+        )
+    r.metricas["metas"] = {str(m): int(n) for m, n in zip(*np.unique(r.metas, return_counts=True))}
     r.exito_por_segmento = {
         nombre: {
             "n": int(mascara.sum()),
@@ -584,7 +625,7 @@ def ejecutar(
         for nombre, mascara in segmentos.items()
         if mascara.any()
     }
-    r.recomendaciones = tabla_recomendaciones(r.resultados, estudiantes, pre, r.exito, etiquetas_prueba[r.seleccion])
+    r.recomendaciones = tabla_recomendaciones(r.resultados, estudiantes, pre, r.exito, etiquetas_prueba[r.seleccion], r.metas)
     en_mejor_nivel = etiquetas_prueba == esquema.mejor_nivel
     if opciones.reconstruccion and en_mejor_nivel.any():
         reales, prescritas = reconstruir(
@@ -639,6 +680,7 @@ def valores_por_defecto() -> dict:
         "condicion_delta_max": presc.condicion_delta_max,
         "sembrar": presc.sembrar,
         "aptitud": presc.aptitud,
+        "meta_escalonada": presc.meta_escalonada,
         "ag": dataclasses.asdict(ConfigAG()),
         "aristas_excluidas": [],
         "matrices_expertos": [],
@@ -739,6 +781,7 @@ def opciones_desde_dict(datos: dict, segmento: Segmento | None = None) -> Opcion
             condicion_delta_max=ConfigPrescripcion.condicion_delta_max if tope is None else float(tope),
             sembrar=bool(v["sembrar"]),
             aptitud=v["aptitud"],
+            meta_escalonada=bool(v["meta_escalonada"]),
         ),
         segmento=segmento,
         aristas_excluidas=tuple((str(o), str(d)) for o, d in excluidas),

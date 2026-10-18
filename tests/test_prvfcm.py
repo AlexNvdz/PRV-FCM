@@ -18,7 +18,7 @@ from prvfcm.fcm import (
 )
 from prvfcm.genetico import AlgoritmoGenetico
 from prvfcm.prescripcion import PrescriptorPRVFCM
-from prvfcm.preprocesamiento import Preprocesador, cargar_datos, dividir_entrenamiento_prueba, grupos_por_perfil
+from prvfcm.preprocesamiento import Preprocesador, cargar_datos, dividir_entrenamiento_prueba, grupos_por_perfil, limites_robustos
 from prvfcm.seleccion import validacion_cruzada_fcm
 
 RUTA_DATOS = Path(__file__).resolve().parents[1] / "data" / "xAPI-Edu-Data.csv"
@@ -290,6 +290,20 @@ def test_tope_condicionado_solo_limita_si_la_condicion_esta_activa():
     assert prescriptor_pequeno(beta_esfuerzo=0.0).limites(activo)[1][0] == 1.0
 
 
+def test_meta_por_debajo_del_estado_no_empuja_el_objetivo_hacia_abajo():
+    # Meta escalonada por debajo de lo que ya estima el FCM (vino observado en 3, el FCM lo ve en 6).
+    estado = np.array([0.4, 0.8, 0.5, 0.3])
+    sin_corte = prescriptor_pequeno(beta_esfuerzo=0.1, solo_incrementos=False)
+    sin_corte.valores_deseados = np.array([0.1])
+    con_corte = prescriptor_pequeno(beta_esfuerzo=0.1, solo_incrementos=False)
+    con_corte.valores_deseados, con_corte.indice_meta = np.array([0.1]), 3
+    bajado = sin_corte.prescribir(estado, np.random.default_rng(0))
+    assert bajado.estado_prescrito[3] < bajado.estado_base[3] - 0.01  # Con |A - D| bajaba la acción.
+    r = con_corte.prescribir(estado, np.random.default_rng(0))
+    assert r.estado_prescrito[3] >= r.estado_base[3] - 1e-9
+    np.testing.assert_allclose(r.acciones_recomendadas, r.acciones_actuales)
+
+
 def test_acciones_discretas_solo_toman_valores_de_su_rejilla():
     prescriptor = prescriptor_pequeno(beta_esfuerzo=0.0)
     prescriptor.rejillas = [np.array([0.0, 1.0])]  # C1 se activa o no.
@@ -303,11 +317,18 @@ def test_acciones_discretas_solo_toman_valores_de_su_rejilla():
     caro = prescriptor_pequeno(beta_esfuerzo=5.0)
     caro.rejillas = [np.array([0.0, 1.0])]
     assert caro.prescribir(np.array([0.4, 0.0, 0.5, 0.3]), np.random.default_rng(0)).acciones_recomendadas[0] == 0.0
-    # Con un tope, el valor admitido más cercano dentro de los límites es el actual.
     np.testing.assert_allclose(caro.discretizar(np.array([[0.9]]), np.array([0.4, 0.0, 0.5, 0.3])), [[1.0]])
+    # Un tope menor que el paso no congela la acción discreta: siempre puede subir una categoría.
     tope = prescriptor_pequeno(delta_max=0.3)
     tope.rejillas = [np.array([0.0, 1.0])]
-    np.testing.assert_allclose(tope.discretizar(np.array([[0.3]]), np.array([0.4, 0.0, 0.5, 0.3])), [[0.0]])
+    np.testing.assert_allclose(tope.limites(np.array([0.4, 0.0, 0.5, 0.3]))[1], [1.0])
+    np.testing.assert_allclose(tope.discretizar(np.array([[0.3], [0.8]]), np.array([0.4, 0.0, 0.5, 0.3])), [[0.0], [1.0]])
+
+
+def test_min_max_robusto_recorta_solo_atipicos_aislados():
+    # Un atípico (1 % de los registros) no estira la escala; una cola poblada sí cuenta.
+    assert limites_robustos(pd.Series(list(range(100)) + [10_000])) == (0.0, 225.0)
+    assert limites_robustos(pd.Series(list(range(100)) + [10_000] * 5)) == (0.0, 10_000.0)
 
 
 def test_metricas():

@@ -83,7 +83,8 @@
       "clases_a_prescribir": [
         "L",
         "M"
-      ]
+      ],
+      "meta_escalonada": true
     },
     "mutables_dinamicos": [
       "Class"
@@ -361,16 +362,20 @@
   },
   "prescripcion": {
     "n_estudiantes": 112,
-    "MAE": 0.5905849026829603,
-    "MSE": 0.43121616514036903,
-    "RMSE": 0.6566705149010187,
-    "PSR": 15.178571428571427,
-    "MAE_base": 0.6675881080695544,
-    "MSE_base": 0.5047042160894566,
-    "RMSE_base": 0.7104253768619591,
-    "PSR_base": 8.928571428571429,
-    "cambio_medio_por_accion": 0.10600029113873564,
-    "generaciones_medias_ag": 32.11607142857143
+    "MAE": 0.39542773429904493,
+    "MSE": 0.2049803518960192,
+    "RMSE": 0.4527475586858743,
+    "PSR": 21.428571428571427,
+    "MAE_base": 0.4610055903103528,
+    "MSE_base": 0.25651570923341593,
+    "RMSE_base": 0.5064737991578794,
+    "PSR_base": 14.285714285714285,
+    "cambio_medio_por_accion": 0.08671296847524346,
+    "generaciones_medias_ag": 33.25,
+    "metas": {
+      "H": 65,
+      "M": 47
+    }
   },
   "exito_por_segmento": {
     "ausencias > 7": {
@@ -380,26 +385,26 @@
     },
     "ausencias <= 7": {
       "n": 42,
-      "PSR_base": 23.809523809523807,
-      "PSR": 40.476190476190474
+      "PSR_base": 38.095238095238095,
+      "PSR": 57.14285714285714
     }
   },
   "validacion_externa": {
     "exactitud_prueba": 0.75,
-    "PSR_externo_base": 1.7857142857142856,
-    "PSR_externo": 8.928571428571429,
+    "PSR_externo_base": 11.607142857142858,
+    "PSR_externo": 19.642857142857142,
     "prob_H_base": 0.12464285714285715,
-    "prob_H_prescrita": 0.21037499999999998,
+    "prob_H_prescrita": 0.20267857142857146,
     "por_segmento": {
       "ausencias > 7": {
         "n": 70,
-        "PSR_externo_base": 0.0,
-        "PSR_externo": 0.0
+        "PSR_externo_base": 5.714285714285714,
+        "PSR_externo": 5.714285714285714
       },
       "ausencias <= 7": {
         "n": 42,
-        "PSR_externo_base": 4.761904761904762,
-        "PSR_externo": 23.809523809523807
+        "PSR_externo_base": 21.428571428571427,
+        "PSR_externo": 42.857142857142854
       }
     }
   }

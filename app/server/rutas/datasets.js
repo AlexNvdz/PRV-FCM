@@ -44,10 +44,14 @@ export const OpcionesEntrenamiento = z.object({
   // Máscara de dirección causal: pares [columna origen, columna destino] que se eliminan del mapa.
   aristas_excluidas: z.array(z.tuple([z.string().min(1), z.string().min(1)])).max(2000).default([]),
   lambda: z.number().positive().max(20).default(1),
+  // Valores de λ que prueba la validación cruzada completa (por defecto, los del perfil).
+  rejilla_lambda: z.array(z.number().positive().max(20)).min(1).max(12).optional(),
   alpha_l2: z.number().min(0).max(1).default(0.001),
   beta: z.number().min(0).max(5).optional(),
   delta_max: z.number().min(0).max(1).nullable().default(null),
   permitir_reducciones: z.boolean().optional(),
+  // Cada registro apunta al nivel siguiente al suyo (L -> M, M -> H), no al mejor de una vez.
+  meta_escalonada: z.boolean().optional(),
   semilla: z.number().int().min(0).max(1_000_000).default(42),
   ag: z
     .object({

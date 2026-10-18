@@ -114,6 +114,8 @@ test('analizar_estudiante acepta "id" como alias de id_estudiante', async () => 
 test('la validación cruzada rápida usa una rejilla pequeña', () => {
   const rapida = opcionesMotor(OpcionesEntrenamiento.parse({ validacion_cruzada: 'rapida' }));
   assert.deepEqual(rapida.rejilla_lambda, [0.5, 1, 2]);
+  // La validación cruzada completa acepta una rejilla de λ propia (por ejemplo, sin pendientes altas).
+  assert.deepEqual(opcionesMotor(OpcionesEntrenamiento.parse({ rejilla_lambda: [0.5, 1, 1.5] })).rejilla_lambda, [0.5, 1, 1.5]);
   assert.equal(rapida.validacion_cruzada, true);
   assert.equal(opcionesMotor(OpcionesEntrenamiento.parse({ validacion_cruzada: 'ninguna' })).validacion_cruzada, false);
   assert.throws(() => OpcionesEntrenamiento.parse({ proporcion_prueba: 0.9 }));

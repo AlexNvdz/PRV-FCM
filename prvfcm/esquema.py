@@ -377,6 +377,10 @@ def validar_esquema(datos: dict, df: pd.DataFrame) -> dict:
         return {"ok": False, "errores": [f"El archivo no tiene las columnas: {', '.join(faltantes)}."], "avisos": [], "filas_utiles": 0, "sujeto": sujeto_a_dict(esquema.sujeto)}
 
     usadas = df[esquema.columnas_origen]
+    # Sin ningún valor no hay mediana que imputar: el FCM recibiría NaN.
+    sin_valores = [c for c in esquema.columnas_origen if usadas[c].isna().all()]
+    if sin_valores:
+        errores.append(f"Las columnas {', '.join(sin_valores)} no tienen ningún valor: márquelas como excluir.")
     imputables = set(columnas_imputables(esquema))
     completas = usadas.dropna(subset=[c for c in esquema.columnas_origen if c not in imputables])
     if len(completas) < len(df):

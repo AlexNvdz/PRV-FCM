@@ -400,7 +400,8 @@ function Paso2() {
         <Lista>
           <li>
             Objetivo ordinal: ordene sus niveles del peor al mejor desenlace con las flechas, entre «Peor» y «Mejor». El último es el{' '}
-            <T a="mejor-nivel">mejor nivel</T>, el estado deseado de la prescripción. La barra de colores de abajo muestra el tono de cada nivel en las
+            <T a="mejor-nivel">mejor nivel</T>, el estado deseado de la prescripción (con la <T a="meta-escalonada">meta escalonada</T>, cada registro apunta
+            antes al nivel siguiente al suyo). La barra de colores de abajo muestra el tono de cada nivel en las
             gráficas.
           </li>
           <li>
@@ -553,7 +554,9 @@ function Paso3() {
           Lo primero del formulario. Cada tarjeta lista, en gris, los valores que fija su perfil (los lee del motor). Vea <Entradas a={['perfil-entrenamiento']} />.
         </p>
         <Defs>
-          <Def t="Mejorado (recomendado)">Lo que este proyecto validó: BPTT, Kosko modificada con sigmoide, sesgo, β = 0,4 y tope por ausentismo.</Def>
+          <Def t="Mejorado (recomendado)">
+            Lo que este proyecto validó: BPTT, Kosko modificada con sigmoide, sesgo, β = 0,4, tope por ausentismo y <T a="meta-escalonada">meta escalonada</T>.
+          </Def>
           <Def t="Artículo (Hoyos, Aguilar y Toro, 2023)">
             El protocolo del artículo: <T a="pso">PSO</T>, sin sesgo, β = 0, <T a="smote">SMOTE</T>, mutables dinámicos, 10 pliegues, aptitud de la
             Tabla 4, AG sin siembra de las acciones actuales y búsqueda de los parámetros del AG; la validación cruzada elige la regla de inferencia y la
@@ -676,6 +679,10 @@ function Paso3() {
           <Def t="Permitir recomendar valores menores que los actuales">
             Sin marcar, el AG solo mantiene o aumenta las acciones. Marcada por defecto en el perfil del artículo. Vea <Entradas a={['permitir-reducciones']} />.
           </Def>
+          <Def t="Meta escalonada: cada registro apunta al nivel siguiente al suyo">
+            Marcada por defecto en el perfil mejorado: un registro en L apunta a M y uno en M, a H, en vez de saltar al mejor nivel. Sin marcar (perfil del
+            artículo), todos apuntan al mejor. Con un objetivo de dos niveles no cambia nada. Vea <Entradas a={['meta-escalonada']} />.
+          </Def>
           <Def t="Algoritmo genético y semilla">
             Apartado plegable. <T a="poblacion">Población</T> (50), <T a="generacion">Generaciones</T> (100), <T a="cruce">Tasa de cruce</T> (0,9),{' '}
             <T a="mutacion">Tasa de mutación</T> (0,25), tipo de cruce (Uniforme o Un punto) y <T a="semilla" /> (42); son los valores del perfil mejorado.
@@ -780,13 +787,15 @@ function Paso4() {
       <Bloque id="paso-4-metricas" titulo="Métricas de la prescripción">
         <p>
           Al entrenar, el AG ya prescribió acciones a los estudiantes de prueba que no están en el mejor nivel. La frase principal compara cuántos ubica
-          el FCM en el mejor nivel con las acciones prescritas y con las actuales, y cuántos confirma el <T a="bosque">bosque aleatorio</T>.
+          el FCM en el mejor nivel con las acciones prescritas y con las actuales, y cuántos confirma el <T a="bosque">bosque aleatorio</T>. Con la{' '}
+          <T a="meta-escalonada">meta escalonada</T> cuenta a los que llegan a su nivel meta (el siguiente al observado) o a uno mejor, y la descripción
+          lista los pares, por ejemplo «L → M, M → H».
         </p>
         <Defs>
           <Def t="Tasa de éxito prescriptivo (FCM)">
             <T a="psr" /> con las acciones actuales y con las prescritas.
           </Def>
-          <Def t="En el mejor nivel según el bosque aleatorio">
+          <Def t="En el mejor nivel (o En su meta) según el bosque aleatorio">
             La misma cuenta con el modelo independiente: la cifra prudente (<T a="validacion-externa">validación externa</T>).
           </Def>
           <Def t="MAE respecto al estado deseado, MSE y RMSE">
@@ -803,14 +812,18 @@ function Paso4() {
         <Defs>
           <Def t="Activación del objetivo antes y después de prescribir">
             Cada estudiante ordenado por su activación actual (línea azul) y su activación con la prescripción (puntos naranjas). Sobre la línea
-            horizontal queda en el mejor nivel.
+            horizontal queda en el mejor nivel. Con la meta escalonada hay una línea por meta, con su nombre, y cada uno alcanza la suya sobre la línea
+            de su nivel meta.
           </Def>
           <Def t="Acciones: nivel medio actual y recomendado">Media de cada acción, en unidades originales; una acción binaria (una campaña) se muestra como % de registros con ella activa.</Def>
           <Def t="Estudiantes que llegan a…, por grupo">
-            Solo si definió un <T a="segmento">segmento</T>: el porcentaje que llega al mejor nivel en cada grupo, según el FCM y según el bosque.
+            Solo si definió un <T a="segmento">segmento</T>: el porcentaje que llega al mejor nivel (o a su meta, con la meta escalonada) en cada grupo, según el FCM y según el bosque.
           </Def>
           <Def t="Convergencia del algoritmo genético">
-            Mediana y rango intercuartílico del mejor costo por generación. Vea <Entradas a={['convergencia-ag']} />.
+            Por defecto, la <T a="aptitud-normalizada">aptitud normalizada</T> desde la generación 0 (la población inicial): el mejor individuo (élite,
+            naranja) y el promedio de la población (azul), que sube hacia él; cuanto más arriba, mejor. El selector «Ver» cambia a «Costo»: mediana y
+            rango intercuartílico del mejor costo por generación, con el costo medio de la población. Los modelos anteriores solo traen el mejor costo.
+            Vea <Entradas a={['convergencia-ag']} />.
           </Def>
         </Defs>
       </Bloque>
@@ -822,10 +835,10 @@ function Paso4() {
         </p>
         <Defs>
           <Def t="Filtros">
-            «Nivel observado» (los niveles que recibieron prescripción) y «Llega al mejor nivel» (Sí o No, según el FCM con la prescripción).
+            «Nivel observado» (los niveles que recibieron prescripción) y «Llega al mejor nivel» (Sí o No, según el FCM con la prescripción; con la meta escalonada, «Llega a su meta»).
           </Def>
           <Def t="Columnas">
-            Estudiante (su <T a="id-estudiante">id</T>), nivel observado, cada acción como «actual → recomendado» con el cambio debajo, «FCM actual» y
+            Estudiante (su <T a="id-estudiante">id</T>), nivel observado, «Meta» (solo con la meta escalonada: el nivel al que apunta), cada acción como «actual → recomendado» con el cambio debajo, «FCM actual» y
             «FCM prescrito» (activación y nivel predicho). Una <T a="accion-binaria">acción binaria</T> muestra solo la decisión: «Activar», «No activar»,
             «Mantener activa» o «Desactivar».
           </Def>
@@ -849,8 +862,8 @@ function Paso4() {
             Elija una iteración con las flechas, el control deslizante o un clic en la gráfica para ver su cuenta. Vea <Entradas a={['inferencia-paso-a-paso']} />.
           </li>
           <li>
-            «Prescripción con el algoritmo genético»: elija la <T a="meta">meta</T>, la penalización del esfuerzo (de 0 a 1; parte del β del modelo) y el cambio
-            máximo (a la derecha, sin límite), y pulse «Prescribir». Las reducciones siguen la opción del entrenamiento. Con ausentismo alto se aplica además el
+            «Prescripción con el algoritmo genético»: elija la <T a="meta">meta</T> (con la meta escalonada, por defecto el nivel siguiente al observado), la penalización del esfuerzo (de 0 a 1; parte del β del modelo) y el cambio
+            máximo (parte del tope del modelo; a la derecha, sin límite), y pulse «Prescribir». Las reducciones siguen la opción del entrenamiento. Con ausentismo alto se aplica además el
             <T a="tope-ausentismo">tope por ausentismo</T>.
           </li>
           <li>Con el resultado, «Probar en el simulador» copia las acciones recomendadas a los controles.</li>
@@ -877,8 +890,9 @@ function Paso4() {
             categorías se eligen de una lista y los números se escriben (un campo vacío muestra el rango observado).
           </li>
           <li>
-            Elija la «Meta en el objetivo», el «Costo de intervención (β)» (de 0 a 1; parte del β con que se entrenó el modelo; mayor da cambios más pequeños), el «Cambio máximo
-            por acción» (al extremo derecho, sin límite) y si quiere «Permitir reducir acciones».
+            Elija la «Meta en el objetivo» (con la meta escalonada, por defecto «Nivel siguiente (meta escalonada)»: el siguiente al nivel que infiere el
+            FCM para el perfil), el «Costo de intervención (β)» (de 0 a 1; parte del β con que se entrenó el modelo; mayor da cambios más pequeños), el «Cambio máximo
+            por acción» (parte del tope del modelo; al extremo derecho, sin límite) y si quiere «Permitir reducir acciones» (parte de la opción del entrenamiento).
           </li>
           <li>Pulse «Calcular la prescripción». El resultado aparece a la derecha (o debajo, en pantallas angostas).</li>
         </Pasos>
@@ -909,7 +923,7 @@ function Paso4() {
           </Def>
           <Def t="Evolución del algoritmo genético">
             Reproduce el historial del AG al abrirse el resultado (sin animación si el sistema pide reducir el movimiento). «Pausar», «Reproducir»,
-            «Ir al final» y el control deslizante eligen la generación. Muestra el mejor costo, el costo medio, el objetivo con el mejor individuo, la
+            «Ir al final» y el control deslizante eligen la generación, desde la 0 («Población inicial»). Muestra el mejor costo, el costo medio, el objetivo con el mejor individuo, la
             curva «Costo por generación» y las barras «Acciones actuales y prescritas por el modelo»; antes de la última generación, las barras son las
             mejores acciones de esa generación. Si el AG se detuvo antes del máximo, lo indica. Vea <Entradas a={['evolucion-ag']} />.
           </Def>
@@ -942,12 +956,15 @@ function Paso5() {
       <Bloque id="paso-5-reporte" titulo="Reporte prescriptivo del conjunto de prueba">
         <Lista>
           <li>«Nivel observado» limita el reporte a los estudiantes de un nivel; «Todos» los incluye a todos.</li>
-          <li>El texto resume cuántos llegan al mejor nivel, la recomendación más frecuente y el resultado por nivel; cada cifra sale de las prescripciones.</li>
+          <li>El texto resume cuántos llegan al mejor nivel (o a su meta, con la meta escalonada), la recomendación más frecuente y el resultado por nivel; cada cifra sale de las prescripciones.</li>
           <li>
             «Qué cambia en cada acción»: media actual y recomendada, y los porcentajes «Aumenta en» y «Sin cambio en» (vea <Entradas a={['aumenta']} />
             ).
           </li>
-          <li>«Por nivel observado» (con más de un nivel): registros, activación actual, activación con la prescripción y porcentaje que llega al mejor nivel.</li>
+          <li>
+            «Por nivel observado» (con más de un nivel): registros, activación actual, activación con la prescripción y porcentaje que llega al mejor nivel; con
+            la meta escalonada, la «Meta» de cada nivel y «Llegan a su meta».
+          </li>
           <li>«Estudiantes con más mejora»: los cinco con mayor aumento de activación; pulse uno para abrir su panel.</li>
           <li>A la derecha, las acciones medias actual y recomendada en una gráfica.</li>
           <li>
@@ -1015,7 +1032,7 @@ function Consulta() {
         <Lista>
           <li>«Datos que no cambian» (inmutables), «Estado actual» (mutables) y «Acciones actuales (opcionales)».</li>
           <li>Un campo vacío toma el valor típico del dataset, que se ve en gris; junto al botón se indica cuántos datos quedaron vacíos.</li>
-          <li>«Nivel deseado del objetivo»: el mejor nivel por defecto.</li>
+          <li>«Nivel deseado del objetivo»: el mejor nivel por defecto; con la meta escalonada, «Nivel siguiente (meta escalonada)», el siguiente al que infiere el FCM.</li>
           <li>
             «Valores deseados del estado (opcional)»: un escenario para los mutables, por ejemplo menos ausencias. Un concepto que el modelo recalcula entra en
             la meta del AG; uno fijo se toma como punto de partida.
@@ -1059,8 +1076,8 @@ function Resumen() {
         <li>Con el esquema sin confirmar: «Revisar el esquema».</li>
         <li>Sin modelo: «Entrenar el modelo».</li>
         <li>
-          Con un modelo: el hallazgo principal. Qué porcentaje de los estudiantes de prueba por debajo del mejor nivel llegaría a él con las acciones
-          prescritas según el FCM, cuántos lo logran hoy y la cifra prudente del bosque aleatorio. Botones «Ver prescripciones» y «Preguntar al
+          Con un modelo: el hallazgo principal. Qué porcentaje de los estudiantes de prueba por debajo del mejor nivel llegaría a él (con la meta
+          escalonada, subiría a su nivel meta, el siguiente) con las acciones prescritas según el FCM, cuántos lo logran hoy y la cifra prudente del bosque aleatorio. Botones «Ver prescripciones» y «Preguntar al
           asistente».
         </li>
       </Lista>
@@ -1232,11 +1249,13 @@ function Graficas() {
           </Def>
           <Def t="Activación del objetivo antes y después">
             Línea azul: la activación actual de cada estudiante, ordenada. Puntos naranjas: la activación con la prescripción. Línea horizontal: el umbral
-            del mejor nivel (1 menos la tolerancia).
+            del mejor nivel (1 menos la tolerancia); con la meta escalonada, una por meta.
           </Def>
           <Def t="Convergencia del AG">
-            En el paso 4 y el Informe, la mediana del mejor costo por generación entre estudiantes, con la banda de los cuartiles 1 y 3. En una
-            prescripción individual («Costo por generación»), el mejor costo (azul) y el costo medio de la población (naranja), que se dibujan hasta la
+            En el paso 4 y el Informe, por defecto la <T a="aptitud-normalizada">aptitud normalizada</T> (0 = costo medio de la población inicial, 1
+            = mejor costo final; mediana entre estudiantes): el mejor individuo en naranja y el promedio de la población en azul. En «Costo», la mediana
+            del mejor costo con la banda de los cuartiles 1 y 3 y la del costo medio. El eje empieza en la generación 0, la población inicial. En una
+            prescripción individual («Costo por generación»), con los mismos colores, el mejor costo (naranja) y el costo medio de la población (azul), que se dibujan hasta la
             generación elegida.
           </Def>
           <Def t="Inferencia paso a paso">
@@ -1315,6 +1334,9 @@ function Formulas() {
           tolerancia = (1 − valor del nivel anterior al mejor) / 2
         </Formula>
         <Formula lectura="Éxito de un estudiante: la activación final queda dentro de la tolerancia de la meta.">éxito ⇔ |A*_T − D_T| ≤ tolerancia</Formula>
+        <Formula lectura="Meta escalonada: la meta es el nivel siguiente al observado y hay éxito si el nivel más cercano a la activación final es la meta o uno mejor.">
+          D_T = valor del nivel siguiente al observado;   éxito ⇔ nivel(A*_T) ≥ meta
+        </Formula>
         <Formula lectura="Aporte de un concepto a la entrada del objetivo.">aporte_j = k1 · w_jT · A_j</Formula>
         <Formula lectura="Cambio de una acción como porcentaje de su rango observado.">del rango = (recomendada − actual) / (máximo − mínimo)</Formula>
       </Bloque>

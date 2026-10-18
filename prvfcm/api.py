@@ -52,7 +52,7 @@ import numpy as np
 import pandas as pd
 
 from .esquema import rol_de
-from .evaluacion import discretizar_rendimiento
+from .evaluacion import discretizar_rendimiento, nivel_siguiente
 from .fcm import ResultadoInferencia
 from .modelo import ModeloPRVFCM
 from .pipeline import indice_condicion
@@ -232,7 +232,7 @@ class PrescriptorAG:
         pesos = {m.pre.indice(c): v for c, v in config.pesos_objetivo.items()}
         prescriptor = PrescriptorPRVFCM(
             m.fcm, m.pre.indices_accion, estado_deseado, pesos, m.config_ag, config, indice_condicion(m.pre, config),
-            m.pre.rejillas_accion(),
+            m.pre.rejillas_accion(), m.pre.indice_objetivo,
         )
         return prescriptor, meta
 
@@ -283,7 +283,7 @@ class PrescriptorAG:
         lo persigue. Un mutable fijo solo plantea el escenario (por ejemplo,
         ausencias Under-7). Con el objetivo en ``deseados``, ``nivel_meta`` no se usa.
 
-        ``al_progresar(evento)`` recibe al final de cada generación
+        ``al_progresar(evento)`` recibe la población inicial (generación 0) y el final de cada generación
         ``{"generacion", "generaciones_max", "mejor_costo", "costo_medio", "acciones"}``,
         con las mejores acciones hasta ese momento en unidades originales: basta
         para emitir el progreso en vivo (SSE o WebSocket) desde un backend.
@@ -300,6 +300,14 @@ class PrescriptorAG:
         for d in deseados_info:
             estado[m.pre.indice(d["columna"])] = d["normalizado"]
         dinamicos = {d["columna"]: d["normalizado"] for d in deseados_info if d["dinamico"]}
+        niveles = m.esquema.niveles
+        # Un registro del dataset parte de su objetivo observado; un perfil no lo tiene.
+        observado = None if es_perfil else discretizar_rendimiento(estado[m.pre.indice_objetivo], niveles).item()
+        if nivel_meta is None and m.esquema.objetivo not in dinamicos and m.config_prescripcion.meta_escalonada and len(niveles) > 2:
+            # Meta escalonada: el nivel siguiente al observado (un perfil no tiene nivel observado: el que infiere el FCM).
+            objetivo = m.pre.indice_objetivo
+            actual = m.fcm.inferir(estado).estados[objetivo] if es_perfil else estado[objetivo]
+            nivel_meta = nivel_siguiente(discretizar_rendimiento(actual, niveles).item(), niveles)
         prescriptor, meta = self.motor(nivel_meta, beta, delta_max, permitir_reducciones, dinamicos)
         columnas = [m.pre.columnas[i] for i in m.pre.indices_accion]
 
@@ -346,6 +354,7 @@ class PrescriptorAG:
             "base": m.describir_final(resultado.estado_base, meta["valor"]),
             "prescrito": m.describir_final(resultado.estado_prescrito, meta["valor"]),
             "meta": meta,
+            "nivel_observado": observado,
             "costo": resultado.costo,
             "generaciones": resultado.generaciones,
             "historial": {

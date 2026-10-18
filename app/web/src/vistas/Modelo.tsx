@@ -32,7 +32,7 @@ const OPCIONES_INICIALES: OpcionesEntrenamiento = {
   ag: {},
 };
 
-const OPCIONES_DE_PERFIL: OpcionDePerfil[] = ['proporcion_prueba', 'pliegues', 'metodo_pesos', 'inferencia', 'activacion', 'beta', 'permitir_reducciones', 'smote', 'busqueda_ag', 'binarizar_objetivo'];
+const OPCIONES_DE_PERFIL: OpcionDePerfil[] = ['proporcion_prueba', 'pliegues', 'metodo_pesos', 'inferencia', 'activacion', 'beta', 'permitir_reducciones', 'meta_escalonada', 'smote', 'busqueda_ag', 'binarizar_objetivo'];
 
 /** Quita las opciones explícitas que dependen del perfil: vuelven a seguir al perfil. */
 function sinExplicitas(o: OpcionesEntrenamiento): OpcionesEntrenamiento {
@@ -51,6 +51,7 @@ function resumenPerfil(d: DefectosPerfil) {
     `β = ${num(d.beta, 2)}`,
     d.condicion_delta_max ? `tope por ausentismo de ${pctDe(d.condicion_delta_max, 0)}` : 'sin tope por ausentismo',
     d.permitir_reducciones ? 'permite reducir acciones' : 'solo aumenta acciones',
+    d.meta_escalonada ? 'meta escalonada (nivel siguiente)' : 'meta en el mejor nivel',
     d.mutables_dinamicos ? 'mutables dinámicos' : 'mutables fijos',
     d.smote ? 'SMOTE al entrenar' : 'sin SMOTE',
     `${pctDe(d.proporcion_prueba, 0)} de prueba`,
@@ -583,6 +584,10 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" className="size-4 accent-[var(--pizarra)]" checked={Boolean(efectivo('permitir_reducciones'))} onChange={(e) => poner('permitir_reducciones', e.target.checked)} />
         Permitir recomendar valores menores que los actuales
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="size-4 accent-[var(--pizarra)]" checked={Boolean(efectivo('meta_escalonada'))} onChange={(e) => poner('meta_escalonada', e.target.checked)} />
+        Meta escalonada: cada registro apunta al nivel siguiente al suyo
       </label>
 
       <details className="rounded-lg border border-linea px-4 py-3 text-sm">

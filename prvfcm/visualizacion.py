@@ -152,26 +152,30 @@ def grafica_seleccion(
 
 
 def grafica_convergencia(resultados: list[ResultadoPrescripcion], ruta: Path, plural: str = "registros") -> None:
-    """Mejor costo por generación: mediana y rango intercuartílico entre registros (``plural``: «estudiantes», «pacientes»...)."""
+    """Mejor costo y costo medio de la población por generación (0 = población inicial): mediana entre registros
+    y rango intercuartílico del mejor (``plural``: «estudiantes», «pacientes»...)."""
     _estilo()
     largo = max(len(r.historial_costo) for r in resultados)
-    # Las corridas detenidas antes conservan su último mejor costo.
-    historiales = np.array(
-        [np.pad(r.historial_costo, (0, largo - len(r.historial_costo)), mode="edge") for r in resultados]
-    )
-    generaciones = np.arange(1, largo + 1)
+    # Las corridas detenidas antes conservan su último valor.
+    rellenar = lambda h: np.pad(h, (0, largo - len(h)), mode="edge")  # noqa: E731
+    historiales = np.array([rellenar(r.historial_costo) for r in resultados])
+    generaciones = np.arange(largo)
     q1, mediana, q3 = np.percentile(historiales, [25, 50, 75], axis=0)
 
     fig, ax = plt.subplots(figsize=(7.5, 4))
     ax.fill_between(generaciones, q1, q3, color=SERIE_1, alpha=0.12, linewidth=0)
-    ax.plot(generaciones, mediana, color=SERIE_1, linewidth=2, solid_capstyle="round")
-    ax.set_title(f"Convergencia del AG: mejor costo por generación ({numero(len(resultados), 0)} {plural})")
+    ax.plot(generaciones, mediana, color=SERIE_1, linewidth=2, solid_capstyle="round", label="Mejor individuo")
+    if all(r.historial_promedio is not None for r in resultados):
+        medio = np.median([rellenar(r.historial_promedio) for r in resultados], axis=0)
+        ax.plot(generaciones, medio, color=SERIE_2, linewidth=2, solid_capstyle="round", label="Promedio de la población")
+        ax.legend(frameon=False)
+    ax.set_title(f"Convergencia del AG: costo por generación ({numero(len(resultados), 0)} {plural})")
     ax.yaxis.set_major_formatter(MARCAS_ES)
-    ax.set_xlabel("Generación")
-    ax.set_ylabel("Mejor costo (mediana y rango intercuartílico)")
+    ax.set_xlabel("Generación (0 = población inicial)")
+    ax.set_ylabel("Costo (menor es mejor; mediana)")
     ax.grid(axis="y")
     ax.set_axisbelow(True)
-    ax.set_xlim(1, largo)
+    ax.set_xlim(0, largo - 1)
     fig.savefig(ruta)
     plt.close(fig)
 

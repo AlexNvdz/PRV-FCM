@@ -124,14 +124,28 @@ def reporte_individual(prescripcion: dict, nombre_objetivo: str, sujeto: str = "
     mantener = agrupar([f for f, cambia in frases if not cambia])
     base, prescrito, meta = prescripcion["base"], prescripcion["prescrito"], prescripcion["meta"]
 
+    # Llegar a la meta o pasarla es éxito (la meta escalonada puede quedar por debajo del mejor nivel).
+    en_meta = lambda estado: estado["activacion"] >= meta["valor"] - meta["tolerancia"] - 1e-9  # noqa: E731
+    observado = prescripcion.get("nivel_observado")
     if cambios:
         plan = f"Para {sujeto} se recomienda {unir(cambios)}."
+    elif en_meta(base):
+        plan = (
+            f"Con sus acciones actuales, el FCM ya ubica {'al ' + sujeto[3:] if sujeto.startswith('el ') else 'a ' + sujeto} en {base['nivel']}, "
+            f"en su meta ({meta['nivel']}) o por encima: "
+            "según el modelo no hace falta cambiarlas."
+        )
+        if observado is not None and observado != base["nivel"]:
+            plan += (
+                f" Su nivel observado es {observado}: el modelo no lo distingue de {base['nivel']}, así que para él no hay "
+                "nada que mejorar; tome el plan con cautela o elija una meta más alta."
+            )
     else:
         plan = f"Para {sujeto} el algoritmo genético no encontró un cambio en las acciones cuyo avance hacia la meta compense el esfuerzo."
     if mantener and cambios:
         plan += f" Además, {unir(mantener)}: el modelo no espera un beneficio que compense el esfuerzo de cambiarla{'s' if sum(not cambia for _, cambia in frases) > 1 else ''}."
 
-    llega = abs(prescrito["activacion"] - meta["valor"]) <= meta["tolerancia"] + 1e-9
+    llega = en_meta(prescrito)
     resultado = (
         f"Con este plan, el FCM estima que {nombre_objetivo} pasa de {numero(base['activacion'], 2)} ({base['nivel']}) "
         f"a {numero(prescrito['activacion'], 2)} ({prescrito['nivel']})"
@@ -197,6 +211,9 @@ def resumen_prescripciones(
         }
 
     exito = tabla["exito"].astype(bool)
+    # Meta escalonada: cada nivel apunta al siguiente (columna nivel_meta de recomendaciones.csv).
+    metas = dict(zip(tabla["clase_observada"].astype(str), tabla["nivel_meta"].astype(str))) if "nivel_meta" in tabla else {}
+    escalonada = any(m != str(mejor_nivel) for m in metas.values())
     base, prescrito = tabla[f"{columna_objetivo}_fcm_base"], tabla[f"{columna_objetivo}_fcm_prescrito"]
     filas_acciones = []
     for a in acciones:
@@ -223,6 +240,7 @@ def resumen_prescripciones(
         por_nivel.append(
             {
                 "nivel": etiqueta,
+                "meta": metas.get(etiqueta, str(mejor_nivel)),
                 "n": int(len(grupo)),
                 "pct_exito": float(100 * grupo["exito"].astype(bool).mean()),
                 "activacion_base": float(grupo[f"{columna_objetivo}_fcm_base"].mean()),
@@ -244,9 +262,11 @@ def resumen_prescripciones(
     ]
 
     niveles = " o ".join(f"«{nivel}»" for nivel in dict.fromkeys(tabla["clase_observada"].astype(str)))
+    pasos = unir([f"de «{o}» a «{m}»" for o, m in metas.items() if o != m])
+    destino = f"su nivel meta, el siguiente al observado ({pasos})," if escalonada else f"el mejor nivel («{mejor_nivel}»)"
     partes = [
         f"El algoritmo genético prescribió acciones a {numero(n, 0)} {plural} de prueba con nivel {niveles}. "
-        f"Con las acciones prescritas, el FCM ubica en el mejor nivel («{mejor_nivel}») al {porcentaje(100 * exito.mean())}; "
+        f"Con las acciones prescritas, el FCM ubica en {destino} al {porcentaje(100 * exito.mean())}; "
         f"{nombre_objetivo} pasa en promedio de {numero(base.mean(), 2)} a {numero(prescrito.mean(), 2)}."
     ]
     if metricas and not nivel:
@@ -254,7 +274,7 @@ def resumen_prescripciones(
         if "PSR_base" in p and "PSR_externo" in e:
             partes.append(
                 f"Con sus acciones actuales lo logra el {porcentaje(p['PSR_base'])}. Un bosque aleatorio independiente "
-                f"confirma el mejor nivel para el {porcentaje(e['PSR_externo'])} (antes {porcentaje(e['PSR_externo_base'])}): es la cifra prudente."
+                f"confirma {'la meta' if escalonada else 'el mejor nivel'} para el {porcentaje(e['PSR_externo'])} (antes {porcentaje(e['PSR_externo_base'])}): es la cifra prudente."
             )
     articulo = "las" if femenino else "los"
     binarias = {a["columna"] for a in acciones if es_binaria(a)}
@@ -284,7 +304,7 @@ def resumen_prescripciones(
     if len(por_nivel) > 1:
         partes.append(
             "Por nivel observado: "
-            + "; ".join(f"«{g['nivel']}» ({numero(g['n'], 0)} {plural}) llega a «{mejor_nivel}» el {porcentaje(g['pct_exito'])}" for g in por_nivel)
+            + "; ".join(f"«{g['nivel']}» ({numero(g['n'], 0)} {plural}) llega a «{g['meta']}» el {porcentaje(g['pct_exito'])}" for g in por_nivel)
             + "."
         )
     return {

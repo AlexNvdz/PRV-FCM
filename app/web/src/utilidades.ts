@@ -1,5 +1,5 @@
 // Formatos y ayudas compartidas.
-import { SUJETO_POR_DEFECTO, type Activacion, type Codificacion, type DatasetResumen, type MetodoPesos, type PerfilModelo, type ReglaInferencia, type Rol, type Sujeto, type ValorOriginal } from './tipos';
+import { SUJETO_POR_DEFECTO, type Activacion, type Codificacion, type DatasetResumen, type Metricas, type MetodoPesos, type PerfilModelo, type ReglaInferencia, type Rol, type Sujeto, type ValorOriginal } from './tipos';
 
 const numero = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
 
@@ -16,6 +16,15 @@ export function pctDe(proporcion: number | null | undefined, decimales = 1) {
 export function num(valor: number | null | undefined, decimales = 1) {
   if (valor === null || valor === undefined || Number.isNaN(valor)) return '—';
   return valor.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: decimales });
+}
+
+/** Marcas de un eje con decimales según el rango: con 2 fijos, un rango estrecho repetía «0,29 0,29 0,28». */
+export function formatoEje(valores: (number | null | undefined)[]) {
+  const v = valores.filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
+  const rango = v.length ? Math.max(...v) - Math.min(...v) : 1;
+  // Unas cinco marcas: el paso es rango / 5 y hacen falta los decimales de ese paso.
+  const decimales = Math.min(4, Math.max(2, Math.ceil(-Math.log10((rango || 1e-4) / 5))));
+  return (x: number) => num(x, decimales);
 }
 
 export function entero(valor: number | null | undefined) {
@@ -125,6 +134,21 @@ export function descargarCsv(nombre: string, filas: (string | number | boolean |
   const enlace = Object.assign(document.createElement('a'), { href: url, download: nombre });
   enlace.click();
   URL.revokeObjectURL(url);
+}
+
+/** Meta escalonada efectiva: la opción del entrenamiento y un objetivo de más de dos niveles (con dos, la meta es el mejor). */
+export function esEscalonada(metricas: Metricas | undefined, niveles: Record<string, number> | undefined) {
+  return Boolean(metricas?.configuracion.prescripcion.meta_escalonada) && Object.keys(niveles ?? {}).length > 2;
+}
+
+/** Pares «observado → meta» de la meta escalonada («L → M, M → H»), solo de las metas usadas si vienen; `niveles` va del peor al mejor. */
+export function paresMeta(niveles: string[], metas?: Record<string, number>) {
+  return niveles
+    .slice(1)
+    .map((n, i) => [niveles[i], n])
+    .filter(([, n]) => !metas || n in metas)
+    .map(([desde, hasta]) => `${desde} → ${hasta}`)
+    .join(', ');
 }
 
 /** Nivel cuyo valor está más cerca de la activación, como `discretizar_rendimiento` del motor. */

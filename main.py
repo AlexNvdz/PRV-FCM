@@ -123,6 +123,7 @@ def parsear_argumentos() -> argparse.Namespace:
     grupo.add_argument("--tope-ausentismo", type=float, help="subida máxima por acción (0-1) si StudentAbsenceDays = Above-7 (0.15)")
     grupo.add_argument("--sin-tope-ausentismo", action="store_true", help="no limita las acciones con ausentismo alto")
     grupo.add_argument("--aptitud", choices=APTITUDES, help="error (defecto), tabla4 (PRV-FCM) o garcia2025")
+    grupo.add_argument("--sin-meta-escalonada", action="store_true", help="todos apuntan al mejor nivel, no al siguiente al suyo")
     parser.add_argument("--sin-graficas", action="store_true", help="no genera las figuras PNG")
     return parser.parse_args()
 
@@ -157,6 +158,8 @@ def opciones_desde_argumentos(args: argparse.Namespace, segmento: Segmento | Non
         datos["aristas_excluidas"] = [tuple(a) for a in args.excluir]
     if args.sin_tope_ausentismo:
         datos["condicion_delta_max"] = None
+    if args.sin_meta_escalonada:
+        datos["meta_escalonada"] = False
     if args.expertos:
         datos["matrices_expertos"] = json.loads(args.expertos.read_text(encoding="utf-8"))
     return opciones_desde_dict(datos, segmento)
@@ -287,6 +290,10 @@ def imprimir_inicio_prescripcion(r: ResultadoPipeline) -> None:
 def imprimir_evaluacion(r: ResultadoPipeline) -> None:
     titulo("4. EVALUACIÓN")
     metricas, externa, presc = r.metricas, r.externa, r.config_prescripcion
+    metas = metricas.get("metas", {})
+    destino = "su meta" if set(metas) - {r.esquema.mejor_nivel} else "el mejor nivel"
+    if destino == "su meta":
+        print("Meta escalonada (nivel siguiente al observado): " + ", ".join(f"{m}: {n}" for m, n in metas.items()))
     print(f"{r.esquema.sujeto.plural.capitalize()} evaluados: {metricas['n_estudiantes']} | tolerancia de éxito: {presc.tolerancia_exito:g}")
     print(f"{'':<8}{'Acciones actuales':>20}{'PRV-FCM':>12}")
     print(f"{'MAE':<8}{metricas['MAE_base']:>20.4f}{metricas['MAE']:>12.4f}")
@@ -299,11 +306,11 @@ def imprimir_evaluacion(r: ResultadoPipeline) -> None:
     )
 
     print(f"\nValidación externa (bosque aleatorio, exactitud en prueba {100 * externa['exactitud_prueba']:.1f}%):")
-    print(f"  Clasificados en el mejor nivel: {externa['PSR_externo_base']:.1f}% -> {externa['PSR_externo']:.1f}%")
+    print(f"  Clasificados en {destino}: {externa['PSR_externo_base']:.1f}% -> {externa['PSR_externo']:.1f}%")
     print(f"  Probabilidad media de H:    {externa['prob_H_base']:.3f} -> {externa['prob_H_prescrita']:.3f}")
 
     if r.exito_por_segmento:
-        print(f"\n{r.esquema.sujeto.plural.capitalize()} que alcanzan el mejor nivel por segmento (acciones actuales -> prescritas):")
+        print(f"\n{r.esquema.sujeto.plural.capitalize()} que alcanzan {destino} por segmento (acciones actuales -> prescritas):")
         for nombre, fcm_seg in r.exito_por_segmento.items():
             rf_seg = externa["por_segmento"][nombre]
             print(

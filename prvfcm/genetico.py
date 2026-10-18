@@ -35,8 +35,8 @@ class ResultadoAG:
 
     mejor_cromosoma: np.ndarray
     mejor_costo: float
-    historial_mejor: np.ndarray     # Mejor costo al final de cada generación.
-    historial_promedio: np.ndarray  # Costo medio de la población en cada generación.
+    historial_mejor: np.ndarray     # Mejor costo de la población inicial (posición 0) y al final de cada generación.
+    historial_promedio: np.ndarray  # Costo medio de la población, también desde la inicial.
     generaciones: int               # Generaciones ejecutadas (puede ser < máximo).
     historial_cromosoma: np.ndarray | None = None  # Mejor individuo de cada generación (generaciones, n_genes).
 
@@ -144,7 +144,13 @@ class AlgoritmoGenetico:
         poblacion = self.inicializar_poblacion(semillas)
         costos = self.funcion_costo(poblacion)
 
-        historial_mejor, historial_promedio, historial_cromosoma = [], [], []
+        # Generación 0: la población inicial (aleatoria y las semillas). Sin ella la curva
+        # empieza tras el primer cruce, con la población ya casi convergida.
+        inicial = int(np.argmin(costos))
+        historial_mejor, historial_promedio = [float(costos[inicial])], [float(costos.mean())]
+        historial_cromosoma = [poblacion[inicial].copy()]
+        if al_generar is not None:
+            al_generar(0, historial_mejor[0], historial_promedio[0], historial_cromosoma[0])
         mejor_costo, sin_mejora = np.inf, 0
         n_hijos = cfg.tam_poblacion - cfg.elitismo
 

@@ -10,7 +10,7 @@ import { Medidor, ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, estiloControl, NivelChip } from '../componentes/ui';
 import { useModelo } from '../hooks';
 import type { Graficas } from '../tipos';
-import { etiquetaAccion, mayuscula, num, pasoAccion, type SujetoTexto } from '../utilidades';
+import { esEscalonada, etiquetaAccion, mayuscula, num, pasoAccion, type SujetoTexto } from '../utilidades';
 
 export { Medidor };
 
@@ -20,10 +20,14 @@ export function DetalleEstudiante({ modeloId, id, graficas, s, alCerrar }: { mod
   const estudiante = useQuery({ queryKey: ['estudiante', modeloId, id], queryFn: () => api.estudiante(modeloId, id) });
   const [valores, setValores] = useState<Record<string, number>>({});
   // β parte del valor con que se entrenó el modelo (en caché: la vista que abre el panel ya lo cargó).
-  const betaModelo = useModelo(modeloId).data?.metricas?.configuracion.prescripcion.beta_esfuerzo ?? 0.4;
+  const metricas = useModelo(modeloId).data?.metricas;
+  const betaModelo = metricas?.configuracion.prescripcion.beta_esfuerzo ?? 0.4;
   const [beta, setBeta] = useState(betaModelo);
-  const [delta, setDelta] = useState<number | null>(null);
-  const [meta, setMeta] = useState(niveles.at(-1) ?? '');
+  // Con meta escalonada, '' (null) deja que el motor elija el nivel siguiente al observado.
+  const escalonada = esEscalonada(metricas, graficas.niveles);
+  // El tope parte del que usó el entrenamiento; 1 (todo el rango) es «sin límite» y sí lo quita.
+  const [delta, setDelta] = useState<number | null>(metricas?.configuracion.prescripcion.delta_max ?? null);
+  const [meta, setMeta] = useState(escalonada ? '' : (niveles.at(-1) ?? ''));
   const cerrar = useRef<HTMLButtonElement>(null);
 
   useEffect(() => cerrar.current?.focus(), []);
@@ -133,6 +137,7 @@ export function DetalleEstudiante({ modeloId, id, graficas, s, alCerrar }: { mod
               <label className="mt-4 flex max-w-xs flex-col gap-1 text-sm">
                 <span className="text-tinta">Meta (estado deseado del objetivo)</span>
                 <select className={estiloControl} value={meta} onChange={(e) => setMeta(e.target.value)}>
+                  {escalonada && <option value="">Nivel siguiente (meta escalonada)</option>}
                   {[...niveles].reverse().map((n) => (
                     <option key={n} value={n}>
                       {n}
@@ -148,8 +153,8 @@ export function DetalleEstudiante({ modeloId, id, graficas, s, alCerrar }: { mod
                   <span className="text-xs text-tinta-3">Mayor, cambios más pequeños.</span>
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-tinta">Cambio máximo: {delta === null ? 'sin límite' : `${Math.round(delta * 100)} % del rango`}</span>
-                  <input type="range" min={0} max={1} step={0.05} value={delta ?? 1} onChange={(e) => setDelta(Number(e.target.value) >= 1 ? null : Number(e.target.value))} className="accent-[var(--pizarra)]" />
+                  <span className="text-tinta">Cambio máximo: {delta === null || delta >= 1 ? 'sin límite' : `${Math.round(delta * 100)} % del rango`}</span>
+                  <input type="range" min={0} max={1} step={0.05} value={delta ?? 1} onChange={(e) => setDelta(Number(e.target.value))} className="accent-[var(--pizarra)]" />
                   <span className="text-xs text-tinta-3">Por acción, respecto a su rango.</span>
                 </label>
               </div>

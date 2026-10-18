@@ -125,6 +125,12 @@ def test_validar_esquema_detecta_categorias_fuera_del_orden():
     assert not resultado["ok"] and any("M" in e for e in resultado["errores"])
 
 
+def test_validar_esquema_rechaza_una_columna_sin_valores():
+    # Una columna numérica vacía no tiene mediana: el FCM recibiría NaN (y una acción vacía rompía el AG).
+    resultado = validar_esquema(esquema_desercion(), dataset_desercion().assign(tutorias=np.nan))
+    assert not resultado["ok"] and any("tutorias" in e and "excluir" in e for e in resultado["errores"])
+
+
 # ---------------------------------------------------------------------------
 # Perfilado
 # ---------------------------------------------------------------------------
@@ -261,10 +267,10 @@ def test_prescriptor_ag_avisa_cada_generacion_sin_cambiar_el_resultado(entrenado
     sin_aviso = prescriptor.prescribir(registro, beta=0.4, semilla=7)
     assert con_aviso["historial"] == sin_aviso["historial"]  # El aviso no consume números aleatorios.
     historial = con_aviso["historial"]
-    assert [e["generacion"] for e in eventos] == list(range(1, con_aviso["generaciones"] + 1))
+    assert [e["generacion"] for e in eventos] == list(range(con_aviso["generaciones"] + 1))  # 0 = población inicial.
     assert [e["mejor_costo"] for e in eventos] == pytest.approx(historial["mejor"])
     assert all(a >= b - 1e-12 for a, b in zip(historial["mejor"], historial["mejor"][1:]))  # Elitismo: nunca empeora.
-    assert len(historial["activacion"]) == len(historial["acciones"]) == con_aviso["generaciones"]
+    assert len(historial["activacion"]) == len(historial["acciones"]) == con_aviso["generaciones"] + 1
     # La última generación es la prescripción final.
     assert historial["acciones"][-1] == pytest.approx([a["recomendada"]["valor"] for a in con_aviso["acciones"]])
     assert historial["activacion"][-1] == pytest.approx(con_aviso["prescrito"]["activacion"], abs=1e-4)
@@ -284,6 +290,11 @@ def test_objetivo_numerico_se_discretiza_en_tres_niveles(tmp_path):
     r = ejecutar(cargar_datos(ruta, objeto), objeto, OpcionesPipeline(validacion_cruzada=False, config_ag=AG_RAPIDO))
     assert set(r.recomendaciones["clase_observada"]) <= {"Bajo", "Medio"}
     assert "nota_final_observado" in r.recomendaciones.columns
+    # Meta escalonada: Bajo apunta a Medio y Medio a Alto; el éxito es llegar a la meta o más arriba.
+    tabla, rango = r.recomendaciones, {"Bajo": 0, "Medio": 1, "Alto": 2}
+    assert (tabla["nivel_meta"] == tabla["clase_observada"].map({"Bajo": "Medio", "Medio": "Alto"})).all()
+    assert (tabla["exito"] == (tabla["nivel_prescrito"].map(rango) >= tabla["nivel_meta"].map(rango))).all()
+    assert r.metricas["PSR"] == pytest.approx(100 * tabla["exito"].mean())
     descripcion = estadisticas(cargar_datos(ruta, objeto), objeto)
     assert sum(n["n"] for n in descripcion["objetivo"]["niveles"]) == len(df)
 
@@ -404,7 +415,8 @@ def test_perfil_de_riesgo_coincide_con_el_registro_y_genera_reporte(entrenado):
     # El objetivo es dinámico y su punto fijo no depende del valor inicial: misma predicción de partida.
     assert desde_perfil["base"]["activacion"] == pytest.approx(desde_registro["base"]["activacion"], abs=1e-4)
     assert desde_perfil["reporte"]["texto"].startswith("Para este perfil")
-    assert len(desde_perfil["historial"]["mejor"]) == desde_perfil["generaciones"] == len(desde_perfil["historial"]["promedio"])
+    # El historial empieza en la población inicial (generación 0).
+    assert len(desde_perfil["historial"]["mejor"]) == desde_perfil["generaciones"] + 1 == len(desde_perfil["historial"]["promedio"])
     assert {c["rol"] for c in desde_perfil["contribuciones"]} <= {"inmutable", "accion", "mutable"}
     assert desde_perfil["meta"]["nivel"] == "No"
     assert desde_perfil["perfil"]["edad"] == perfil["edad"] and "perfil" not in desde_registro
@@ -430,6 +442,17 @@ def test_reporte_individual_traduce_los_deltas_a_frases():
     assert "pasa de 0,31 (L) a 0,8 (H) y alcanza la meta (H)" in reporte["texto"]
     assert "Ausentismo (aporte -0,62)" in reporte["frenos"] and "Nacionalidad" not in reporte["frenos"]
     assert numero(1234.5) == "1.234,5" and numero(-0.0001, 2) == "0" and numero(40.0) == "40"
+
+
+def test_reporte_explica_cuando_el_fcm_ya_esta_en_la_meta():
+    # Vino observado en 3 con meta escalonada 4: el FCM ya lo ve en 4 y no hay nada que cambiar.
+    prescripcion = {
+        "acciones": [], "base": {"activacion": 0.24, "nivel": "4"}, "prescrito": {"activacion": 0.24, "nivel": "4"},
+        "meta": {"valor": 1 / 6, "nivel": "4", "tolerancia": 1 / 12}, "nivel_observado": "3",
+    }
+    reporte = reporte_individual(prescripcion, "Calidad", "el vino 294")
+    assert "ya ubica al vino 294 en 4" in reporte["plan"] and "nivel observado es 3" in reporte["plan"]
+    assert reporte["alcanza_meta"]  # Pasarse de la meta también es llegar.
 
 
 def test_reporte_agrupa_las_acciones_binarias():

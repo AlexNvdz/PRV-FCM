@@ -13,7 +13,7 @@ import { RedaccionIA } from '../componentes/RedaccionIA';
 import { Aviso, Cargando, Encabezado, estiloControl, NivelChip, Seccion, Vacio } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import { useModelo } from '../hooks';
-import { entero, filaMancuerna, mayuscula, NOMBRE_METODO, num, pct, pctDe, sujetoDe } from '../utilidades';
+import { entero, esEscalonada, filaMancuerna, mayuscula, NOMBRE_METODO, num, pct, pctDe, sujetoDe } from '../utilidades';
 import type { Reconstruccion } from '../tipos';
 import { DetalleEstudiante } from './DetalleEstudiante';
 
@@ -149,6 +149,7 @@ export function Informe() {
   const m = modelo.data.metricas;
   const g = modelo.data.graficas;
   const niveles = Object.entries(g.niveles).sort((a, b) => a[1] - b[1]).map(([n]) => n);
+  const escalonada = esEscalonada(m, g.niveles);
   const figuras = g.figuras ?? [];
   const r = resumen.data;
   const rangos = new Map(g.acciones.map((a) => [a.columna, a]));
@@ -225,7 +226,8 @@ export function Informe() {
                       <th scope="col" className="pb-1 text-right font-medium">Registros</th>
                       <th scope="col" className="pb-1 text-right font-medium">Activación actual</th>
                       <th scope="col" className="pb-1 text-right font-medium">Con la prescripción</th>
-                      <th scope="col" className="pb-1 text-right font-medium">Llegan a {g.mejor_nivel}</th>
+                      {escalonada && <th scope="col" className="pb-1 font-medium">Meta</th>}
+                      <th scope="col" className="pb-1 text-right font-medium">{escalonada ? 'Llegan a su meta' : `Llegan a ${g.mejor_nivel}`}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -237,6 +239,7 @@ export function Informe() {
                         <td className="py-1.5 text-right">{entero(p.n)}</td>
                         <td className="py-1.5 text-right">{num(p.activacion_base, 3)}</td>
                         <td className="py-1.5 text-right">{num(p.activacion_prescrita, 3)}</td>
+                        {escalonada && <td className="py-1.5">{p.meta && <NivelChip nivel={p.meta} niveles={niveles} />}</td>}
                         <td className="py-1.5 text-right font-medium">{pct(p.pct_exito)}</td>
                       </tr>
                     ))}

@@ -18,8 +18,9 @@ import {
   YAxis,
 } from 'recharts';
 
-import type { EstadisticaVariable, FilaSeleccion } from '../tipos';
-import { clase, colorNivel, firmado, mayuscula, num, pct, type SujetoTexto } from '../utilidades';
+import type { EstadisticaVariable, FilaSeleccion, Graficas } from '../tipos';
+import { clase, colorNivel, firmado, formatoEje, mayuscula, num, pct, type SujetoTexto } from '../utilidades';
+import { estiloControl } from './ui';
 
 // ---------------------------------------------------------------------------
 // Marco común: título, alternar gráfica/tabla
@@ -432,12 +433,31 @@ export function GraficaSeleccion({ tabla, lambda, alpha, mayoritaria }: { tabla:
 // ---------------------------------------------------------------------------
 // Antes y después de la prescripción
 // ---------------------------------------------------------------------------
-export function GraficaAntesDespues({ datos, umbral, mejor, s }: { datos: { id: number; base: number; prescrito: number }[]; umbral: number; mejor: string; s: SujetoTexto }) {
+export function GraficaAntesDespues({
+  datos,
+  umbral,
+  mejor,
+  s,
+}: {
+  datos: { id: number; base: number; prescrito: number; meta?: string; umbral_meta?: number }[];
+  umbral: number;
+  mejor: string;
+  s: SujetoTexto;
+}) {
   const puntos = datos.map((d, i) => ({ ...d, orden: i + 1 }));
+  // Una línea por meta: con meta escalonada, una por nivel siguiente; si no (o en modelos antiguos), la del mejor nivel.
+  const lineas = [...new Map(datos.flatMap((d) => (d.meta !== undefined && d.umbral_meta !== undefined ? [[d.meta, d.umbral_meta] as const] : []))).entries()].sort((a, b) => a[1] - b[1]);
+  if (!lineas.length) lineas.push([mejor, umbral]);
+  const varias = lineas.length > 1;
+  const ordenado = `Cada ${s.singular} ${s.femenino ? 'ordenada' : 'ordenado'} por su activación actual`;
   return (
     <MarcoGrafica
       titulo="Activación del objetivo antes y después de prescribir"
-      descripcion={`Cada ${s.singular} ${s.femenino ? 'ordenada' : 'ordenado'} por su activación actual. Sobre la línea (${num(umbral, 2)}) queda en ${mejor}.`}
+      descripcion={
+        varias
+          ? `${ordenado}. Apunta al nivel siguiente al suyo y lo alcanza sobre la línea de su meta (${lineas.map(([n, u]) => `${n} desde ${num(u, 2)}`).join('; ')}).`
+          : `${ordenado}. Sobre la línea (${num(lineas[0][1], 2)}) queda en ${lineas[0][0]}.`
+      }
       leyenda={
         <>
           <ItemLeyenda color="var(--serie-1)" texto="Acciones actuales" forma="linea" />
@@ -445,8 +465,8 @@ export function GraficaAntesDespues({ datos, umbral, mejor, s }: { datos: { id: 
         </>
       }
       tabla={{
-        columnas: [`${mayuscula(s.singular)} (id)`, 'Actual', 'Prescrita'],
-        filas: puntos.map((p) => [p.id, num(p.base, 3), num(p.prescrito, 3)]),
+        columnas: [`${mayuscula(s.singular)} (id)`, ...(varias ? ['Meta'] : []), 'Actual', 'Prescrita'],
+        filas: puntos.map((p) => [p.id, ...(varias ? [p.meta ?? ''] : []), num(p.base, 3), num(p.prescrito, 3)]),
       }}
     >
       <ResponsiveContainer width="100%" height={300}>
@@ -454,7 +474,9 @@ export function GraficaAntesDespues({ datos, umbral, mejor, s }: { datos: { id: 
           {REJILLA}
           <XAxis dataKey="orden" type="number" domain={[1, puntos.length]} tick={TICK} axisLine={EJE} tickLine={false} />
           <YAxis domain={[0, 1]} tick={TICK} axisLine={false} tickLine={false} />
-          <ReferenceLine y={umbral} stroke="var(--tinta-3)" />
+          {lineas.map(([nivel, u]) => (
+            <ReferenceLine key={nivel} y={u} stroke="var(--tinta-3)" label={varias ? { value: nivel, position: 'insideTopLeft', fill: 'var(--tinta-2)', fontSize: 11 } : undefined} />
+          ))}
           <Scatter dataKey="prescrito" fill="var(--serie-2)" fillOpacity={0.55} shape="circle" isAnimationActive={false} />
           <Line dataKey="base" stroke="var(--serie-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
           <Tooltip
@@ -462,6 +484,7 @@ export function GraficaAntesDespues({ datos, umbral, mejor, s }: { datos: { id: 
               active && payload?.length ? (
                 <Globo>
                   <strong>{mayuscula(s.singular)} {payload[0].payload.id}</strong>
+                  {varias && <div>Meta: {payload[0].payload.meta}</div>}
                   <div>Actual: {num(payload[0].payload.base, 3)}</div>
                   <div>Prescrita: {num(payload[0].payload.prescrito, 3)}</div>
                 </Globo>
@@ -477,31 +500,118 @@ export function GraficaAntesDespues({ datos, umbral, mejor, s }: { datos: { id: 
 // ---------------------------------------------------------------------------
 // Convergencia del AG
 // ---------------------------------------------------------------------------
-export function GraficaConvergencia({ datos, s }: { datos: { generacion: number[]; q1: number[]; mediana: number[]; q3: number[] }; s: SujetoTexto }) {
-  const filas = datos.generacion.map((g, i) => ({ generacion: g, banda: [datos.q1[i], datos.q3[i]], mediana: datos.mediana[i] }));
+/** Nombre de una generación del AG: la 0 es la población inicial, antes del primer cruce. */
+export const nombreGeneracion = (g: number) => (g === 0 ? 'Población inicial (generación 0)' : `Generación ${g}`);
+
+const EJE_GENERACION = { value: 'Generación', position: 'insideBottom', offset: -2, fill: 'var(--tinta-3)', fontSize: 11 } as const;
+
+export function GraficaConvergencia({ datos, s }: { datos: Graficas['convergencia']; s: SujetoTexto }) {
+  const { progreso, medio } = datos;
+  const [vista, setVista] = useState<'aptitud' | 'costo'>('aptitud');
+  // Modelos antiguos: sin progreso ni costo medio, solo la mediana del mejor costo (en azul, como antes).
+  const nuevo = Boolean(progreso);
+  const colorMejor = nuevo ? 'var(--serie-2)' : 'var(--serie-1)';
+  const selector = nuevo && (
+    <label className="mb-3 flex items-center gap-2 text-xs text-tinta-2">
+      Ver
+      <select className={clase(estiloControl, 'h-8 w-52! text-xs')} value={vista} onChange={(e) => setVista(e.target.value as 'aptitud' | 'costo')}>
+        <option value="aptitud">Aptitud normalizada</option>
+        <option value="costo">Costo</option>
+      </select>
+    </label>
+  );
+
+  if (progreso && vista === 'aptitud') {
+    const filas = datos.generacion.map((g, i) => ({ generacion: g, mejor: progreso.mejor[i], medio: progreso.medio[i] }));
+    const minimo = Math.min(0, ...progreso.mejor, ...progreso.medio);
+    return (
+      <MarcoGrafica
+        titulo="Convergencia del algoritmo genético"
+        descripcion={`Cuanto más arriba, mejor. El AG minimiza el costo; aquí se muestra como aptitud: 0 es el costo medio de la población inicial de cada ${s.singular} y 1, su mejor costo final. Mediana entre ${s.plural}.`}
+        leyenda={
+          <>
+            <ItemLeyenda color="var(--serie-2)" texto="Mejor individuo (élite)" forma="linea" />
+            <ItemLeyenda color="var(--serie-1)" texto="Promedio de la población" forma="linea" />
+          </>
+        }
+        tabla={{
+          columnas: ['Generación', 'Mejor individuo (élite)', 'Promedio de la población'],
+          filas: filas.map((f) => [f.generacion === 0 ? '0 (población inicial)' : f.generacion, num(f.mejor, 3), num(f.medio, 3)]),
+        }}
+      >
+        {selector}
+        <ResponsiveContainer width="100%" height={240}>
+          <ComposedChart data={filas} margin={{ top: 10, right: 16, left: -4, bottom: 12 }}>
+            {REJILLA}
+            <XAxis dataKey="generacion" type="number" domain={[0, 'dataMax']} allowDecimals={false} tick={TICK} axisLine={EJE} tickLine={false} label={EJE_GENERACION} />
+            <YAxis tick={TICK} axisLine={false} tickLine={false} tickFormatter={(v) => num(v, 2)} domain={[Math.floor(minimo * 10) / 10, 1]} />
+            <Line dataKey="medio" stroke="var(--serie-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Line dataKey="mejor" stroke="var(--serie-2)" strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Tooltip
+              cursor={{ stroke: 'var(--eje)' }}
+              content={({ active, payload }) =>
+                active && payload?.length ? (
+                  <Globo>
+                    <strong>{nombreGeneracion(payload[0].payload.generacion)}</strong>
+                    <div>Mejor individuo: {num(payload[0].payload.mejor, 3)}</div>
+                    <div>Promedio de la población: {num(payload[0].payload.medio, 3)}</div>
+                  </Globo>
+                ) : null
+              }
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </MarcoGrafica>
+    );
+  }
+
+  const filas = datos.generacion.map((g, i) => ({ generacion: g, banda: [datos.q1[i], datos.q3[i]], mediana: datos.mediana[i], medio: medio?.[i] ?? null }));
   return (
     <MarcoGrafica
       titulo="Convergencia del algoritmo genético"
-      descripcion={`Mejor costo por generación: mediana y rango intercuartílico entre ${s.plural}.`}
-      leyenda={<ItemLeyenda color="var(--serie-1)" texto="Mediana (banda: cuartiles 1 y 3)" forma="linea" />}
+      descripcion={`Mejor costo por generación: mediana y rango intercuartílico entre ${s.plural}${medio ? ', con la mediana del costo medio de la población' : ''}. Menor es mejor.`}
+      leyenda={
+        <>
+          <ItemLeyenda color={colorMejor} texto="Mejor costo: mediana (banda: cuartiles 1 y 3)" forma="linea" />
+          {medio && <ItemLeyenda color="var(--serie-1)" texto="Costo medio de la población" forma="linea" />}
+        </>
+      }
       tabla={{
-        columnas: ['Generación', 'Cuartil 1', 'Mediana', 'Cuartil 3'],
-        filas: filas.map((f) => [f.generacion, num(f.banda[0], 4), num(f.mediana, 4), num(f.banda[1], 4)]),
+        columnas: ['Generación', 'Cuartil 1', 'Mediana', 'Cuartil 3', ...(medio ? ['Costo medio'] : [])],
+        filas: filas.map((f) => [
+          f.generacion === 0 ? '0 (población inicial)' : f.generacion,
+          num(f.banda[0], 4),
+          num(f.mediana, 4),
+          num(f.banda[1], 4),
+          ...(medio ? [num(f.medio, 4)] : []),
+        ]),
       }}
     >
+      {selector}
       <ResponsiveContainer width="100%" height={220}>
-        <ComposedChart data={filas} margin={{ top: 10, right: 16, left: -4, bottom: 0 }}>
+        <ComposedChart data={filas} margin={{ top: 10, right: 16, left: -4, bottom: nuevo ? 12 : 0 }}>
           {REJILLA}
-          <XAxis dataKey="generacion" tick={TICK} axisLine={EJE} tickLine={false} />
-          <YAxis tick={TICK} axisLine={false} tickLine={false} tickFormatter={(v) => num(v, 2)} domain={['auto', 'auto']} />
-          <Area dataKey="banda" stroke="none" fill="var(--serie-1)" fillOpacity={0.14} isAnimationActive={false} />
-          <Line dataKey="mediana" stroke="var(--serie-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <XAxis
+            dataKey="generacion"
+            type="number"
+            domain={['dataMin', 'dataMax']}
+            allowDecimals={false}
+            tick={TICK}
+            axisLine={EJE}
+            tickLine={false}
+            label={nuevo ? EJE_GENERACION : undefined}
+          />
+          <YAxis tick={TICK} axisLine={false} tickLine={false} tickFormatter={formatoEje([...datos.q1, ...datos.q3, ...(medio ?? [])])} domain={['auto', 'auto']} />
+          <Area dataKey="banda" stroke="none" fill={colorMejor} fillOpacity={0.14} isAnimationActive={false} />
+          {medio && <Line dataKey="medio" stroke="var(--serie-1)" strokeWidth={2} dot={false} isAnimationActive={false} />}
+          <Line dataKey="mediana" stroke={colorMejor} strokeWidth={2} dot={false} isAnimationActive={false} />
           <Tooltip
-            content={({ active, payload, label }) =>
+            content={({ active, payload }) =>
               active && payload?.length ? (
                 <Globo>
-                  <strong>Generación {label}</strong>
-                  <div>Mediana: {num(payload[0].payload.mediana, 4)}</div>
+                  <strong>{nombreGeneracion(payload[0].payload.generacion)}</strong>
+                  <div>Mejor costo, mediana: {num(payload[0].payload.mediana, 4)}</div>
+                  {payload[0].payload.medio !== null && <div>Costo medio: {num(payload[0].payload.medio, 4)}</div>}
                 </Globo>
               ) : null
             }
@@ -516,31 +626,35 @@ export function GraficaConvergencia({ datos, s }: { datos: { generacion: number[
 // Convergencia del AG para una sola prescripción
 // ---------------------------------------------------------------------------
 export function GraficaConvergenciaIndividual({ historial }: { historial: { mejor: number[]; promedio: number[] } }) {
-  const filas = historial.mejor.map((mejor, i) => ({ generacion: i + 1, mejor, promedio: historial.promedio[i] ?? null }));
+  // La posición 0 del historial es la población inicial (generación 0).
+  const filas = historial.mejor.map((mejor, i) => ({ generacion: i, mejor, promedio: historial.promedio[i] ?? null }));
   return (
     <MarcoGrafica
       titulo="Convergencia del algoritmo genético"
-      descripcion={`Costo por generación (${filas.length} generaciones): el mejor individuo y la media de la población. El mejor nunca empeora gracias al elitismo.`}
+      descripcion={`Costo por generación (población inicial y ${filas.length - 1} generaciones): el mejor individuo y la media de la población. El mejor nunca empeora gracias al elitismo.`}
       leyenda={
         <>
-          <ItemLeyenda color="var(--serie-1)" texto="Mejor costo" forma="linea" />
-          <ItemLeyenda color="var(--serie-2)" texto="Costo medio de la población" forma="linea" />
+          <ItemLeyenda color="var(--serie-2)" texto="Mejor costo" forma="linea" />
+          <ItemLeyenda color="var(--serie-1)" texto="Costo medio de la población" forma="linea" />
         </>
       }
-      tabla={{ columnas: ['Generación', 'Mejor costo', 'Costo medio'], filas: filas.map((f) => [f.generacion, num(f.mejor, 4), f.promedio === null ? '—' : num(f.promedio, 4)]) }}
+      tabla={{
+        columnas: ['Generación', 'Mejor costo', 'Costo medio'],
+        filas: filas.map((f) => [f.generacion === 0 ? '0 (población inicial)' : f.generacion, num(f.mejor, 4), f.promedio === null ? '—' : num(f.promedio, 4)]),
+      }}
     >
       <ResponsiveContainer width="100%" height={210}>
         <ComposedChart data={filas} margin={{ top: 10, right: 16, left: -4, bottom: 0 }}>
           {REJILLA}
-          <XAxis dataKey="generacion" tick={TICK} axisLine={EJE} tickLine={false} />
-          <YAxis tick={TICK} axisLine={false} tickLine={false} tickFormatter={(v) => num(v, 2)} domain={['auto', 'auto']} />
-          <Line dataKey="promedio" stroke="var(--serie-2)" strokeWidth={2} dot={false} isAnimationActive={false} />
-          <Line dataKey="mejor" stroke="var(--serie-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <XAxis dataKey="generacion" type="number" domain={[0, 'dataMax']} allowDecimals={false} tick={TICK} axisLine={EJE} tickLine={false} />
+          <YAxis tick={TICK} axisLine={false} tickLine={false} tickFormatter={formatoEje([...historial.mejor, ...historial.promedio])} domain={['auto', 'auto']} />
+          <Line dataKey="promedio" stroke="var(--serie-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Line dataKey="mejor" stroke="var(--serie-2)" strokeWidth={2} dot={false} isAnimationActive={false} />
           <Tooltip
-            content={({ active, payload, label }) =>
+            content={({ active, payload }) =>
               active && payload?.length ? (
                 <Globo>
-                  <strong>Generación {label}</strong>
+                  <strong>{nombreGeneracion(payload[0].payload.generacion)}</strong>
                   <div>Mejor costo: {num(payload[0].payload.mejor, 4)}</div>
                   {payload[0].payload.promedio !== null && <div>Costo medio: {num(payload[0].payload.promedio, 4)}</div>}
                 </Globo>

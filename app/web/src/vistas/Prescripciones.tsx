@@ -12,11 +12,11 @@ import { Aviso, Boton, Cargando, Clase, Encabezado, estiloControl, Formula, Nive
 import { useDatasetActivo } from '../contexto';
 import { useDataset, useModelo } from '../hooks';
 import type { Graficas, Metricas } from '../tipos';
-import { clase, entero, esBinaria, filaMancuerna, firmado, mayuscula, num, pct, pctDe, recomendacionAccion, sujetoDe, sujetoDeDataset, type SujetoTexto } from '../utilidades';
+import { clase, entero, esBinaria, esEscalonada, filaMancuerna, firmado, mayuscula, num, paresMeta, pct, pctDe, recomendacionAccion, sujetoDe, sujetoDeDataset, type SujetoTexto } from '../utilidades';
 import { DetalleEstudiante } from './DetalleEstudiante';
 import { PerfilRiesgo } from './PerfilRiesgo';
 
-function Aptitud({ m, s }: { m: Metricas; s: SujetoTexto }) {
+function Aptitud({ m, s, escalonada }: { m: Metricas; s: SujetoTexto; escalonada: boolean }) {
   const ag = m.configuracion.ag;
   return (
     <details className="mt-6 max-w-4xl rounded-lg border border-linea px-4 py-3 text-sm">
@@ -28,7 +28,7 @@ function Aptitud({ m, s }: { m: Metricas; s: SujetoTexto }) {
         <p className="text-xs text-tinta-2">
           Cada cromosoma <span className="font-mono">a</span> es un valor en [0, 1] por acción <Clase letra="P" />. Para evaluarlo, el FCM parte del perfil {s.del} {s.singular}
           con esas acciones y se itera hasta converger: <span className="font-mono">A*_T</span> es la activación final del objetivo <Clase letra="T" /> y{' '}
-          <span className="font-mono">D_T</span> la meta (1 = mejor nivel). Los conceptos <Clase letra="S" /> no cambian. Operadores: torneo de {String(ag.tam_torneo)},
+          <span className="font-mono">D_T</span> la meta ({escalonada ? 'el valor del nivel siguiente al observado' : '1 = mejor nivel'}). Los conceptos <Clase letra="S" /> no cambian. Operadores: torneo de {String(ag.tam_torneo)},
           cruce {String(ag.tipo_cruce)} ({String(ag.tasa_cruce)}), mutación gaussiana ({String(ag.tasa_mutacion)}), elitismo de {String(ag.elitismo)}, población{' '}
           {String(ag.tam_poblacion)} y hasta {String(ag.generaciones)} generaciones. Las acciones actuales están en la población inicial: la prescripción nunca es peor que no
           actuar. β = {m.configuracion.prescripcion.beta_esfuerzo} en este entrenamiento.
@@ -38,12 +38,12 @@ function Aptitud({ m, s }: { m: Metricas; s: SujetoTexto }) {
   );
 }
 
-function TablaMetricas({ m, s }: { m: Metricas; s: SujetoTexto }) {
+function TablaMetricas({ m, s, escalonada }: { m: Metricas; s: SujetoTexto; escalonada: boolean }) {
   const p = m.prescripcion;
   const e = m.validacion_externa;
   const filas: [string, string, string, string][] = [
-    ['Tasa de éxito prescriptivo (FCM)', pct(p.PSR_base), pct(p.PSR), `${mayuscula(s.plural)} que el FCM ubica en el mejor nivel`],
-    ['En el mejor nivel según el bosque aleatorio', pct(e.PSR_externo_base), pct(e.PSR_externo), 'Modelo independiente: la cifra prudente'],
+    ['Tasa de éxito prescriptivo (FCM)', pct(p.PSR_base), pct(p.PSR), `${mayuscula(s.plural)} que el FCM ubica en ${escalonada ? 'su nivel meta o en uno mejor' : 'el mejor nivel'}`],
+    [escalonada ? 'En su meta según el bosque aleatorio' : 'En el mejor nivel según el bosque aleatorio', pct(e.PSR_externo_base), pct(e.PSR_externo), 'Modelo independiente: la cifra prudente'],
     ['MAE respecto al estado deseado', num(p.MAE_base, 3), num(p.MAE, 3), 'Menor es mejor'],
     ['MSE', num(p.MSE_base, 3), num(p.MSE, 3), ''],
     ['RMSE', num(p.RMSE_base, 3), num(p.RMSE, 3), ''],
@@ -72,7 +72,7 @@ function TablaMetricas({ m, s }: { m: Metricas; s: SujetoTexto }) {
   );
 }
 
-function Recomendaciones({ modeloId, g, m, s, alElegir }: { modeloId: string; g: Graficas; m: Metricas; s: SujetoTexto; alElegir: (id: number) => void }) {
+function Recomendaciones({ modeloId, g, m, s, escalonada, alElegir }: { modeloId: string; g: Graficas; m: Metricas; s: SujetoTexto; escalonada: boolean; alElegir: (id: number) => void }) {
   const [desde, setDesde] = useState(0);
   const [clasePrescrita, setClase] = useState('');
   const [exito, setExito] = useState<'' | '1' | '0'>('');
@@ -119,7 +119,7 @@ function Recomendaciones({ modeloId, g, m, s, alElegir }: { modeloId: string; g:
           </select>
         </label>
         <label className="flex items-center gap-2">
-          <span className="text-tinta-2">Llega al mejor nivel</span>
+          <span className="text-tinta-2">{escalonada ? 'Llega a su meta' : 'Llega al mejor nivel'}</span>
           <select className={clase(estiloControl, 'w-28!')} value={exito} onChange={(e) => { setExito(e.target.value as '' | '1' | '0'); setDesde(0); }}>
             <option value="">Todos</option>
             <option value="1">Sí</option>
@@ -136,6 +136,7 @@ function Recomendaciones({ modeloId, g, m, s, alElegir }: { modeloId: string; g:
               <tr>
                 <Cabecera columna="id_estudiante" texto={mayuscula(s.singular)} />
                 <th scope="col" className="px-3 py-2 font-medium">Observado</th>
+                {escalonada && <th scope="col" className="px-3 py-2 font-medium">Meta</th>}
                 {g.acciones.map((a) => (
                   <Cabecera key={a.columna} columna={`${a.columna}_cambio`} texto={`${a.nombre}`} derecha />
                 ))}
@@ -154,6 +155,11 @@ function Recomendaciones({ modeloId, g, m, s, alElegir }: { modeloId: string; g:
                   <td className="px-3 py-2">
                     <NivelChip nivel={String(f.clase_observada)} niveles={niveles} />
                   </td>
+                  {escalonada && (
+                    <td className="px-3 py-2">
+                      <NivelChip nivel={String(f.nivel_meta)} niveles={niveles} />
+                    </td>
+                  )}
                   {g.acciones.map((a) => {
                     const cambio = Number(f[`${a.columna}_cambio`]);
                     const accion = { categorias: categorias[a.columna] };
@@ -228,24 +234,35 @@ export function Prescripciones() {
   const g = modelo.data.graficas;
   const segmentos = Object.entries(m.exito_por_segmento ?? {});
   const s = sujetoDe(modelo.data.sujeto);
+  const escalonada = esEscalonada(m, g.niveles);
+  const pares = paresMeta(Object.entries(g.niveles).sort((a, b) => a[1] - b[1]).map(([n]) => n), m.prescripcion.metas);
 
   return (
     <div>
       <FlujoPasos actual={4} compacto />
       <Encabezado
         titulo="Paso 4: motor prescriptivo"
-        descripcion={`${entero(m.prescripcion.n_estudiantes)} ${s.plural} de prueba con nivel ${m.configuracion.prescripcion.clases_a_prescribir.join(' o ')}. Para cada uno, el algoritmo genético busca cómo cambiar sus acciones para llegar a ${g.mejor_nivel}.`}
+        descripcion={`${entero(m.prescripcion.n_estudiantes)} ${s.plural} de prueba con nivel ${m.configuracion.prescripcion.clases_a_prescribir.join(' o ')}. Para cada uno, el algoritmo genético busca cómo cambiar sus acciones para ${escalonada ? `subir al nivel siguiente (${pares})` : `llegar a ${g.mejor_nivel}`}.`}
       />
       <p className="max-w-[62ch] font-serif text-[1.6rem] leading-snug">
-        El FCM ubicaría en {g.mejor_nivel} al <span className="resaltado">{pct(m.prescripcion.PSR)}</span>; hoy ubica al {pct(m.prescripcion.PSR_base)}. Un bosque aleatorio lo confirma para el {pct(m.validacion_externa.PSR_externo)}.
+        {escalonada ? (
+          <>
+            El FCM llevaría a su nivel meta al <span className="resaltado">{pct(m.prescripcion.PSR)}</span>; hoy lo alcanza el {pct(m.prescripcion.PSR_base)}.
+          </>
+        ) : (
+          <>
+            El FCM ubicaría en {g.mejor_nivel} al <span className="resaltado">{pct(m.prescripcion.PSR)}</span>; hoy ubica al {pct(m.prescripcion.PSR_base)}.
+          </>
+        )}{' '}
+        Un bosque aleatorio lo confirma para el {pct(m.validacion_externa.PSR_externo)}.
       </p>
       <div className="mt-8 max-w-4xl">
-        <TablaMetricas m={m} s={s} />
+        <TablaMetricas m={m} s={s} escalonada={escalonada} />
         <p className="mt-2 text-xs text-tinta-3">
           Cambio medio por acción: {num(m.prescripcion.cambio_medio_por_accion, 2)} del rango. Generaciones medias del AG: {num(m.prescripcion.generaciones_medias_ag)}. β = {m.configuracion.prescripcion.beta_esfuerzo}.
         </p>
       </div>
-      <Aptitud m={m} s={s} />
+      <Aptitud m={m} s={s} escalonada={escalonada} />
 
       <Seccion titulo="Qué propone el algoritmo genético">
         <div className="grid gap-6 xl:grid-cols-2">
@@ -257,7 +274,7 @@ export function Prescripciones() {
           />
           {segmentos.length > 0 && (
             <GraficaMancuernas
-              titulo={`${mayuscula(s.plural)} que llegan a ${g.mejor_nivel}, por grupo`}
+              titulo={`${mayuscula(s.plural)} que llegan a ${escalonada ? 'su meta' : g.mejor_nivel}, por grupo`}
               descripcion="El FCM frente al bosque aleatorio independiente, con acciones actuales y prescritas."
               dominio={[0, 100]}
               formato={(v) => pct(v)}
@@ -273,7 +290,7 @@ export function Prescripciones() {
       </Seccion>
 
       <Seccion titulo={`Por ${s.singular}`} descripcion={`Probabilidad media del mejor nivel según el bosque: ${pctDe(m.validacion_externa.prob_H_base)} → ${pctDe(m.validacion_externa.prob_H_prescrita)}.`}>
-        <Recomendaciones modeloId={modelo.data.id} g={g} m={m} s={s} alElegir={setEstudiante} />
+        <Recomendaciones modeloId={modelo.data.id} g={g} m={m} s={s} escalonada={escalonada} alElegir={setEstudiante} />
       </Seccion>
 
       <Seccion

@@ -18,7 +18,9 @@ lectura: ``aptitud_tabla4`` (PRV-FCM, 2023) y ``aptitud_garcia2025``.
 
 * A*(a): estado de convergencia del FCM partiendo del estado actual del
   estudiante con las acciones sustituidas por a.
-* D: estado deseado (por defecto rendimiento académico = 1, nivel H).
+* D: estado deseado (por defecto rendimiento académico = 1, nivel H). En el
+  objetivo solo cuenta lo que falta, max(D - A, 0): con una meta escalonada por
+  debajo de lo que ya estima el FCM, pasarse no es un error (con D = 1 es igual).
 * p_i: importancia de cada concepto del estado deseado.
 * beta: penalización opcional del esfuerzo. Con beta = 0 el costo es solo el
   error absoluto; con beta > 0, entre dos prescripciones con error similar se
@@ -32,6 +34,7 @@ en el AG, que es genérico y no conoce conceptos.
 """
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from typing import Callable
 
@@ -120,6 +123,9 @@ class PrescriptorPRVFCM:
     indice_condicion:
         Índice del concepto de ``config.condicion_columna`` (None si el esquema
         no lo tiene: no hay tope condicionado).
+    indice_meta:
+        Concepto objetivo (1 = mejor nivel): en él solo cuenta lo que falta para la
+        meta, no pasarse. None: error absoluto en todos los conceptos deseados.
     rejillas:
         Por acción, los valores normalizados que admite (por ejemplo, 0 y 1 en
         una campaña que se activa o no) o None si es continua. El AG sigue
@@ -137,6 +143,7 @@ class PrescriptorPRVFCM:
         config: ConfigPrescripcion = ConfigPrescripcion(),
         indice_condicion: int | None = None,
         rejillas: list[np.ndarray | None] | None = None,
+        indice_meta: int | None = None,
     ):
         self.fcm = fcm
         self.indices_accion = np.asarray(indices_accion, dtype=int)
@@ -149,6 +156,7 @@ class PrescriptorPRVFCM:
         self.config_ag = config_ag
         self.config = config
         self.indice_condicion = None if config.condicion_columna is None else indice_condicion
+        self.indice_meta = indice_meta
         if config.aptitud not in APTITUDES:
             raise ValueError(f"aptitud debe ser una de {APTITUDES}, no '{config.aptitud}'.")
 
@@ -166,6 +174,17 @@ class PrescriptorPRVFCM:
             superior = np.minimum(superior, acciones_actuales + self.config.delta_max)
         if self.condicion_activa(estado_actual):
             superior = np.minimum(superior, acciones_actuales + self.config.condicion_delta_max)
+        # Una acción discreta puede moverse al menos una categoría: con un tope menor que su paso
+        # (activar una campaña es pasar de 0 a 1) quedaría congelada.
+        for k, rejilla in enumerate(self.rejillas):
+            if rejilla is None:
+                continue
+            arriba = rejilla[rejilla > acciones_actuales[k] + 1e-9]
+            if len(arriba):
+                superior[k] = max(superior[k], arriba.min())
+            abajo = rejilla[rejilla < acciones_actuales[k] - 1e-9]
+            if len(abajo) and not self.config.solo_incrementos:
+                inferior[k] = min(inferior[k], abajo.max())
         return inferior, superior
 
     def discretizar(self, acciones: np.ndarray, estado_actual: np.ndarray) -> np.ndarray:
@@ -187,8 +206,14 @@ class PrescriptorPRVFCM:
     def error_objetivo(self, estados_finales: np.ndarray) -> np.ndarray:
         """Error absoluto ponderado entre estados finales y estado deseado."""
         estados_finales = np.atleast_2d(estados_finales)
-        diferencias = np.abs(estados_finales[:, self.indices_objetivo] - self.valores_deseados)
-        return diferencias @ self.pesos_objetivo
+        diferencias = estados_finales[:, self.indices_objetivo] - self.valores_deseados
+        errores = np.abs(diferencias)
+        if self.indice_meta is not None:
+            # Con |A - D| y una meta escalonada por debajo de lo que ya estima el FCM, el AG
+            # empujaba el objetivo hacia abajo (vinos de calidad 3: menos alcohol). Con D = 1 es igual.
+            columna = self.indices_objetivo == self.indice_meta
+            errores[:, columna] = np.maximum(-diferencias[:, columna], 0.0)
+        return errores @ self.pesos_objetivo
 
     def estados_con_acciones(self, estado_actual: np.ndarray, acciones: np.ndarray) -> np.ndarray:
         """Copia el estado actual una vez por individuo y sustituye las acciones."""
@@ -267,16 +292,23 @@ class PrescriptorPRVFCM:
         semilla: int | None = None,
         mostrar_progreso: bool = True,
         al_avanzar: Callable[[int, int], None] | None = None,
+        deseados: np.ndarray | None = None,
     ) -> list[ResultadoPrescripcion]:
         """Prescribe para varios estudiantes con semillas independientes y reproducibles.
 
         ``al_avanzar(hechos, total)`` se llama después de cada estudiante.
+        ``deseados`` (una fila por estudiante, alineada con los conceptos objetivo)
+        reemplaza los valores deseados de cada uno: la meta escalonada.
         """
         semillas = np.random.SeedSequence(semilla).spawn(len(estados_actuales))
         paso = max(10, len(estados_actuales) // 10)  # Unas diez líneas de progreso como máximo.
         resultados = []
         for i, (estado, semilla_i) in enumerate(zip(estados_actuales, semillas), start=1):
-            resultados.append(self.prescribir(estado, np.random.default_rng(semilla_i)))
+            prescriptor = self
+            if deseados is not None:
+                prescriptor = copy.copy(self)
+                prescriptor.valores_deseados = np.asarray(deseados[i - 1], dtype=float)
+            resultados.append(prescriptor.prescribir(estado, np.random.default_rng(semilla_i)))
             if mostrar_progreso and (i % paso == 0 or i == len(estados_actuales)):
                 print(f"  prescripciones completadas: {i}/{len(estados_actuales)}")
             if al_avanzar is not None:

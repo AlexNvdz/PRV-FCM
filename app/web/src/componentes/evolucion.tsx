@@ -9,8 +9,8 @@ import { useEffect, useState } from 'react';
 import { ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import type { Prescripcion } from '../tipos';
-import { etiquetaAccion, nivelCercano, num, pct } from '../utilidades';
-import { EJE, Globo, GraficaConvergenciaIndividual, ItemLeyenda, MarcoGrafica, REJILLA, TICK } from './graficas';
+import { etiquetaAccion, formatoEje, nivelCercano, num, pct } from '../utilidades';
+import { EJE, Globo, GraficaConvergenciaIndividual, ItemLeyenda, MarcoGrafica, nombreGeneracion, REJILLA, TICK } from './graficas';
 import { Barra, Boton, NivelChip } from './ui';
 
 function prefiereSinMovimiento() {
@@ -74,11 +74,13 @@ function BarrasAcciones({ prescripcion, propuestas, titulo, etiqueta }: { prescr
 
 export function EvolucionAG({ prescripcion, niveles, valores }: { prescripcion: Prescripcion; niveles: string[]; valores: Record<string, number> }) {
   const historial = prescripcion.historial;
+  // La posición i del historial es la generación i; la 0 es la población inicial.
   const total = historial?.mejor.length ?? 0;
-  const [generacion, setGeneracion] = useState(() => (prefiereSinMovimiento() ? total : 1));
+  const ultima = Math.max(total - 1, 0);
+  const [generacion, setGeneracion] = useState(() => (prefiereSinMovimiento() ? ultima : 0));
   const [reproducir, setReproducir] = useState(() => !prefiereSinMovimiento());
   // La reproducción se detiene sola en la última generación.
-  const reproduciendo = reproducir && generacion < total;
+  const reproduciendo = reproducir && generacion < ultima;
 
   // Unos dos segundos y medio de reproducción, sin bajar de 30 ms por generación.
   const intervalo = Math.min(120, Math.max(30, 2500 / Math.max(total, 1)));
@@ -92,20 +94,20 @@ export function EvolucionAG({ prescripcion, niveles, valores }: { prescripcion: 
   // Prescripciones guardadas antes de que el motor enviara el historial de acciones: solo la curva.
   if (!historial.acciones?.length || !historial.activacion?.length) return <GraficaConvergenciaIndividual historial={historial} />;
 
-  const g = Math.min(Math.max(generacion, 1), total);
-  const final = g === total;
+  const g = Math.min(Math.max(generacion, 0), ultima);
+  const final = g === ultima;
   const filas = historial.mejor.map((mejor, i) => ({
-    generacion: i + 1,
-    mejor: i < g ? mejor : null,
-    promedio: i < g ? (historial.promedio[i] ?? null) : null,
+    generacion: i,
+    mejor: i <= g ? mejor : null,
+    promedio: i <= g ? (historial.promedio[i] ?? null) : null,
   }));
   const todos = [...historial.mejor, ...historial.promedio];
   const minimo = Math.min(...todos);
   const maximo = Math.max(...todos);
   const margen = (maximo - minimo) * 0.08 || 0.01;
-  const activacion = historial.activacion[g - 1];
+  const activacion = historial.activacion[g];
   const { generaciones_max: maximoGeneraciones, paciencia, poblacion } = prescripcion.configuracion;
-  const temprano = maximoGeneraciones !== undefined && total < maximoGeneraciones;
+  const temprano = maximoGeneraciones !== undefined && ultima < maximoGeneraciones;
 
   return (
     <section className="space-y-4 rounded-xl border border-linea bg-hoja p-4">
@@ -126,7 +128,7 @@ export function EvolucionAG({ prescripcion, niveles, valores }: { prescripcion: 
               setReproducir(false);
               return;
             }
-            if (final) setGeneracion(1);
+            if (final) setGeneracion(0);
             setReproducir(true);
           }}
         >
@@ -138,7 +140,7 @@ export function EvolucionAG({ prescripcion, niveles, valores }: { prescripcion: 
           disabled={final}
           onClick={() => {
             setReproducir(false);
-            setGeneracion(total);
+            setGeneracion(ultima);
           }}
         >
           Ir al final
@@ -146,8 +148,8 @@ export function EvolucionAG({ prescripcion, niveles, valores }: { prescripcion: 
       </div>
       <input
         type="range"
-        min={1}
-        max={total}
+        min={0}
+        max={ultima}
         step={1}
         value={g}
         onChange={(e) => {
@@ -160,7 +162,7 @@ export function EvolucionAG({ prescripcion, niveles, valores }: { prescripcion: 
       <div>
         <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
           <span className="tabular text-tinta">
-            Generación {g} de {total}
+            {nombreGeneracion(g)} de {ultima}
           </span>
           {temprano && (
             <span className="text-xs text-tinta-3">
@@ -168,17 +170,17 @@ export function EvolucionAG({ prescripcion, niveles, valores }: { prescripcion: 
             </span>
           )}
         </div>
-        <Barra valor={(100 * g) / total} className="mt-1.5" />
+        <Barra valor={ultima ? (100 * g) / ultima : 100} className="mt-1.5" />
       </div>
 
       <dl className="tabular grid grid-cols-3 gap-3 text-sm">
         <div>
           <dt className="text-xs text-tinta-2">Mejor costo</dt>
-          <dd className="mt-0.5 font-semibold text-tinta">{num(historial.mejor[g - 1], 4)}</dd>
+          <dd className="mt-0.5 font-semibold text-tinta">{num(historial.mejor[g], 4)}</dd>
         </div>
         <div>
           <dt className="text-xs text-tinta-2">Costo medio</dt>
-          <dd className="mt-0.5 font-semibold text-tinta">{num(historial.promedio[g - 1], 4)}</dd>
+          <dd className="mt-0.5 font-semibold text-tinta">{num(historial.promedio[g], 4)}</dd>
         </div>
         <div>
           <dt className="text-xs text-tinta-2">Objetivo con el mejor</dt>
@@ -190,31 +192,31 @@ export function EvolucionAG({ prescripcion, niveles, valores }: { prescripcion: 
 
       <MarcoGrafica
         titulo="Costo por generación"
-        descripcion="El mejor costo nunca sube: el elitismo conserva a los mejores individuos. El costo medio muestra cuánto se parece la población a su mejor individuo."
+        descripcion="La generación 0 es la población inicial, antes del primer cruce. El mejor costo nunca sube: el elitismo conserva a los mejores individuos. El costo medio muestra cuánto se parece la población a su mejor individuo."
         leyenda={
           <>
-            <ItemLeyenda color="var(--serie-1)" texto="Mejor costo" forma="linea" />
-            <ItemLeyenda color="var(--serie-2)" texto="Costo medio de la población" forma="linea" />
+            <ItemLeyenda color="var(--serie-2)" texto="Mejor costo" forma="linea" />
+            <ItemLeyenda color="var(--serie-1)" texto="Costo medio de la población" forma="linea" />
           </>
         }
         tabla={{
           columnas: ['Generación', 'Mejor costo', 'Costo medio', 'Objetivo con el mejor'],
-          filas: historial.mejor.map((mejor, i) => [i + 1, num(mejor, 4), num(historial.promedio[i], 4), num(historial.activacion![i], 3)]),
+          filas: historial.mejor.map((mejor, i) => [i === 0 ? '0 (población inicial)' : i, num(mejor, 4), num(historial.promedio[i], 4), num(historial.activacion![i], 3)]),
         }}
       >
         <ResponsiveContainer width="100%" height={200}>
           <ComposedChart data={filas} margin={{ top: 10, right: 16, left: -4, bottom: 0 }}>
             {REJILLA}
-            <XAxis dataKey="generacion" type="number" domain={[1, total]} allowDecimals={false} tick={TICK} axisLine={EJE} tickLine={false} />
-            <YAxis tick={TICK} axisLine={false} tickLine={false} tickFormatter={(v) => num(v, 2)} domain={[Math.max(0, minimo - margen), maximo + margen]} />
-            <Line dataKey="promedio" stroke="var(--serie-2)" strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={false} />
-            <Line dataKey="mejor" stroke="var(--serie-1)" strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={false} />
+            <XAxis dataKey="generacion" type="number" domain={[0, Math.max(ultima, 1)]} allowDecimals={false} tick={TICK} axisLine={EJE} tickLine={false} />
+            <YAxis tick={TICK} axisLine={false} tickLine={false} tickFormatter={formatoEje(todos)} domain={[Math.max(0, minimo - margen), maximo + margen]} />
+            <Line dataKey="promedio" stroke="var(--serie-1)" strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={false} />
+            <Line dataKey="mejor" stroke="var(--serie-2)" strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={false} />
             <Tooltip
               cursor={{ stroke: 'var(--eje)' }}
-              content={({ active, payload, label }) =>
+              content={({ active, payload }) =>
                 active && payload?.length && payload[0].payload.mejor !== null ? (
                   <Globo>
-                    <strong>Generación {label}</strong>
+                    <strong>{nombreGeneracion(payload[0].payload.generacion)}</strong>
                     <div>Mejor costo: {num(payload[0].payload.mejor, 4)}</div>
                     {payload[0].payload.promedio !== null && <div>Costo medio: {num(payload[0].payload.promedio, 4)}</div>}
                   </Globo>
@@ -227,9 +229,9 @@ export function EvolucionAG({ prescripcion, niveles, valores }: { prescripcion: 
 
       <BarrasAcciones
         prescripcion={prescripcion}
-        propuestas={historial.acciones[g - 1]}
-        titulo={final ? 'Acciones actuales y prescritas por el modelo' : `Acciones actuales y mejores de la generación ${g}`}
-        etiqueta={final ? 'Acciones prescritas' : `Generación ${g}`}
+        propuestas={historial.acciones[g]}
+        titulo={final ? 'Acciones actuales y prescritas por el modelo' : g === 0 ? 'Acciones actuales y mejores de la población inicial' : `Acciones actuales y mejores de la generación ${g}`}
+        etiqueta={final ? 'Acciones prescritas' : g === 0 ? 'Población inicial' : `Generación ${g}`}
       />
     </section>
   );

@@ -120,6 +120,27 @@ def como_texto(serie: pd.Series) -> pd.Series:
     return serie.astype(str).str.strip()
 
 
+def limites_robustos(valores: pd.Series, cola_max: float = 0.01) -> tuple[float, float]:
+    """Mínimo y máximo para el Min-Max sin estirarlo por atípicos.
+
+    Una cola que queda más allá de 3 rangos intercuartílicos y reúne como mucho el 1 %
+    de los registros se recorta a esa cerca (en marketing, un ingreso de 666 666
+    dejaba al 98 % de los clientes en el 13 % inferior de la escala). Una cola más
+    poblada es una parte real de los datos y se conserva.
+    """
+    minimo, maximo = float(valores.min()), float(valores.max())
+    q1, q3 = valores.quantile([0.25, 0.75])
+    rango = q3 - q1
+    if rango <= 0:
+        return minimo, maximo
+    bajo, alto = q1 - 3 * rango, q3 + 3 * rango
+    if minimo < bajo and (valores < bajo).mean() <= cola_max:
+        minimo = float(bajo)
+    if maximo > alto and (valores > alto).mean() <= cola_max:
+        maximo = float(alto)
+    return minimo, maximo
+
+
 def columnas_imputables(esquema: Esquema) -> list[str]:
     """Columnas numéricas y de fecha, salvo el objetivo: sus vacíos se imputan con la mediana de entrenamiento."""
     otras = (
@@ -390,6 +411,8 @@ class Preprocesador:
         codificado = codificado.fillna(self.medianas)
         self.minimos = codificado.min()
         self.maximos = codificado.max()
+        for columna in imputables:
+            self.minimos[columna], self.maximos[columna] = limites_robustos(codificado[columna])
         return self
 
     def transformar(self, df: pd.DataFrame) -> np.ndarray:

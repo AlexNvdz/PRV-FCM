@@ -8,7 +8,7 @@ import { api } from '../api';
 import { ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, Clase, estiloControl } from '../componentes/ui';
 import type { ColumnaEsquema, Dataset, ModeloDetalle } from '../tipos';
-import { etiquetaAccion, mayuscula, num, sujetoDe } from '../utilidades';
+import { esEscalonada, etiquetaAccion, mayuscula, num, sujetoDe } from '../utilidades';
 
 type Valores = Record<string, string | number>;
 
@@ -76,11 +76,14 @@ export function PerfilRiesgo({ modelo, dataset }: { modelo: ModeloDetalle; datas
   const [valores, setValores] = useState<Valores>({});
   const [origen, setOrigen] = useState('');
   const [estudiante, setEstudiante] = useState('');
-  const [meta, setMeta] = useState(niveles.at(-1) ?? '');
+  // Con meta escalonada, '' (null) deja que el motor elija el nivel siguiente al que infiere el FCM.
+  const escalonada = esEscalonada(modelo.metricas, g.niveles);
+  const [meta, setMeta] = useState(escalonada ? '' : (niveles.at(-1) ?? ''));
   const betaModelo = modelo.metricas?.configuracion.prescripcion.beta_esfuerzo ?? 0.4;
   const [beta, setBeta] = useState(betaModelo);
-  const [delta, setDelta] = useState<number | null>(null);
-  const [reducir, setReducir] = useState(false);
+  // Tope y reducciones parten de los del entrenamiento; con el tope en 1 (todo el rango) no hay límite.
+  const [delta, setDelta] = useState<number | null>(modelo.metricas?.configuracion.prescripcion.delta_max ?? null);
+  const [reducir, setReducir] = useState(!(modelo.metricas?.configuracion.prescripcion.solo_incrementos ?? true));
 
   const tipico = useQuery({ queryKey: ['perfil-base', modelo.id, null], queryFn: () => api.perfilBase(modelo.id, null), staleTime: Infinity });
   useEffect(() => {
@@ -159,6 +162,7 @@ export function PerfilRiesgo({ modelo, dataset }: { modelo: ModeloDetalle; datas
               Meta en el objetivo <Clase letra="T" />
             </span>
             <select className={estiloControl} value={meta} onChange={(e) => setMeta(e.target.value)}>
+              {escalonada && <option value="">Nivel siguiente (meta escalonada)</option>}
               {[...niveles].reverse().map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -173,8 +177,8 @@ export function PerfilRiesgo({ modelo, dataset }: { modelo: ModeloDetalle; datas
             <span className="text-xs text-tinta-3">Mayor, cambios más pequeños.</span>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-tinta">Cambio máximo por acción: {delta === null ? 'sin límite' : `${Math.round(delta * 100)} % del rango`}</span>
-            <input type="range" min={0} max={1} step={0.05} value={delta ?? 1} onChange={(e) => setDelta(Number(e.target.value) >= 1 ? null : Number(e.target.value))} className="accent-[var(--pizarra)]" />
+            <span className="text-tinta">Cambio máximo por acción: {delta === null || delta >= 1 ? 'sin límite' : `${Math.round(delta * 100)} % del rango`}</span>
+            <input type="range" min={0} max={1} step={0.05} value={delta ?? 1} onChange={(e) => setDelta(Number(e.target.value))} className="accent-[var(--pizarra)]" />
           </label>
           <label className="flex items-center gap-2 self-center text-sm text-tinta">
             <input type="checkbox" className="size-4 accent-[var(--pizarra)]" checked={reducir} onChange={(e) => setReducir(e.target.checked)} />
