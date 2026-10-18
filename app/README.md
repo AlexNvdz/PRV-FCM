@@ -53,16 +53,12 @@ anterior (guardar la clasificación, entrenar el modelo).
    variables" grafica el objetivo, la correlación de cada variable con él, el
    perfil medio de cada nivel, el mapa de calor de correlaciones (Spearman,
    Pearson o parcial) y la dispersión de dos variables coloreada por nivel.
-3. **Entrenamiento del FCM** (Modelo). Elige el perfil: **Mejorado** (el de
-   trabajo: sesgo, penalización del esfuerzo β = 0,4, tope por ausentismo) o
-   **Artículo** (reproduce a Hoyos, Aguilar y Toro, 2023: PSO, SMOTE, 10
-   pliegues, sin sesgo ni β; solo para comparar). Cada perfil trae sus valores
-   por defecto y se pueden cambiar. Elige cómo se extrae la matriz de pesos
-   W: BPTT (gradiente exacto, recomendado), PSO, regresión Ridge o Lasso,
-   correlación parcial o matriz de expertos (uno o varios CSV
-   `origen,destino,peso`, promediados), la regla de inferencia (Kosko, Kosko
-   modificada, reescalada), la activación (sigmoide o tanh), binarizar el
-   objetivo y SMOTE. "Equilibrar los niveles del
+3. **Entrenamiento del FCM** (Modelo). Las opciones parten de los valores por
+   defecto del motor (sesgo, penalización del esfuerzo β = 0,4, tope por
+   ausentismo, meta escalonada) y se pueden cambiar. Elige cómo se extrae la
+   matriz de pesos W: BPTT (gradiente exacto, recomendado) o PSO (enjambre de
+   partículas, más lento), la regla de inferencia (Kosko, Kosko modificada,
+   reescalada), la activación (sigmoide o tanh), binarizar el objetivo y SMOTE. "Equilibrar los niveles del
    objetivo" (activada por defecto si un nivel es menos del 25 % de los
    registros, como en la deserción) hace que cada nivel pese lo mismo. La
    máscara de dirección causal opcional elimina aristas lógicamente
@@ -80,17 +76,13 @@ anterior (guardar la clasificación, entrenar el modelo).
 5. **Visualización y recomendaciones** (Informe). Reporte prescriptivo en
    lenguaje natural (por nivel), recomendaciones institucionales redactadas por
    qwen2.5, grafo del mapa generado con NetworkX y matplotlib, convergencia del
-   AG y las demás figuras en PNG; descarga de `recomendaciones.csv`. La sección
-   "Validación según el artículo" muestra sus Tablas 11 y 12 (MAE, MSE, RMSE y
-   R² entre acciones prescritas y reales, pruebas t o Wilcoxon) y la PSR de su
-   ecuación 19, un cociente distinto de nuestra tasa de éxito prescriptivo.
+   AG y las demás figuras en PNG; descarga de `recomendaciones.csv`.
 
 ## Consulta (usuario final)
 
 `/consulta` está fuera de la barra de pasos y es para quien solo quiere una
-recomendación: elige un modelo entrenado por tema (el nombre del dataset; los
-del perfil Artículo aparecen aparte como "Solo para experimentos", con un
-aviso), llena el formulario que se arma desde el esquema del modelo (datos que
+recomendación: elige un modelo entrenado por tema (el nombre del dataset),
+llena el formulario que se arma desde el esquema del modelo (datos que
 no cambian, estado actual, acciones actuales; un campo vacío toma el valor
 típico), fija el nivel deseado y, si quiere, valores deseados de los mutables, y
 recibe la prescripción con su reporte, en CSV o para imprimir. "Registrar

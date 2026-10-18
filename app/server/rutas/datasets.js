@@ -12,33 +12,22 @@ import { LIMITE_SUBIDA_MB } from '../config.js';
 const EXTENSIONES_CSV = new Set(['.csv', '.txt']);
 const EXTENSIONES_EXCEL = new Set(['.xlsx', '.xlsm', '.xls']);
 
-export const METODOS_PESOS = ['bptt', 'ridge', 'lasso', 'correlacion_parcial', 'pso', 'expertos'];
+// BPTT (recomendado) o PSO.
+export const METODOS_PESOS = ['bptt', 'pso'];
 
-// Matriz de un experto: aristas con nombres de concepto (one-hot: "columna=categoría", como en /estructura).
-const MatrizExperto = z.object({
-  experto: z.string().trim().min(1).max(80),
-  aristas: z
-    .array(z.object({ origen: z.string().min(1).max(200), destino: z.string().min(1).max(200), peso: z.number().min(-1).max(1) }))
-    .min(1)
-    .max(5000),
-});
-
-// Los campos sin valor por defecto dependen del perfil: si faltan, el motor usa el del perfil
-// elegido. Así una opción explícita manda sobre el perfil y el resto lo sigue.
+// Los campos sin valor por defecto los fija el motor (GET /api/opciones): una opción explícita
+// manda y el resto queda en su valor por defecto.
 export const OpcionesEntrenamiento = z.object({
-  perfil: z.enum(['articulo', 'mejorado']).default('mejorado'),
   proporcion_prueba: z.number().min(0.1).max(0.5).optional(),
   division: z.enum(['agrupada', 'aleatoria']).default('agrupada'),
   validacion_cruzada: z.enum(['completa', 'rapida', 'ninguna']).default('completa'),
   pliegues: z.number().int().min(2).max(10).optional(),
   metodo_pesos: z.enum(METODOS_PESOS).optional(),
-  matrices_expertos: z.array(MatrizExperto).min(1).max(50).optional(),
   inferencia: z.enum(['kosko', 'kosko_modificada', 'reescalada']).optional(),
   activacion: z.enum(['sigmoide', 'tanh']).optional(),
   // Nivel desde el que se cuenta éxito (objetivo ordinal) o umbral en unidades originales (numérico).
   binarizar_objetivo: z.union([z.string().min(1).max(80), z.number().finite()]).nullable().optional(),
   smote: z.boolean().optional(),
-  busqueda_ag: z.boolean().optional(),
   // Pondera cada registro por la inversa de la frecuencia de su nivel del objetivo al aprender W.
   balancear_niveles: z.boolean().default(false),
   // Máscara de dirección causal: pares [columna origen, columna destino] que se eliminan del mapa.
@@ -63,9 +52,6 @@ export const OpcionesEntrenamiento = z.object({
     })
     .partial()
     .default({}),
-}).refine((o) => o.metodo_pesos !== 'expertos' || o.matrices_expertos?.length, {
-  message: 'El método de expertos necesita al menos una matriz de expertos.',
-  path: ['matrices_expertos'],
 });
 
 /** Opciones de la interfaz -> opciones del motor Python. */
@@ -299,17 +285,12 @@ export function rutasDatasets({ almacen, motor, trabajos }) {
   router.post('/:id/entrenar', async (req, res) => {
     const dataset = await datasetConEsquema(req.params.id);
     const opciones = OpcionesEntrenamiento.parse(req.body?.opciones ?? {});
-    const expertos = opciones.metodo_pesos === 'expertos' ? opciones.matrices_expertos : [];
-    if (opciones.aristas_excluidas.length || expertos.length) {
+    if (opciones.aristas_excluidas.length) {
       const { aristas } = await motor.llamar('estructura', { esquema: dataset.esquema });
       const permitidas = new Set(aristas.map((a) => `${a.origen}\u0000${a.destino}`));
       const fuera = (pares) => pares.filter(([o, d]) => !permitidas.has(`${o}\u0000${d}`)).map(([o, d]) => `${o} → ${d}`);
       const desconocidas = fuera(opciones.aristas_excluidas);
       if (desconocidas.length) throw error(422, `La máscara causal incluye aristas que la estructura no tiene: ${desconocidas.join(', ')}.`);
-      for (const { experto, aristas: propias } of expertos) {
-        const invalidas = fuera(propias.map((a) => [a.origen, a.destino]));
-        if (invalidas.length) throw error(422, `La matriz de «${experto}» incluye aristas que la estructura no permite: ${invalidas.slice(0, 10).join(', ')}.`);
-      }
     }
     const modelo = await trabajos.iniciar({ dataset, opciones: opcionesMotor(opciones) });
     res.status(202).json({ ...modelo, opcionesInterfaz: opciones });

@@ -47,12 +47,6 @@
         0.001,
         0.01
       ],
-      "rejilla_inferencia": [
-        "kosko_modificada"
-      ],
-      "rejilla_activacion": [
-        "sigmoide"
-      ],
       "trabajos": -1,
       "pso_iteraciones": null
     },
@@ -77,8 +71,6 @@
       "delta_max": null,
       "condicion_columna": "StudentAbsenceDays",
       "condicion_delta_max": 0.15,
-      "sembrar": true,
-      "aptitud": "error",
       "tolerancia_exito": 0.25,
       "clases_a_prescribir": [
         "L",
@@ -90,12 +82,9 @@
       "Class"
     ],
     "aristas_excluidas": [],
-    "perfil": "mejorado",
     "binarizar_objetivo": null,
     "smote": false,
     "n_sinteticos": 0,
-    "busqueda_ag": false,
-    "expertos": [],
     "sujeto": {
       "singular": "estudiante",
       "plural": "estudiantes",
@@ -230,86 +219,6 @@
       "MAE": 0.47779203567184725
     }
   ],
-  "busqueda_ag": null,
-  "reconstruccion": {
-    "n": 44,
-    "global": {
-      "mae": 0.37135365716534546,
-      "mse": 0.20454735899993723,
-      "rmse": 0.45226912231539446,
-      "r2": -2.571950589529642,
-      "psr_ec19": 1.590719506123045
-    },
-    "por_accion": [
-      {
-        "columna": "raisedhands",
-        "nombre": "Manos levantadas",
-        "mae": 0.2918181818181818,
-        "mse": 0.12993181818181818,
-        "rmse": 0.36046056397589205,
-        "r2": -1.901950107518942,
-        "media_real": 0.7081818181818181,
-        "de_real": 0.21404490647365337,
-        "media_prescrita": 1.0,
-        "de_prescrita": 0.0,
-        "normal_real": false,
-        "normal_prescrita": false,
-        "prueba": "wilcoxon",
-        "p": 1.0787073030668351e-08
-      },
-      {
-        "columna": "VisITedResources",
-        "nombre": "Recursos visitados",
-        "mae": 0.23209366391184574,
-        "mse": 0.09250679429742789,
-        "rmse": 0.30414929606597463,
-        "r2": -1.3941099688885674,
-        "media_real": 0.7679063360881545,
-        "de_real": 0.198841430375583,
-        "media_prescrita": 1.0,
-        "de_prescrita": 0.0,
-        "normal_real": false,
-        "normal_prescrita": false,
-        "prueba": "wilcoxon",
-        "p": 7.47035461509302e-09
-      },
-      {
-        "columna": "AnnouncementsView",
-        "nombre": "Anuncios consultados",
-        "mae": 0.4751855287569573,
-        "mse": 0.28538061792434966,
-        "rmse": 0.5342102750082122,
-        "r2": -3.789926510612676,
-        "media_real": 0.5248144712430426,
-        "de_real": 0.24691070658401268,
-        "media_prescrita": 1.0,
-        "de_prescrita": 0.0,
-        "normal_real": true,
-        "normal_prescrita": false,
-        "prueba": "wilcoxon",
-        "p": 1.1106017532212573e-08
-      },
-      {
-        "columna": "Discussion",
-        "nombre": "Grupos de discusión",
-        "mae": 0.48631725417439714,
-        "mse": 0.31037020559615314,
-        "rmse": 0.5571087915265323,
-        "r2": -3.2018157710983832,
-        "media_real": 0.5136827458256028,
-        "de_real": 0.27492461085409425,
-        "media_prescrita": 1.0,
-        "de_prescrita": 0.0,
-        "normal_real": true,
-        "normal_prescrita": false,
-        "prueba": "wilcoxon",
-        "p": 7.558292895833934e-09
-      }
-    ],
-    "avisos": [
-      "PSR de la ec. 19 = 1,591 > 1: las acciones prescritas suman más que las reales (el artículo espera un cociente menor que 1; no se recorta)."
-    ]
-  },
   "prediccion_fcm": {
     "por_concepto": {
       "C16": {
@@ -362,16 +271,16 @@
   },
   "prescripcion": {
     "n_estudiantes": 112,
-    "MAE": 0.39542773429904493,
-    "MSE": 0.2049803518960192,
-    "RMSE": 0.4527475586858743,
+    "MAE": 0.3954272010041942,
+    "MSE": 0.20498035206251838,
+    "RMSE": 0.4527475588697507,
     "PSR": 21.428571428571427,
     "MAE_base": 0.4610055903103528,
     "MSE_base": 0.25651570923341593,
     "RMSE_base": 0.5064737991578794,
     "PSR_base": 14.285714285714285,
-    "cambio_medio_por_accion": 0.08671296847524346,
-    "generaciones_medias_ag": 33.25,
+    "cambio_medio_por_accion": 0.08671414831961417,
+    "generaciones_medias_ag": 33.74107142857143,
     "metas": {
       "H": 65,
       "M": 47

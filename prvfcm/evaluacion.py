@@ -26,14 +26,12 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import precision_recall_fscore_support, r2_score
+from sklearn.metrics import precision_recall_fscore_support
 
 from .configuracion import NIVELES_RENDIMIENTO
 from .fcm import MapaCognitivoDifuso
 from .prescripcion import ResultadoPrescripcion
-from .reporte import numero
 
 
 def mae(real: np.ndarray, estimado: np.ndarray) -> float:
@@ -207,95 +205,4 @@ def validacion_externa(
             for nombre, mascara in (segmentos or {}).items()
             if mascara.any()
         },
-    }
-
-
-# ---------------------------------------------------------------------------
-# Evaluación por reconstrucción (protocolo de PRV-FCM, Tablas 11 y 12)
-# ---------------------------------------------------------------------------
-def psr_ec19(reales: np.ndarray, prescritas: np.ndarray) -> float:
-    """PSR de PRV-FCM (ec. 19): suma de las acciones prescritas sobre la suma de las reales.
-
-        PSR = sum_{i=1..s} sum_{j=1..m} v̂^a_ij / sum_{i=1..s} sum_{j=1..m} v^a_ij
-
-    con s registros y m acciones. El artículo dice que el numerador debe ser
-    menor; aquí es el cociente literal, que puede pasar de 1 (``evaluar_reconstruccion``
-    lo avisa). No es la tasa de éxito prescriptivo de las claves ``PSR``.
-    """
-    return float(np.sum(prescritas) / np.sum(reales))
-
-
-def es_normal(valores: np.ndarray, semilla: int | None = None) -> bool:
-    """Prueba de Lilliefors (Kolmogorov-Smirnov con media y varianza estimadas): normal si p > 0.05."""
-    valores = np.asarray(valores, dtype=float)
-    if np.ptp(valores) == 0:
-        return False
-    prueba = stats.goodness_of_fit(stats.norm, valores, statistic="ks", rng=np.random.default_rng(semilla))
-    return bool(prueba.pvalue > 0.05)
-
-
-def comparar_medias(reales: np.ndarray, prescritas: np.ndarray, semilla: int | None = None) -> dict:
-    """Comparación pareada de PRV-FCM (Tabla 12): t de Student si las dos son normales, si no Wilcoxon.
-
-    ``p`` es None con menos de 3 registros. Si no hay ninguna diferencia, p = 1.
-    """
-    reales, prescritas = np.asarray(reales, dtype=float), np.asarray(prescritas, dtype=float)
-    if len(reales) < 3:
-        return {"normal_real": None, "normal_prescrita": None, "prueba": None, "p": None}
-    normal_real, normal_prescrita = es_normal(reales, semilla), es_normal(prescritas, semilla)
-    if normal_real and normal_prescrita:
-        prueba, p = "t", float(stats.ttest_rel(reales, prescritas).pvalue)
-    elif np.all(reales == prescritas):
-        prueba, p = "wilcoxon", 1.0
-    else:
-        prueba, p = "wilcoxon", float(stats.wilcoxon(reales, prescritas).pvalue)
-    return {"normal_real": normal_real, "normal_prescrita": normal_prescrita, "prueba": prueba, "p": p}
-
-
-def evaluar_reconstruccion(
-    reales: np.ndarray, prescritas: np.ndarray, columnas: list[str], nombres: list[str], semilla: int | None = None
-) -> dict:
-    """Acciones prescritas frente a las reales de registros que ya están en el estado deseado (escala [0, 1]).
-
-    Tabla 11 (MAE, MSE, RMSE; R² de García et al., 2025) por acción y global, PSR
-    de la ec. 19 y Tabla 12 (media ± DE y comparación de medias) por acción. El
-    R² global es el promedio del de cada acción.
-    """
-    reales, prescritas = np.atleast_2d(reales), np.atleast_2d(prescritas)
-    por_accion = []
-    for k, (columna, nombre) in enumerate(zip(columnas, nombres)):
-        real, prescrita = reales[:, k], prescritas[:, k]
-        por_accion.append(
-            {
-                "columna": columna,
-                "nombre": nombre,
-                "mae": mae(real, prescrita),
-                "mse": mse(real, prescrita),
-                "rmse": rmse(real, prescrita),
-                "r2": float(r2_score(real, prescrita)) if len(real) > 1 else None,
-                "media_real": float(real.mean()),
-                "de_real": float(real.std(ddof=1)) if len(real) > 1 else None,
-                "media_prescrita": float(prescrita.mean()),
-                "de_prescrita": float(prescrita.std(ddof=1)) if len(prescrita) > 1 else None,
-                **comparar_medias(real, prescrita, semilla),
-            }
-        )
-    psr = psr_ec19(reales, prescritas)
-    avisos = []
-    if psr > 1:
-        avisos.append(
-            f"PSR de la ec. 19 = {numero(psr, 3)} > 1: las acciones prescritas suman más que las reales "
-            "(el artículo espera un cociente menor que 1; no se recorta)."
-        )
-    return {
-        "n": int(len(reales)),
-        "global": {
-            "mae": mae(reales, prescritas),
-            "mse": mse(reales, prescritas),
-            "rmse": rmse(reales, prescritas),
-            "r2": float(r2_score(reales, prescritas)) if len(reales) > 1 else None,
-            "psr_ec19": psr,
-        },
-        "por_accion": por_accion,
-        "avisos": avisos,
     }

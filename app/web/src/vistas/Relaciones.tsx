@@ -15,7 +15,7 @@ import { clase, NOMBRE_ROL, sujetoDeDataset } from '../utilidades';
 const METODOS: { valor: MetodoCorrelacion; texto: string; ayuda: string }[] = [
   { valor: 'spearman', texto: 'Spearman', ayuda: 'Por rangos: capta relaciones monótonas aunque no sean lineales.' },
   { valor: 'pearson', texto: 'Pearson', ayuda: 'Lineal, sobre los valores normalizados.' },
-  { valor: 'parcial', texto: 'Parcial', ayuda: 'Cada par descontando a todas las demás variables: la base del método de pesos por correlación parcial.' },
+  { valor: 'parcial', texto: 'Parcial', ayuda: 'Cada par descontando a todas las demás variables: la relación directa entre las dos.' },
 ];
 
 function Seccion({ titulo, descripcion, children }: { titulo: string; descripcion: string; children: ReactNode }) {

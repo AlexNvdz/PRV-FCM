@@ -1,5 +1,5 @@
 // Formatos y ayudas compartidas.
-import { SUJETO_POR_DEFECTO, type Activacion, type Codificacion, type DatasetResumen, type Metricas, type MetodoPesos, type PerfilModelo, type ReglaInferencia, type Rol, type Sujeto, type ValorOriginal } from './tipos';
+import { SUJETO_POR_DEFECTO, type Activacion, type Codificacion, type DatasetResumen, type Metricas, type MetodoPesos, type ReglaInferencia, type Rol, type Sujeto, type ValorOriginal } from './tipos';
 
 const numero = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
 
@@ -108,16 +108,10 @@ export const NOMBRE_CODIFICACION: Record<Codificacion, string> = {
   fecha: 'Fecha',
 };
 
-export const NOMBRE_METODO: Record<MetodoPesos, string> = {
-  bptt: 'BPTT',
-  ridge: 'Ridge',
-  lasso: 'Lasso',
-  correlacion_parcial: 'Correlación parcial',
-  pso: 'PSO',
-  expertos: 'Expertos',
-};
+export const NOMBRE_METODO: Record<MetodoPesos, string> = { bptt: 'BPTT', pso: 'PSO' };
 
-export const NOMBRE_PERFIL: Record<PerfilModelo, string> = { articulo: 'Artículo', mejorado: 'Mejorado' };
+/** Nombre del método de W; un modelo viejo puede traer otro (ridge, expertos…) y se muestra crudo. */
+export const nombreMetodo = (metodo: string | undefined) => NOMBRE_METODO[(metodo ?? 'bptt') as MetodoPesos] ?? metodo;
 
 export const NOMBRE_INFERENCIA: Record<ReglaInferencia, string> = { kosko: 'Kosko', kosko_modificada: 'Kosko modificada', reescalada: 'Reescalada' };
 

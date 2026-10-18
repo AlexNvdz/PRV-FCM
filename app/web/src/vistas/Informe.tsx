@@ -13,8 +13,7 @@ import { RedaccionIA } from '../componentes/RedaccionIA';
 import { Aviso, Cargando, Encabezado, estiloControl, NivelChip, Seccion, Vacio } from '../componentes/ui';
 import { useDatasetActivo } from '../contexto';
 import { useModelo } from '../hooks';
-import { entero, esEscalonada, filaMancuerna, mayuscula, NOMBRE_METODO, num, pct, pctDe, sujetoDe } from '../utilidades';
-import type { Reconstruccion } from '../tipos';
+import { entero, esEscalonada, filaMancuerna, mayuscula, nombreMetodo, num, pct, pctDe, sujetoDe } from '../utilidades';
 import { DetalleEstudiante } from './DetalleEstudiante';
 
 const FIGURAS: Record<string, { titulo: string; descripcion: string }> = {
@@ -49,76 +48,6 @@ function Figura({ modeloId, nombre }: { modeloId: string; nombre: string }) {
       </figcaption>
       <img src={url} alt={`${info.titulo}. ${info.descripcion}`} loading="lazy" className="w-full rounded-md bg-[#fcfcfb]" />
     </figure>
-  );
-}
-
-/** Tablas 11 y 12 del artículo: error de reconstrucción por acción y comparación real frente a prescrito. */
-function ValidacionArticulo({ r }: { r: Reconstruccion }) {
-  const n4 = (v: number | null) => (v === null ? '—' : num(v, 4));
-  return (
-    <Seccion
-      titulo="Validación según el artículo"
-      descripcion={`Qué tan cerca quedan las acciones prescritas de las reales en ${entero(r.n)} registros de prueba (Hoyos, Aguilar y Toro, 2023). PSR de la ecuación 19 (prescrito sobre real; el artículo espera menos de 1): ${num(r.global.psr_ec19, 3)}.`}
-    >
-      <div className="grid gap-6 xl:grid-cols-2">
-        <table className="tabular w-full text-sm">
-          <caption className="mb-2 text-left text-sm font-semibold">Tabla 11: error por acción</caption>
-          <thead className="text-left text-xs text-tinta-3">
-            <tr>
-              <th scope="col" className="pb-1 font-medium">Acción</th>
-              <th scope="col" className="pb-1 text-right font-medium">MAE</th>
-              <th scope="col" className="pb-1 text-right font-medium">MSE</th>
-              <th scope="col" className="pb-1 text-right font-medium">RMSE</th>
-              <th scope="col" className="pb-1 text-right font-medium">R²</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...r.por_accion, { ...r.global, nombre: 'Global', columna: '' }].map((a) => (
-              <tr key={a.nombre} className="border-t border-linea">
-                <th scope="row" className="py-1.5 text-left font-normal">{a.nombre}</th>
-                <td className="py-1.5 text-right">{n4(a.mae)}</td>
-                <td className="py-1.5 text-right">{n4(a.mse)}</td>
-                <td className="py-1.5 text-right">{n4(a.rmse)}</td>
-                <td className="py-1.5 text-right">{n4(a.r2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <table className="tabular w-full text-sm">
-          <caption className="mb-2 text-left text-sm font-semibold">Tabla 12: real frente a prescrito (media ± DE)</caption>
-          <thead className="text-left text-xs text-tinta-3">
-            <tr>
-              <th scope="col" className="pb-1 font-medium">Acción</th>
-              <th scope="col" className="pb-1 text-right font-medium">Real</th>
-              <th scope="col" className="pb-1 text-right font-medium">Prescrito</th>
-              <th scope="col" className="pb-1 text-right font-medium">p</th>
-            </tr>
-          </thead>
-          <tbody>
-            {r.por_accion.map((a) => (
-              <tr key={a.columna} className="border-t border-linea">
-                <th scope="row" className="py-1.5 text-left font-normal">{a.nombre}</th>
-                <td className="py-1.5 text-right">{num(a.media_real, 2)} ± {num(a.de_real, 2)}</td>
-                <td className="py-1.5 text-right">{num(a.media_prescrita, 2)} ± {num(a.de_prescrita, 2)}</td>
-                <td className="py-1.5 text-right">
-                  {a.p === null ? '—' : `${a.p < 0.0001 ? '< 0,0001' : num(a.p, 4)} ${a.prueba === 'wilcoxon' ? '†' : '⋆'}`}
-                  {a.p !== null && a.p > 0.05 && <span className="block text-xs text-tinta-3">sin diferencia significativa</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {r.avisos?.map((aviso) => (
-        <Aviso key={aviso} tipo="aviso" className="mt-3">
-          {aviso}
-        </Aviso>
-      ))}
-      <p className="mt-3 text-xs text-tinta-3">
-        † Wilcoxon (algún grupo no es normal según Lilliefors); ⋆ t de Student (ambos normales). Con p mayor que 0,05 no hay diferencia significativa entre lo real y
-        lo prescrito.
-      </p>
-    </Seccion>
   );
 }
 
@@ -163,7 +92,7 @@ export function Informe() {
         titulo="Paso 5: visualización y recomendaciones"
         descripcion={
           <>
-            Modelo de <strong className="text-tinta">{dataset.nombre}</strong> con pesos por {NOMBRE_METODO[m.configuracion.fcm.metodo_pesos ?? 'bptt']} (λ ={' '}
+            Modelo de <strong className="text-tinta">{dataset.nombre}</strong> con pesos por {nombreMetodo(m.configuracion.fcm.metodo_pesos)} (λ ={' '}
             {num(m.configuracion.fcm.lambda_, 2)}): exactitud en prueba {pct(100 * m.prediccion_fcm.exactitud_rendimiento)}.
           </>
         }
@@ -276,8 +205,6 @@ export function Informe() {
           </div>
         )}
       </Seccion>
-
-      {m.reconstruccion && <ValidacionArticulo r={m.reconstruccion} />}
 
       <Seccion titulo="Grafo del mapa cognitivo" descripcion="Generado con NetworkX y matplotlib al entrenar; el mapa interactivo está en el paso 3.">
         {figuras.includes('red_fcm.png') ? (

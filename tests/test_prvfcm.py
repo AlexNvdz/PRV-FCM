@@ -13,7 +13,6 @@ from prvfcm.fcm import (
     correlaciones_parciales,
     entrenar_fcm,
     pesos_equilibrados,
-    pesos_por_regresion,
     sigmoide,
 )
 from prvfcm.genetico import AlgoritmoGenetico
@@ -155,45 +154,21 @@ def fcm_un_dinamico(
     return real.predecir(X), estructura
 
 
-def test_regresion_recupera_los_pesos_de_un_punto_fijo():
-    # Sin ruido ni regularización, la regresión sobre (logit(y) - y) recupera los pesos; tanh solo los transforma.
-    pesos_reales = np.array([0.6, -0.4, 0.2])
-    X, estructura = fcm_un_dinamico(pesos_reales)
-    for metodo in ("ridge", "lasso"):
-        W, b = pesos_por_regresion(X, estructura, ConfigFCM(metodo_pesos=metodo, alpha_l2=1e-9))
-        np.testing.assert_allclose(np.arctanh(W[:3, 3]), pesos_reales, atol=1e-3)
-        assert not W[~estructura].any()  # Solo las aristas permitidas.
-        assert b[3] == pytest.approx(0.0, abs=1e-3) and not b[:3].any()
-
-
-def test_regresion_recupera_el_sesgo_como_intercepto():
-    pesos_reales = np.array([0.6, -0.4, 0.2])
-    X, estructura = fcm_un_dinamico(pesos_reales, sesgo_real=-0.5)
-    W, b = pesos_por_regresion(X, estructura, ConfigFCM(metodo_pesos="ridge", alpha_l2=1e-9))
-    np.testing.assert_allclose(np.arctanh(W[:3, 3]), pesos_reales, atol=1e-3)
-    assert b[3] == pytest.approx(-0.5, abs=1e-3)
-    _, b_sin = pesos_por_regresion(X, estructura, ConfigFCM(metodo_pesos="ridge", alpha_l2=1e-9, sesgo=False))
-    assert not b_sin.any()
-    # Un intercepto fuera de [-1, 1] se recorta y los pesos se reajustan con b fijo.
-    X, estructura = fcm_un_dinamico(pesos_reales, sesgo_real=-2.0)
-    _, b = pesos_por_regresion(X, estructura, ConfigFCM(metodo_pesos="ridge", alpha_l2=1e-9))
-    assert b[3] == -1.0
-
-
 def test_metodos_de_pesos_quedan_en_rango_y_respetan_la_mascara():
     # C1 no influye en los datos. Si influyera, al quitarlo los demás pesos lo compensarían: la regla no tiene sesgo.
     X, _ = fcm_un_dinamico(np.array([0.9, 0.0, 0.3]))
     excluir = np.zeros((4, 4), dtype=bool)
     excluir[1, 3] = True  # Máscara causal: sin la arista C1 -> C3.
-    for metodo in ("bptt", "ridge", "lasso", "correlacion_parcial"):
-        fcm, _ = entrenar_fcm(X, np.array([0, 1, 2]), np.array([3]), 3, ConfigFCM(metodo_pesos=metodo), aristas_excluidas=excluir)
+    for metodo in ("bptt", "pso"):
+        fcm, _ = entrenar_fcm(
+            X, np.array([0, 1, 2]), np.array([3]), 3, ConfigFCM(metodo_pesos=metodo), aristas_excluidas=excluir, semilla=0,
+        )
         assert np.all(np.abs(fcm.sesgo) <= 1) and not fcm.sesgo[:3].any()  # Sesgo solo en el objetivo.
-        assert (fcm.sesgo[3] == 0) == (metodo == "correlacion_parcial")
         assert not fcm.estructura[1, 3] and fcm.pesos[1, 3] == 0.0
         assert np.all(np.abs(fcm.pesos) <= 1.0)
         assert fcm.pesos[0, 3] > 0 and fcm.pesos[2, 3] > 0  # El signo de las fuentes permitidas se conserva.
     with pytest.raises(ValueError):
-        entrenar_fcm(X, np.array([0, 1, 2]), np.array([3]), 3, ConfigFCM(metodo_pesos="otro"))
+        entrenar_fcm(X, np.array([0, 1, 2]), np.array([3]), 3, ConfigFCM(metodo_pesos="ridge"))  # Ya no existe.
 
 
 def test_correlacion_parcial_coincide_con_la_definicion():

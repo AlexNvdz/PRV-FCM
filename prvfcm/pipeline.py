@@ -6,13 +6,11 @@ Pipeline PRV-FCM completo, independiente de la interfaz (consola o aplicación w
        aprendizaje de los pesos del FCM.
     3. Prescripción con el AG para los registros de prueba que no están en el
        mejor nivel del objetivo.
-    4. Evaluación: métricas prescriptivas, validación externa, éxito por segmento
-       y reconstrucción de las acciones de los registros que ya están en el
-       mejor nivel (protocolo de PRV-FCM, Tablas 11 y 12).
+    4. Evaluación: métricas prescriptivas, validación externa y éxito por segmento.
 
 Las opciones se arman desde un diccionario con ``opciones_desde_dict`` (la
-aplicación y la línea de comandos), que parte del perfil ("mejorado" o
-"articulo", ver ``configuracion.PERFILES``) y aplica las opciones explícitas.
+aplicación y la línea de comandos), que parte de los valores por defecto y
+aplica las opciones explícitas.
 
 ``ejecutar`` avisa al terminar cada etapa (``al_terminar_etapa``) y durante las
 tareas largas (``al_progresar``): la consola imprime cada sección y la
@@ -30,7 +28,6 @@ import numpy as np
 import pandas as pd
 
 from .configuracion import (
-    PERFILES,
     ConfigAG,
     ConfigFCM,
     ConfigPrescripcion,
@@ -44,7 +41,6 @@ from .evaluacion import (
     discretizar_rendimiento,
     evaluar_prediccion,
     evaluar_prescripciones,
-    evaluar_reconstruccion,
     exito_prescriptivo,
     nivel_siguiente,
     validacion_externa,
@@ -55,13 +51,11 @@ from .fcm import (
     METODOS_PESOS,
     MapaCognitivoDifuso,
     con_dinamicos_neutros,
-    construir_estructura,
     entrenar_fcm,
     pesos_equilibrados,
 )
-from .prescripcion import APTITUDES, PrescriptorPRVFCM, ResultadoPrescripcion
+from .prescripcion import PrescriptorPRVFCM, ResultadoPrescripcion
 from .preprocesamiento import Preprocesador, como_texto, dividir_entrenamiento_prueba, grupos_por_perfil, smote
-from .reporte import numero
 from .seleccion import configuracion_de, validacion_cruzada_fcm
 
 
@@ -103,14 +97,9 @@ class OpcionesPipeline:
     segmento: Segmento | None = None
     # Máscara de dirección causal: aristas (columna origen, columna destino) que se eliminan.
     aristas_excluidas: tuple[tuple[str, str], ...] = ()
-    perfil: str = "mejorado"
     mutables_dinamicos: bool = False                 # Todos los mutables se actualizan en la inferencia.
     binarizar_objetivo: str | float | None = None    # Nivel mínimo de éxito (ordinal) o umbral (numérico).
     smote: bool = False                              # SMOTE sobre el entrenamiento (nunca sobre la prueba).
-    busqueda_ag: bool = False                        # Búsqueda aleatoria de los hiperparámetros del AG.
-    reconstruccion: bool = True                      # Evaluación por reconstrucción (Tablas 11 y 12).
-    # Método "expertos": [{"experto": nombre, "aristas": [{"origen", "destino", "peso"}]}].
-    matrices_expertos: tuple[dict, ...] = ()
 
 
 # La división agrupada reparte perfiles inmutables en 20 partes: con menos de 40 perfiles
@@ -135,9 +124,7 @@ class ResultadoPipeline:
     X_pru: np.ndarray
     division: str = "agrupada"  # La aplicada: puede ser "aleatoria" aunque se pidiera "agrupada".
     n_sinteticos: int = 0       # Registros que SMOTE agregó al entrenamiento.
-    config_ag: ConfigAG | None = None       # La del AG usada (la elegida por la búsqueda, si la hubo).
-    busqueda_ag: pd.DataFrame | None = None
-    reconstruccion: dict | None = None
+    config_ag: ConfigAG | None = None
     seleccion_cv: pd.DataFrame | None = None
     config_fcm: ConfigFCM | None = None
     fcm: MapaCognitivoDifuso | None = None
@@ -177,18 +164,13 @@ class ResultadoPipeline:
                 "prescripcion": dataclasses.asdict(self.config_prescripcion),
                 "mutables_dinamicos": [self.pre.columnas[i] for i in self.pre.indices_dinamicos],
                 "aristas_excluidas": [list(a) for a in o.aristas_excluidas],
-                "perfil": o.perfil,
                 "binarizar_objetivo": o.binarizar_objetivo,
                 "smote": o.smote,
                 "n_sinteticos": self.n_sinteticos,
-                "busqueda_ag": o.busqueda_ag,
-                "expertos": [str(m.get("experto", "")) for m in o.matrices_expertos] if self.config_fcm.metodo_pesos == "expertos" else [],
                 "sujeto": {"singular": self.esquema.sujeto.singular, "plural": self.esquema.sujeto.plural,
                            "femenino": self.esquema.sujeto.femenino},
             },
             "seleccion_hiperparametros": None if self.seleccion_cv is None else self.seleccion_cv.to_dict(orient="records"),
-            "busqueda_ag": None if self.busqueda_ag is None else self.busqueda_ag.to_dict(orient="records"),
-            "reconstruccion": self.reconstruccion,
             "prediccion_fcm": {
                 **{k: v for k, v in self.prediccion.items() if k != "matriz_confusion"},
                 "matriz_confusion": {
@@ -311,120 +293,6 @@ def tabla_recomendaciones(
     return pd.DataFrame(filas)
 
 
-def matriz_expertos(pre: Preprocesador, estructura: np.ndarray, matrices: tuple[dict, ...]) -> np.ndarray:
-    """W de consenso de varios expertos: media aritmética, con 0 en las aristas que un experto no da (García et al., 2025).
-
-    Cada matriz es ``{"experto": nombre, "aristas": [{"origen", "destino", "peso"}]}``
-    con columnas de concepto (en one-hot, "columna=categoría"). Cada arista debe
-    estar en la estructura (sin la máscara causal) y su peso en [-1, 1].
-    """
-    if not matrices:
-        raise ValueError("El método de expertos necesita al menos una matriz de expertos.")
-    fijos = set(pre.indices_fijos.tolist())
-    suma, errores = np.zeros(estructura.shape), []
-    for k, matriz in enumerate(matrices, start=1):
-        nombre = str(matriz.get("experto") or f"experto {k}")
-        vistas = set()
-        for arista in matriz.get("aristas") or []:
-            origen, destino = arista.get("origen"), arista.get("destino")
-            desconocidas = [str(c) for c in (origen, destino) if c not in pre.columnas]
-            if desconocidas:
-                errores.append(f"{nombre}: {', '.join(desconocidas)} no es un concepto del esquema.")
-                continue
-            try:
-                peso = float(arista.get("peso"))
-            except (TypeError, ValueError):
-                errores.append(f"{nombre}: el peso de {origen} → {destino} no es un número.")
-                continue
-            j, i = pre.indice(origen), pre.indice(destino)
-            if not -1.0 <= peso <= 1.0:
-                errores.append(f"{nombre}: el peso de {origen} → {destino} ({numero(peso, 6)}) está fuera de [-1, 1].")
-            elif i in fijos:
-                errores.append(f"{nombre}: {destino} es un concepto fijo en la inferencia; ninguna arista puede entrar en él.")
-            elif not estructura[j, i]:
-                errores.append(f"{nombre}: la estructura (o la máscara causal) no permite la arista {origen} → {destino}.")
-            elif (j, i) in vistas:
-                errores.append(f"{nombre}: la arista {origen} → {destino} aparece dos veces.")
-            else:
-                vistas.add((j, i))
-                suma[j, i] += peso
-    if errores:
-        raise ValueError("Matrices de expertos inválidas: " + " ".join(errores))
-    return suma / len(matrices)
-
-
-def reconstruir(
-    fcm: MapaCognitivoDifuso,
-    pre: Preprocesador,
-    estados: np.ndarray,
-    config: ConfigPrescripcion,
-    config_ag: ConfigAG,
-    semilla: int | None = None,
-    al_avanzar: Callable[[int, int], None] | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Acciones reales y prescritas de registros que ya están en el estado deseado (protocolo de PRV-FCM).
-
-    Para cada registro, sus valores del sistema son el estado deseado (todos los
-    conceptos dinámicos) y el AG parte de acciones aleatorias: sin siembra, sin
-    penalización del esfuerzo, sin límites de cambio ni tope condicionado. La
-    aptitud es la de ``config``.
-    """
-    config = replace(config, beta_esfuerzo=0.0, sembrar=False, solo_incrementos=False, delta_max=None, condicion_columna=None)
-    semillas = np.random.SeedSequence(semilla).spawn(len(estados))
-    prescritas = []
-    for k, (estado, semilla_k) in enumerate(zip(estados, semillas), start=1):
-        deseado = {int(i): float(estado[i]) for i in pre.indices_dinamicos}
-        prescriptor = PrescriptorPRVFCM(fcm, pre.indices_accion, deseado, None, config_ag, config, rejillas=pre.rejillas_accion())
-        prescritas.append(prescriptor.prescribir(estado, np.random.default_rng(semilla_k)).acciones_recomendadas)
-        if al_avanzar is not None:
-            al_avanzar(k, len(estados))
-    return estados[:, pre.indices_accion], np.array(prescritas).reshape(len(estados), len(pre.indices_accion))
-
-
-# Valores de la búsqueda aleatoria del AG: los que PRV-FCM reporta en sus cuatro casos.
-REJILLA_AG = {
-    "tam_poblacion": (50, 100, 150, 200),
-    "generaciones": (20, 30, 50),
-    "tasa_cruce": (0.2, 0.3, 0.5, 0.9),
-    "tasa_mutacion": (0.2, 0.3, 0.4, 0.5),
-}
-
-
-def buscar_config_ag(
-    fcm: MapaCognitivoDifuso,
-    pre: Preprocesador,
-    estados: np.ndarray,
-    config: ConfigPrescripcion,
-    base: ConfigAG,
-    semilla: int | None = None,
-    n_configuraciones: int = 8,
-    max_registros: int = 30,
-    al_avanzar: Callable[[int, int], None] | None = None,
-) -> tuple[ConfigAG, pd.DataFrame]:
-    """Búsqueda aleatoria de población, generaciones, cruce y mutación (como PRV-FCM).
-
-    Cada configuración se evalúa por el MAE de reconstrucción (``reconstruir``)
-    en hasta ``max_registros`` registros de entrenamiento en el mejor nivel:
-    la prueba no interviene. Sin parada temprana (paciencia = generaciones).
-    """
-    rng = np.random.default_rng(semilla)
-    if len(estados) > max_registros:
-        estados = estados[rng.choice(len(estados), max_registros, replace=False)]
-    candidatos = []
-    for _ in range(n_configuraciones):
-        valores = {clave: opciones[rng.integers(len(opciones))] for clave, opciones in REJILLA_AG.items()}
-        candidatos.append(replace(base, **valores, paciencia=valores["generaciones"]))
-    filas = []
-    for k, candidato in enumerate(candidatos, start=1):
-        reales, prescritas = reconstruir(fcm, pre, estados, config, candidato, semilla)
-        filas.append({**{c: getattr(candidato, c) for c in REJILLA_AG}, "mae": float(np.mean(np.abs(reales - prescritas)))})
-        if al_avanzar is not None:
-            al_avanzar(k, len(candidatos))
-    tabla = pd.DataFrame(filas)
-    mejor = int(tabla["mae"].idxmin())
-    return candidatos[mejor], tabla.sort_values("mae", ignore_index=True)
-
-
 def indice_condicion(pre: Preprocesador, config: ConfigPrescripcion) -> int | None:
     """Índice del concepto del tope condicionado; None si no hay columna o el esquema no la tiene."""
     columna = config.condicion_columna
@@ -504,22 +372,14 @@ def ejecutar(
 
     # 2. Selección de hiperparámetros y aprendizaje del FCM -----------------
     config_fcm = opciones.config_fcm
-    if config_fcm.metodo_pesos in ("expertos", "correlacion_parcial"):
-        config_fcm = replace(config_fcm, sesgo=False)  # Estos métodos no aprenden b: el modelo guardado no debe decir que lo tiene.
     excluidas = matriz_excluidas(pre, opciones.aristas_excluidas)
     dinamicos, objetivo = pre.indices_dinamicos, pre.indice_objetivo
-    pesos_expertos = None
-    if config_fcm.metodo_pesos == "expertos":
-        estructura = construir_estructura(len(pre.columnas), pre.indices_fijos, dinamicos, objetivo)
-        if excluidas is not None:
-            estructura &= ~excluidas
-        pesos_expertos = matriz_expertos(pre, estructura, opciones.matrices_expertos)
     if opciones.validacion_cruzada:
         # Con la división aleatoria cada registro es su propio grupo: pliegues estratificados sin agrupar.
         grupos_cv = grupos.loc[entrenamiento.index].to_numpy() if agrupada else np.arange(len(entrenamiento))
         r.seleccion_cv = validacion_cruzada_fcm(
             entrenamiento, grupos_cv, esquema, config_fcm, opciones.config_seleccion, opciones.semilla,
-            progreso("validacion_cruzada"), excluidas, opciones.smote, pesos_expertos,
+            progreso("validacion_cruzada"), excluidas, opciones.smote,
         )
         config_fcm = configuracion_de(config_fcm, r.seleccion_cv.iloc[0].to_dict())
         r.config_fcm = config_fcm
@@ -529,8 +389,7 @@ def ejecutar(
     nombres = [c.id for c in esquema.conceptos]
     pesos_muestras = pesos_equilibrados(etiquetas_fcm) if config_fcm.balancear_niveles else None
     r.fcm, r.medias_dinamicos = entrenar_fcm(
-        X_fcm, pre.indices_fijos, dinamicos, objetivo, config_fcm, nombres, excluidas, pesos_muestras,
-        opciones.semilla, pesos_expertos,
+        X_fcm, pre.indices_fijos, dinamicos, objetivo, config_fcm, nombres, excluidas, pesos_muestras, opciones.semilla,
     )
     r.prediccion = evaluar_prediccion(
         r.fcm, con_dinamicos_neutros(r.X_pru, dinamicos, r.medias_dinamicos), r.X_pru, dinamicos, objetivo, nombres,
@@ -553,12 +412,6 @@ def ejecutar(
     estado_deseado = {pre.indice(c): v for c, v in config_presc.estado_deseado.items()}
     pesos_objetivo = {pre.indice(c): v for c, v in config_presc.pesos_objetivo.items()}
     r.config_ag = opciones.config_ag
-    if opciones.busqueda_ag:
-        en_mejor_nivel = r.X_ent[pre.etiquetas(entrenamiento) == esquema.mejor_nivel]
-        if len(en_mejor_nivel):
-            r.config_ag, r.busqueda_ag = buscar_config_ag(
-                r.fcm, pre, en_mejor_nivel, config_presc, opciones.config_ag, opciones.semilla, al_avanzar=progreso("busqueda_ag")
-            )
     r.prescriptor = PrescriptorPRVFCM(
         r.fcm, pre.indices_accion, estado_deseado, pesos_objetivo, r.config_ag, config_presc,
         indice_condicion(pre, config_presc), pre.rejillas_accion(), pre.indice_objetivo,
@@ -626,15 +479,6 @@ def ejecutar(
         if mascara.any()
     }
     r.recomendaciones = tabla_recomendaciones(r.resultados, estudiantes, pre, r.exito, etiquetas_prueba[r.seleccion], r.metas)
-    en_mejor_nivel = etiquetas_prueba == esquema.mejor_nivel
-    if opciones.reconstruccion and en_mejor_nivel.any():
-        reales, prescritas = reconstruir(
-            r.fcm, pre, r.X_pru[en_mejor_nivel], config_presc, r.config_ag, opciones.semilla, progreso("reconstruccion")
-        )
-        r.reconstruccion = evaluar_reconstruccion(
-            reales, prescritas, [pre.columnas[i] for i in pre.indices_accion],
-            [esquema.conceptos[i].nombre for i in pre.indices_accion], opciones.semilla,
-        )
     avisar("evaluacion", r)
     return r
 
@@ -643,10 +487,9 @@ def ejecutar(
 # Opciones desde un diccionario (aplicación y línea de comandos)
 # ---------------------------------------------------------------------------
 def valores_por_defecto() -> dict:
-    """Las opciones de entrenamiento sin perfil, con los valores por defecto de las dataclasses."""
+    """Las opciones de entrenamiento con los valores por defecto de las dataclasses."""
     fcm, sel, presc, o = ConfigFCM(), ConfigSeleccion(), ConfigPrescripcion(), OpcionesPipeline()
     return {
-        "perfil": "mejorado",
         "proporcion_prueba": o.proporcion_prueba,
         "semilla": o.semilla,
         "division": o.division,
@@ -667,52 +510,31 @@ def valores_por_defecto() -> dict:
         "pso_iteraciones_cv": sel.pso_iteraciones,
         "rejilla_lambda": list(sel.rejilla_lambda),
         "rejilla_alpha": list(sel.rejilla_alpha),
-        "rejilla_inferencia": list(sel.rejilla_inferencia),
-        "rejilla_activacion": list(sel.rejilla_activacion),
         "mutables_dinamicos": o.mutables_dinamicos,
         "smote": o.smote,
         "binarizar_objetivo": o.binarizar_objetivo,
-        "busqueda_ag": o.busqueda_ag,
-        "reconstruccion": o.reconstruccion,
         "beta": presc.beta_esfuerzo,
         "delta_max": presc.delta_max,
         "permitir_reducciones": not presc.solo_incrementos,
         "condicion_delta_max": presc.condicion_delta_max,
-        "sembrar": presc.sembrar,
-        "aptitud": presc.aptitud,
         "meta_escalonada": presc.meta_escalonada,
         "ag": dataclasses.asdict(ConfigAG()),
         "aristas_excluidas": [],
-        "matrices_expertos": [],
     }
-
-
-def valores_de_perfil(perfil: str = "mejorado") -> dict:
-    """Opciones resueltas de un perfil: los valores por defecto con los cambios del perfil.
-
-    ``inferencia`` y ``activacion`` quedan en None si las elige la validación cruzada.
-    """
-    if perfil not in PERFILES:
-        raise ValueError(f"El perfil debe ser uno de {', '.join(PERFILES)}, no '{perfil}'.")
-    valores = valores_por_defecto()
-    for clave, valor in PERFILES[perfil].items():
-        valores[clave] = {**valores[clave], **valor} if clave in ("ag", "pso") else valor
-    valores["perfil"] = perfil
-    return valores
 
 
 def opciones_desde_dict(datos: dict, segmento: Segmento | None = None) -> OpcionesPipeline:
     """Opciones (JSON de la aplicación o argumentos de main.py) -> ``OpcionesPipeline``, con límites razonables.
 
-    Parte del perfil (``datos["perfil"]``, por defecto "mejorado") y aplica las
-    claves presentes en ``datos``, que mandan sobre el perfil (también un None
-    explícito: por ejemplo, ``condicion_delta_max: None`` quita el tope).
+    Parte de ``valores_por_defecto`` y aplica las claves presentes en ``datos``
+    (también un None explícito: por ejemplo, ``condicion_delta_max: None`` quita
+    el tope). Las claves desconocidas (como el antiguo ``perfil``) se ignoran.
     """
-    valores = valores_de_perfil(datos.get("perfil") or "mejorado")
+    valores = valores_por_defecto()
     for clave, valor in datos.items():
         if clave in ("ag", "pso") and isinstance(valor, dict):
             valores[clave] = {**valores[clave], **valor}
-        elif clave in valores and clave != "perfil":
+        elif clave in valores:
             valores[clave] = valor
     v = valores
     proporcion = float(v["proporcion_prueba"])
@@ -724,20 +546,12 @@ def opciones_desde_dict(datos: dict, segmento: Segmento | None = None) -> Opcion
         raise ValueError("Los pliegues de la validación cruzada deben estar entre 2 y 10.")
     if v["metodo_pesos"] not in METODOS_PESOS:
         raise ValueError(f"El método de pesos debe ser uno de {', '.join(METODOS_PESOS)}.")
-    rejillas = {}
     for clave, validos in (("inferencia", INFERENCIAS), ("activacion", ACTIVACIONES)):
-        rejilla = [v[clave]] if v[clave] else list(v[f"rejilla_{clave}"])
-        if not rejilla or any(r not in validos for r in rejilla):
+        if v[clave] not in validos:
             raise ValueError(f"{clave} debe ser una de {', '.join(validos)}.")
-        rejillas[clave] = rejilla
-    if v["aptitud"] not in APTITUDES:
-        raise ValueError(f"La aptitud debe ser una de {', '.join(APTITUDES)}.")
     excluidas = v["aristas_excluidas"] or []
     if not all(isinstance(a, (list, tuple)) and len(a) == 2 for a in excluidas):
         raise ValueError("La máscara causal debe ser una lista de pares [origen, destino].")
-    expertos = v["matrices_expertos"] or []
-    if not all(isinstance(m, dict) and isinstance(m.get("aristas", []), list) for m in expertos):
-        raise ValueError("Las matrices de expertos deben ser [{experto, aristas: [{origen, destino, peso}]}].")
     pso = v["pso"]
     permitidos = {f.name for f in dataclasses.fields(ConfigAG)}
     delta_max, tope = v["delta_max"], v["condicion_delta_max"]
@@ -753,9 +567,8 @@ def opciones_desde_dict(datos: dict, segmento: Segmento | None = None) -> Opcion
             metodo_pesos=v["metodo_pesos"],
             balancear_niveles=bool(v["balancear_niveles"]),
             sesgo=bool(v["sesgo"]),
-            # Sin validación cruzada, la regla de la Tabla 10 de PRV-FCM si está en la rejilla.
-            inferencia="kosko_modificada" if "kosko_modificada" in rejillas["inferencia"] else rejillas["inferencia"][0],
-            activacion="sigmoide" if "sigmoide" in rejillas["activacion"] else rejillas["activacion"][0],
+            inferencia=v["inferencia"],
+            activacion=v["activacion"],
             pso_particulas=int(pso["particulas"]),
             pso_iteraciones=int(pso["iteraciones"]),
             pso_inercia=float(pso["inercia"]),
@@ -768,8 +581,6 @@ def opciones_desde_dict(datos: dict, segmento: Segmento | None = None) -> Opcion
             pliegues=int(v["pliegues"]),
             rejilla_lambda=tuple(float(x) for x in v["rejilla_lambda"]),
             rejilla_alpha=tuple(float(x) for x in v["rejilla_alpha"]),
-            rejilla_inferencia=tuple(rejillas["inferencia"]),
-            rejilla_activacion=tuple(rejillas["activacion"]),
             pso_iteraciones=int(v["pso_iteraciones_cv"]) if v["pso_iteraciones_cv"] else None,
         ),
         config_ag=replace(ConfigAG(), **{k: x for k, x in (v["ag"] or {}).items() if k in permitidos}),
@@ -779,17 +590,11 @@ def opciones_desde_dict(datos: dict, segmento: Segmento | None = None) -> Opcion
             delta_max=float(delta_max) if delta_max else None,
             condicion_columna=None if tope is None else ConfigPrescripcion.condicion_columna,
             condicion_delta_max=ConfigPrescripcion.condicion_delta_max if tope is None else float(tope),
-            sembrar=bool(v["sembrar"]),
-            aptitud=v["aptitud"],
             meta_escalonada=bool(v["meta_escalonada"]),
         ),
         segmento=segmento,
         aristas_excluidas=tuple((str(o), str(d)) for o, d in excluidas),
-        perfil=v["perfil"],
         mutables_dinamicos=bool(v["mutables_dinamicos"]),
         binarizar_objetivo=v["binarizar_objetivo"],
         smote=bool(v["smote"]),
-        busqueda_ag=bool(v["busqueda_ag"]),
-        reconstruccion=bool(v["reconstruccion"]),
-        matrices_expertos=tuple(expertos),
     )

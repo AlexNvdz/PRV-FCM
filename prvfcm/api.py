@@ -374,8 +374,6 @@ class PrescriptorAG:
                 "solo_incrementos": prescriptor.config.solo_incrementos,
                 "condicion_columna": prescriptor.config.condicion_columna,
                 "condicion_delta_max": prescriptor.config.condicion_delta_max,
-                "sembrar": prescriptor.config.sembrar,
-                "aptitud": prescriptor.config.aptitud,
                 "poblacion": m.config_ag.tam_poblacion,
                 "generaciones_max": m.config_ag.generaciones,
                 "paciencia": m.config_ag.paciencia,

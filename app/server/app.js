@@ -50,9 +50,9 @@ export function crearApp({ almacen, motor, trabajos }) {
     ]);
     res.json({ ollama, motor: { ...motorPython, ejecutable: rutaPython() }, modelo: OLLAMA_MODELO });
   });
-  // Valores por defecto de cada perfil de entrenamiento («articulo» y «mejorado»): los fija el motor.
-  app.get('/api/perfiles', async (_req, res) => {
-    res.json(await motor.llamar('perfiles'));
+  // Valores por defecto de las opciones de entrenamiento: los fija el motor.
+  app.get('/api/opciones', async (_req, res) => {
+    res.json(await motor.llamar('opciones'));
   });
   app.use('/api/datasets', rutasDatasets({ almacen, motor, trabajos }));
   app.use('/api/modelos', rutasModelos({ almacen, motor, trabajos }));

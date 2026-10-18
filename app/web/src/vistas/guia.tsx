@@ -545,31 +545,8 @@ function Paso3() {
       <Bloque id="paso-3-vista" titulo="La vista Modelo">
         <p>
           Requiere el esquema guardado. A la izquierda está el formulario «Entrenar»; a la derecha, «Progreso». El formulario parte de las opciones del
-          último entrenamiento terminado. Debajo aparecen los resultados del modelo y la lista de entrenamientos.
-        </p>
-      </Bloque>
-
-      <Bloque id="paso-3-perfil" titulo="Perfil de entrenamiento">
-        <p>
-          Lo primero del formulario. Cada tarjeta lista, en gris, los valores que fija su perfil (los lee del motor). Vea <Entradas a={['perfil-entrenamiento']} />.
-        </p>
-        <Defs>
-          <Def t="Mejorado (recomendado)">
-            Lo que este proyecto validó: BPTT, Kosko modificada con sigmoide, sesgo, β = 0,4, tope por ausentismo y <T a="meta-escalonada">meta escalonada</T>.
-          </Def>
-          <Def t="Artículo (Hoyos, Aguilar y Toro, 2023)">
-            El protocolo del artículo: <T a="pso">PSO</T>, sin sesgo, β = 0, <T a="smote">SMOTE</T>, mutables dinámicos, 10 pliegues, aptitud de la
-            Tabla 4, AG sin siembra de las acciones actuales y búsqueda de los parámetros del AG; la validación cruzada elige la regla de inferencia y la
-            activación.
-          </Def>
-        </Defs>
-        <p>
-          La aptitud de la Tabla 4 pide que el estado final se parezca al deseado, no que el objetivo suba; sin la siembra, la{' '}
-          <T a="psr">tasa de éxito prescriptivo</T> puede bajar.
-        </p>
-        <p>
-          Cualquier opción que cambie después manda sobre el perfil. Debajo de las tarjetas, «Volver a los valores del perfil» deshace esos cambios; elegir
-          otro perfil también los deshace.
+          último entrenamiento terminado; sin entrenamientos, de los valores por defecto del motor. Si cambia alguno, «Volver a los valores por defecto»
+          deshace esos cambios. Debajo aparecen los resultados del modelo y la lista de entrenamientos.
         </p>
       </Bloque>
 
@@ -580,25 +557,11 @@ function Paso3() {
         <Defs>
           <Def t="BPTT (recomendado)">
             <T a="bptt">Gradiente exacto</T> a través de las iteraciones del FCM y optimizador <T a="lbfgsb" /> con W en [−1, 1]. Es el más preciso (79 %
-            en el dataset del proyecto) y el más lento.
+            en el dataset del proyecto) y el método por defecto.
           </Def>
-          <Def t="Regresión Ridge">
-            <T a="ridge">Regresión lineal con penalización L2</T> por concepto dinámico; <T a="tanh">tanh</T> trunca los pesos a (−1, 1). Instantánea; 77 %.
-          </Def>
-          <Def t="Regresión Lasso">
-            <T a="lasso">Penalización L1</T>: anula los pesos débiles y deja un mapa más simple. Instantánea; 76 %.
-          </Def>
-          <Def t="Correlación parcial">
-            Cada peso es la <T a="correlacion-parcial">correlación parcial</T> del par, dados los demás. Describe la estructura, pero no calibra la inferencia: 48 %.
-          </Def>
-          <Def t="PSO (artículo)">
-            <T a="pso">Enjambre de partículas</T>: cada partícula es una W completa. No usa el gradiente; es más lento que BPTT. Con el perfil
-            «Artículo» usa la ecuación 4 literal, que tiende a estancarse; con «Mejorado», los coeficientes de Clerc.
-          </Def>
-          <Def t="Matriz de expertos">
-            W es el <T a="consenso">consenso</T> de las matrices que suban los expertos. «Subir matrices (CSV)» acepta uno o varios archivos con las columnas
-            origen, destino y peso, uno por experto. Cada archivo se valida (pesos entre −1 y 1, aristas de la estructura, sin repetidas) y los errores se
-            muestran con su línea. Debajo aparece la «Matriz de consenso». Vea <Entradas a={['expertos']} />.
+          <Def t="PSO">
+            <T a="pso">Enjambre de partículas</T>, el método del artículo: cada partícula es una W completa. No usa el gradiente y es más lento que BPTT;
+            usa los coeficientes de Clerc, porque la ecuación 4 literal tiende a estancarse.
           </Def>
         </Defs>
         <p>El apartado plegable «Cómo se construye y se usa W» muestra sus fórmulas; también están en <Ir a="formulas">Fórmulas</Ir>.</p>
@@ -608,7 +571,7 @@ function Paso3() {
         <p>
           Marque «Equilibrar los niveles del objetivo al aprender W» cuando un nivel sea mucho menos frecuente que los demás, como en la deserción. Cada
           registro pesa según la frecuencia de su nivel y λ y α se eligen por <T a="exactitud-equilibrada">exactitud equilibrada</T>. Sin entrenamientos previos, se activa sola
-          si un nivel es menos del 25 % de los registros, y el texto de ayuda dice cuál. No aplica a la correlación parcial. Vea{' '}
+          si un nivel es menos del 25 % de los registros, y el texto de ayuda dice cuál. Vea{' '}
           <Entradas a={['equilibrar']} />.
         </p>
       </Bloque>
@@ -643,20 +606,19 @@ function Paso3() {
       <Bloque id="paso-3-inferencia" titulo="Inferencia, objetivo y evaluación">
         <Defs>
           <Def t="Regla de inferencia">
-            Kosko, Kosko modificada o reescalada. «Según el perfil» deja la del perfil o, si este no fija una, la que elija la validación cruzada. Vea{' '}
+            Kosko, Kosko modificada (por defecto) o reescalada. Vea{' '}
             <Entradas a={['regla-inferencia']} />.
           </Def>
           <Def t="Función de activación">
-            Sigmoide o <T a="tanh">tangente hiperbólica</T> reescalada a (0, 1).
+            Sigmoide (por defecto) o <T a="tanh">tangente hiperbólica</T> reescalada a (0, 1).
           </Def>
           <Def t="Binarizar el objetivo">
             Éxito desde un nivel (≥N frente a {'<'}N) o, con un objetivo numérico, desde un umbral. Vea <Entradas a={['binarizacion']} />.
           </Def>
-          <Def t="Pliegues de la validación">De 2 a 10. Vacío: los del perfil (3 con la validación rápida). No aplica sin validación.</Def>
+          <Def t="Pliegues de la validación">De 2 a 10. Vacío: 5 (3 con la validación rápida). No aplica sin validación.</Def>
           <Def t="SMOTE en el entrenamiento">
             Registros sintéticos de los niveles escasos, solo en el entrenamiento. Vea <Entradas a={['smote']} />.
           </Def>
-          <Def t="Buscar los parámetros del AG">Prueba población, cruce y mutación antes de prescribir; tarda más.</Def>
         </Defs>
       </Bloque>
 
@@ -666,27 +628,27 @@ function Paso3() {
             <T a="division-agrupada">Agrupada por perfil</T> (recomendada) o <T a="division-aleatoria">aleatoria</T>.
           </Def>
           <Def t="Datos de prueba (%)">
-            Proporción de registros que se reserva para la <T a="entrenamiento-prueba">prueba</T>: de 10 a 50, de 5 en 5; 30 en los dos perfiles, como en
+            Proporción de registros que se reserva para la <T a="entrenamiento-prueba">prueba</T>: de 10 a 50, de 5 en 5; 30 por defecto, como en
             los artículos.
           </Def>
           <Def t="Penalización del esfuerzo (β)">
-            De 0 a 5. El perfil mejorado usa 0,4, que da cambios moderados y distintos para cada estudiante; el del artículo, 0, que solo mira la meta.
+            De 0 a 5. Por defecto 0,4, que da cambios moderados y distintos para cada estudiante; 0, como en el artículo, solo mira la meta y
             0,05 busca el máximo efecto. Vea <Entradas a={['beta']} />.
           </Def>
           <Def t="Cambio máximo por acción">
             Fracción del rango de cada acción, de 0 a 1. Vacío: sin límite. Vea <Entradas a={['cambio-maximo']} />.
           </Def>
           <Def t="Permitir recomendar valores menores que los actuales">
-            Sin marcar, el AG solo mantiene o aumenta las acciones. Marcada por defecto en el perfil del artículo. Vea <Entradas a={['permitir-reducciones']} />.
+            Sin marcar (por defecto), el AG solo mantiene o aumenta las acciones. Vea <Entradas a={['permitir-reducciones']} />.
           </Def>
           <Def t="Meta escalonada: cada registro apunta al nivel siguiente al suyo">
-            Marcada por defecto en el perfil mejorado: un registro en L apunta a M y uno en M, a H, en vez de saltar al mejor nivel. Sin marcar (perfil del
-            artículo), todos apuntan al mejor. Con un objetivo de dos niveles no cambia nada. Vea <Entradas a={['meta-escalonada']} />.
+            Marcada por defecto: un registro en L apunta a M y uno en M, a H, en vez de saltar al mejor nivel. Sin marcar, todos apuntan al
+            mejor, como en el artículo. Con un objetivo de dos niveles no cambia nada. Vea <Entradas a={['meta-escalonada']} />.
           </Def>
           <Def t="Algoritmo genético y semilla">
             Apartado plegable. <T a="poblacion">Población</T> (50), <T a="generacion">Generaciones</T> (100), <T a="cruce">Tasa de cruce</T> (0,9),{' '}
-            <T a="mutacion">Tasa de mutación</T> (0,25), tipo de cruce (Uniforme o Un punto) y <T a="semilla" /> (42); son los valores del perfil mejorado.
-            Un campo vacío usa el del perfil.
+            <T a="mutacion">Tasa de mutación</T> (0,25), tipo de cruce (Uniforme o Un punto) y <T a="semilla" /> (42); son los valores por defecto.
+            Un campo vacío usa el valor por defecto.
           </Def>
         </Defs>
       </Bloque>
@@ -974,28 +936,6 @@ function Paso5() {
         </Lista>
       </Bloque>
 
-      <Bloque id="paso-5-validacion" titulo="Validación según el artículo">
-        <p>
-          El protocolo de <T a="reconstruccion">reconstrucción</T> de Hoyos, Aguilar y Toro (2023): qué tan cerca quedan las acciones prescritas de las
-          reales en los registros de prueba. La descripción da la <T a="psr-ec19">PSR de la ecuación 19</T>, un cociente que el artículo espera menor que 1;
-          si sale mayor, un aviso lo señala.
-        </p>
-        <Defs>
-          <Def t="Tabla 11">
-            MAE, MSE, RMSE y <T a="r2">R²</T> por acción y en total («Global»).
-          </Def>
-          <Def t="Tabla 12">
-            Media ± desviación real y prescrita y el valor p. † es Wilcoxon y ⋆ es t de Student; la prueba se elige con <T a="lilliefors" />. Con p mayor que
-            0,05 se lee «sin diferencia significativa». Vea <Entradas a={['prueba-t-wilcoxon']} />.
-          </Def>
-        </Defs>
-        <p>
-          Un R² negativo o una PSR mayor que 1 no indican un error de la aplicación: muchas combinaciones de acciones llevan al mismo estado, así que la
-          prescripción no tiene por qué parecerse a las acciones observadas.
-        </p>
-        <p>Los modelos entrenados antes de esta versión no traen la validación; vuelva a entrenarlos para verla.</p>
-      </Bloque>
-
       <Bloque id="paso-5-figuras" titulo="Figuras del informe">
         <Lista>
           <li>«Grafo del mapa cognitivo»: el mapa como <T a="grafo">grafo dirigido</T>, dibujado con NetworkX y matplotlib.</li>
@@ -1023,7 +963,7 @@ function Consulta() {
       <Bloque id="consulta-elegir" titulo="Elegir el tema y el modelo">
         <p>
           <T a="consulta">Consulta</T> es para quien recibe las recomendaciones, no para quien entrena el modelo. «Modelo» lista los modelos listos de todos
-          los datasets: el nombre del dataset es el tema, seguido de la fecha, el perfil y el método. Al elegir uno se muestran el objetivo con sus niveles y
+          los datasets: el nombre del dataset es el tema, seguido de la fecha y el método. Al elegir uno se muestran el objetivo con sus niveles y
           las acciones que puede prescribir. Funciona con cualquier dataset, no solo con el de estudiantes.
         </p>
       </Bloque>
@@ -1311,16 +1251,6 @@ function Formulas() {
         <Formula lectura="BPTT: error cuadrático ponderado del objetivo tras 30 iteraciones más la penalización L2, que incluye el sesgo; L-BFGS-B mantiene cada peso y cada sesgo en [−1, 1].">
           L(W, b) = media_r [ v_r · (A_T,r − y_r)² ] + α · (Σ w² + Σ b²)
         </Formula>
-        <Formula lectura="Ridge y Lasso: z es lo que deben sumar la influencia y el sesgo para que el valor observado y sea un punto fijo de la regla; y se recorta antes a [0,05; 0,95].">
-          z = ( logit(y)/λ − k2·y ) / k1 ≈ Σ_j w_ji·x_j + c
-        </Formula>
-        <Formula lectura="Penalizaciones: Ridge (L2) y Lasso (L1); el intercepto c no se penaliza; n es el número de registros.">
-          Ridge: ‖z − X·w − c‖² + α·n·‖w‖²     Lasso: ‖z − X·w − c‖² / (2n) + α·‖w‖₁
-        </Formula>
-        <Formula lectura="Truncamiento de los coeficientes y del intercepto de la regresión al rango de un peso: el intercepto truncado es el sesgo.">
-          w_ji = tanh(β_j) ∈ (−1, 1),   b_i = tanh(c)
-        </Formula>
-        <Formula lectura="Correlación parcial: P es la inversa de la matriz de covarianzas, con contracción de Ledoit-Wolf. No tiene sesgo (b = 0).">w_ji = −P_ji / √(P_jj · P_ii)</Formula>
         <Formula lectura="Pesos de los registros al equilibrar los niveles: n registros, k niveles y n_nivel registros del nivel del registro.">
           v_r = n / (k · n_nivel), con media 1
         </Formula>
@@ -1345,8 +1275,7 @@ function Formulas() {
         <Formula lectura="Errores respecto a la meta, entre los N estudiantes prescritos.">
           MAE = media |A*_T − D_T|     MSE = media (A*_T − D_T)²     RMSE = √MSE
         </Formula>
-        <Formula lectura="Tasa de éxito prescriptivo (PSR en las métricas del motor). La PSR de la ecuación 19 del artículo es otra cifra.">tasa de éxito = 100 · (estudiantes con éxito) / N</Formula>
-        <Formula lectura="Coeficiente de determinación de una acción en la validación del artículo: y real, ŷ prescrito.">R² = 1 − Σ (y − ŷ)² / Σ (y − ȳ)²</Formula>
+        <Formula lectura="Tasa de éxito prescriptivo (PSR en las métricas del motor); no es la PSR de la ecuación 19 del artículo.">tasa de éxito = 100 · (estudiantes con éxito) / N</Formula>
         <Formula lectura="Exactitud: niveles acertados sobre registros de prueba.">exactitud = aciertos / registros</Formula>
         <Formula lectura="Precisión y recall de un nivel.">
           precisión = aciertos del nivel / predichos en el nivel     recall = aciertos del nivel / reales del nivel
@@ -1400,7 +1329,7 @@ function Problemas() {
       <Bloque id="problemas-modelo" titulo="Entrenamiento y calidad">
         <Defs>
           <Def t="El entrenamiento tarda mucho">
-            Use la validación «Rápida» o un método de regresión (Ridge o Lasso). La completa con BPTT tarda unos segundos con los 480 registros de xAPI, y
+            Use la validación «Rápida» o BPTT en lugar de PSO. La completa con BPTT tarda unos segundos con los 480 registros de xAPI, y
             minutos con datasets grandes.
           </Def>
           <Def t="El modelo casi siempre predice el nivel frecuente">

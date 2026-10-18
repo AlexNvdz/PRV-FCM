@@ -20,13 +20,11 @@ Uso:
     python main.py --sin-cv --lambda 1 --alpha-l2 0.001    # sin validación cruzada
     python main.py --division aleatoria                    # división sin agrupar (ver README)
     python main.py --cruce un_punto --tasa-mutacion 0.3 --beta 0.1
-    python main.py --metodo-pesos ridge                    # pesos por regresión Ridge (también lasso, correlacion_parcial)
+    python main.py --metodo-pesos pso                      # pesos por enjambre de partículas (por defecto, BPTT)
     python main.py --excluir gender Class                  # máscara causal: sin la arista gender -> Class
     python main.py --sin-sesgo                             # regla sin sesgo b_i
     python main.py --sin-tope-ausentismo                   # sin el tope de acciones con más de 7 ausencias
-    python main.py --perfil articulo --datos data/xAPI-Edu-Data.csv --binarizar-objetivo M   # como PRV-FCM (2023)
     python main.py --esquema app/almacen/modelos/<id>/esquema.json --datos data/heart.csv --permitir-reducciones
-    python experimentos.py                                 # ablación de perfiles y métodos (resultados_experimentos/)
     python main.py --help
 """
 from __future__ import annotations
@@ -38,12 +36,11 @@ from pathlib import Path
 
 import numpy as np
 
-from prvfcm.configuracion import ESQUEMA_XAPI, LAMBDA_ARTICULO, PERFILES
+from prvfcm.configuracion import ESQUEMA_XAPI, LAMBDA_ARTICULO
 from prvfcm.esquema import esquema_desde_dict, segmento_desde_dict
 from prvfcm.fcm import ACTIVACIONES, INFERENCIAS, METODOS_PESOS
 from prvfcm.genetico import TIPOS_CRUCE
 from prvfcm.pipeline import SEGMENTO_AUSENTISMO, OpcionesPipeline, ResultadoPipeline, Segmento, ejecutar, opciones_desde_dict
-from prvfcm.prescripcion import APTITUDES
 from prvfcm.seleccion import combinaciones
 from prvfcm.preprocesamiento import cargar_datos, etiquetas_objetivo
 from prvfcm import visualizacion
@@ -52,7 +49,7 @@ RAIZ = Path(__file__).resolve().parent
 
 
 def parsear_argumentos() -> argparse.Namespace:
-    """Argumentos de la línea de comandos. Las opciones del modelo valen None si no se dan: entonces manda el perfil."""
+    """Argumentos de la línea de comandos. Las opciones del modelo valen None si no se dan: entonces valen las de por defecto."""
     parser = argparse.ArgumentParser(description="PRV-FCM: prescripción de acciones para el rendimiento académico.")
     parser.add_argument(
         "--datos", type=Path, default=RAIZ / "data" / "xAPI-Edu-Data.csv", help="ruta del CSV"
@@ -62,10 +59,6 @@ def parsear_argumentos() -> argparse.Namespace:
         help="esquema JSON de otro dataset (formato de la aplicación, por ejemplo app/almacen/modelos/<id>/esquema.json); por defecto, xAPI-Edu-Data",
     )
     parser.add_argument("--salida", type=Path, default=RAIZ / "resultados", help="carpeta de resultados")
-    parser.add_argument(
-        "--perfil", choices=tuple(PERFILES), default="mejorado",
-        help="mejorado (este proyecto) o articulo (PRV-FCM 2023: PSO, sin sesgo, SMOTE, 10 pliegues); las opciones explícitas mandan",
-    )
     parser.add_argument("--semilla", type=int, help="semilla aleatoria (42)")
     parser.add_argument("--prueba", type=float, help="proporción del conjunto de prueba (0.3)")
     parser.add_argument(
@@ -80,9 +73,8 @@ def parsear_argumentos() -> argparse.Namespace:
     grupo = parser.add_argument_group("FCM")
     grupo.add_argument(
         "--metodo-pesos", choices=METODOS_PESOS,
-        help="extracción de W: bptt (gradiente exacto), ridge, lasso, correlacion_parcial, pso o expertos (con --expertos)",
+        help="extracción de W: bptt (gradiente exacto, recomendado) o pso (enjambre de partículas)",
     )
-    grupo.add_argument("--expertos", type=Path, help="JSON con las matrices de expertos [{experto, aristas: [{origen, destino, peso}]}]")
     grupo.add_argument("--inferencia", choices=INFERENCIAS, help="regla de inferencia (Tabla 2 de PRV-FCM)")
     grupo.add_argument("--activacion", choices=ACTIVACIONES, help="función de activación")
     grupo.add_argument(
@@ -103,7 +95,7 @@ def parsear_argumentos() -> argparse.Namespace:
     )
     grupo = parser.add_argument_group("Validación cruzada")
     grupo.add_argument("--sin-cv", dest="validacion_cruzada", action="store_const", const=False, help="usa --lambda y --alpha-l2")
-    grupo.add_argument("--pliegues", type=int, help="número de pliegues (5; 10 en el perfil articulo)")
+    grupo.add_argument("--pliegues", type=int, help="número de pliegues (5)")
     grupo.add_argument("--rejilla-lambda", type=float, nargs="+", help="valores de lambda")
     grupo.add_argument("--rejilla-alpha", type=float, nargs="+", help="valores de alpha_l2")
     grupo = parser.add_argument_group("Algoritmo genético")
@@ -115,14 +107,12 @@ def parsear_argumentos() -> argparse.Namespace:
     grupo.add_argument("--tasa-mutacion", type=float, help="probabilidad por gen")
     grupo.add_argument("--sigma-mutacion", type=float, help="fracción del rango del gen")
     grupo.add_argument("--elitismo", type=int)
-    grupo.add_argument("--busqueda-ag", action="store_true", default=None, help="búsqueda aleatoria de los hiperparámetros del AG")
     grupo = parser.add_argument_group("Prescripción")
     grupo.add_argument("--beta", type=float, help="penalización del esfuerzo (0.4)")
     grupo.add_argument("--delta-max", type=float, help="cambio máximo por acción (0-1)")
     grupo.add_argument("--permitir-reducciones", action="store_true", default=None, help="permite recomendar valores menores a los actuales")
     grupo.add_argument("--tope-ausentismo", type=float, help="subida máxima por acción (0-1) si StudentAbsenceDays = Above-7 (0.15)")
     grupo.add_argument("--sin-tope-ausentismo", action="store_true", help="no limita las acciones con ausentismo alto")
-    grupo.add_argument("--aptitud", choices=APTITUDES, help="error (defecto), tabla4 (PRV-FCM) o garcia2025")
     grupo.add_argument("--sin-meta-escalonada", action="store_true", help="todos apuntan al mejor nivel, no al siguiente al suyo")
     parser.add_argument("--sin-graficas", action="store_true", help="no genera las figuras PNG")
     return parser.parse_args()
@@ -134,13 +124,13 @@ def titulo(texto: str) -> None:
 
 # Argumento de main.py -> clave de pipeline.opciones_desde_dict.
 CLAVES = {
-    "perfil": "perfil", "semilla": "semilla", "prueba": "proporcion_prueba", "division": "division",
+    "semilla": "semilla", "prueba": "proporcion_prueba", "division": "division",
     "binarizar_objetivo": "binarizar_objetivo", "smote": "smote", "metodo_pesos": "metodo_pesos",
     "inferencia": "inferencia", "activacion": "activacion", "sesgo": "sesgo", "equilibrar_niveles": "balancear_niveles",
     "lambda_": "lambda", "alpha_l2": "alpha_l2", "tolerancia": "tolerancia", "mutables_dinamicos": "mutables_dinamicos",
     "validacion_cruzada": "validacion_cruzada", "pliegues": "pliegues", "rejilla_lambda": "rejilla_lambda",
-    "rejilla_alpha": "rejilla_alpha", "busqueda_ag": "busqueda_ag", "beta": "beta", "delta_max": "delta_max",
-    "permitir_reducciones": "permitir_reducciones", "tope_ausentismo": "condicion_delta_max", "aptitud": "aptitud",
+    "rejilla_alpha": "rejilla_alpha", "beta": "beta", "delta_max": "delta_max",
+    "permitir_reducciones": "permitir_reducciones", "tope_ausentismo": "condicion_delta_max",
 }
 CLAVES_AG = {
     "poblacion": "tam_poblacion", "generaciones": "generaciones", "torneo": "tam_torneo", "cruce": "tipo_cruce",
@@ -149,7 +139,7 @@ CLAVES_AG = {
 
 
 def opciones_desde_argumentos(args: argparse.Namespace, segmento: Segmento | None = SEGMENTO_AUSENTISMO) -> OpcionesPipeline:
-    """Solo los argumentos dados pasan a ``opciones_desde_dict``: el resto lo pone el perfil."""
+    """Solo los argumentos dados pasan a ``opciones_desde_dict``: el resto toma su valor por defecto."""
     datos = {clave: getattr(args, arg) for arg, clave in CLAVES.items() if getattr(args, arg) is not None}
     ag = {clave: getattr(args, arg) for arg, clave in CLAVES_AG.items() if getattr(args, arg) is not None}
     if ag:
@@ -160,8 +150,6 @@ def opciones_desde_argumentos(args: argparse.Namespace, segmento: Segmento | Non
         datos["condicion_delta_max"] = None
     if args.sin_meta_escalonada:
         datos["meta_escalonada"] = False
-    if args.expertos:
-        datos["matrices_expertos"] = json.loads(args.expertos.read_text(encoding="utf-8"))
     return opciones_desde_dict(datos, segmento)
 
 
@@ -188,7 +176,7 @@ def imprimir_preprocesamiento(r: ResultadoPipeline) -> None:
     if r.n_sinteticos:
         print(f"SMOTE: {r.n_sinteticos} registros sintéticos en el entrenamiento (la prueba no cambia).")
 
-    titulo(f"2. INFERENCIA DIFUSA (FCM; perfil {r.opciones.perfil})")
+    titulo(f"2. INFERENCIA DIFUSA (FCM; pesos por {r.opciones.config_fcm.metodo_pesos.upper()})")
     if r.opciones.validacion_cruzada:
         sel = r.opciones.config_seleccion
         print(
@@ -209,9 +197,8 @@ def imprimir_seleccion(r: ResultadoPipeline) -> None:
     print(vista.to_string(index=False, float_format=lambda v: f"{v:.4g}"))
     mejor = tabla.iloc[0]
     equilibrada = f", equilibrada {100 * mejor['exactitud_equilibrada']:.1f}%" if "exactitud_equilibrada" in mejor else ""
-    regla = f"{r.config_fcm.inferencia} con {r.config_fcm.activacion}, " if "inferencia" in mejor else ""
     print(
-        f"Elegido: {regla}lambda = {r.config_fcm.lambda_:g}, alpha_l2 = {r.config_fcm.alpha_l2:g} "
+        f"Elegido: lambda = {r.config_fcm.lambda_:g}, alpha_l2 = {r.config_fcm.alpha_l2:g} "
         f"(exactitud de validación {100 * mejor['exactitud']:.1f}% ± {100 * mejor['exactitud_de']:.1f}{equilibrada})"
     )
 
@@ -236,16 +223,12 @@ def imprimir_fcm(r: ResultadoPipeline) -> None:
             f"Pesos aprendidos: {int(fcm.estructura.sum())} aristas | L-BFGS-B: {fcm.resultado_optimizacion.nit} iteraciones, "
             f"pérdida final {fcm.resultado_optimizacion.fun:.4f}"
         )
-    elif config.metodo_pesos == "pso":
+    else:
         print(
             f"Pesos por PSO: {int(fcm.estructura.sum())} aristas | {len(fcm.historial_perdida) - 1} iteraciones "
             f"(inercia {config.pso_inercia:g}, c1 {config.pso_c1:g}, c2 {config.pso_c2:g}), "
             f"pérdida {fcm.historial_perdida[0]:.4f} -> {fcm.historial_perdida[-1]:.4f}"
         )
-    elif config.metodo_pesos == "expertos":
-        print(f"Pesos de {len(r.opciones.matrices_expertos)} expertos (media aritmética): {int(fcm.estructura.sum())} aristas posibles")
-    else:
-        print(f"Pesos por {config.metodo_pesos}: {int(fcm.estructura.sum())} aristas, truncados a [-1, 1]")
     estado = "converge" if prediccion["convergio"] else "NO converge"
     print(f"Inferencia en prueba: {estado} en {prediccion['iteraciones_inferencia']} iteraciones (tolerancia {config.tolerancia:g})")
     print("Calidad predictiva de los conceptos dinámicos (conjunto de prueba):")
@@ -270,13 +253,7 @@ def imprimir_inicio_prescripcion(r: ResultadoPipeline) -> None:
     titulo("3. OPTIMIZACIÓN PRESCRIPTIVA (algoritmo genético)")
     ag, presc = r.config_ag, r.config_prescripcion
     print(f"Cromosoma: {[r.pre.columnas[i] for i in r.pre.indices_accion]} (genes reales en [0, 1])")
-    print(
-        f"Estado deseado: {presc.estado_deseado} | aptitud {presc.aptitud} | beta (esfuerzo) = {presc.beta_esfuerzo:g} | "
-        f"{'acciones actuales sembradas' if presc.sembrar else 'sin siembra'}"
-    )
-    if r.busqueda_ag is not None:
-        print("Búsqueda aleatoria del AG (MAE de reconstrucción en entrenamiento):")
-        print(r.busqueda_ag.to_string(index=False, float_format=lambda v: f"{v:.4g}"))
+    print(f"Estado deseado: {presc.estado_deseado} | beta (esfuerzo) = {presc.beta_esfuerzo:g} | acciones actuales sembradas")
     if r.prescriptor.indice_condicion is not None:
         print(f"Tope con {presc.condicion_columna} activo: cada acción sube como máximo {presc.condicion_delta_max:g}")
     print(
@@ -334,28 +311,6 @@ def imprimir_evaluacion(r: ResultadoPipeline) -> None:
                 f"    Rendimiento FCM:   {fila[f'{objetivo}_fcm_base']:.3f} ({fila['nivel_base']}) -> "
                 f"{fila[f'{objetivo}_fcm_prescrito']:.3f} ({fila['nivel_prescrito']})"
             )
-    imprimir_reconstruccion(r)
-
-
-def imprimir_reconstruccion(r: ResultadoPipeline) -> None:
-    """Protocolo de PRV-FCM: acciones prescritas frente a las reales de quienes ya están en el mejor nivel."""
-    rec = r.reconstruccion
-    if rec is None:
-        return
-    g = rec["global"]
-    print(
-        f"\nReconstrucción de acciones ({rec['n']} registros de prueba en {r.esquema.mejor_nivel}; AG sin siembra y "
-        f"beta = 0; escala [0, 1]): MAE {g['mae']:.4f} | MSE {g['mse']:.4f} | RMSE {g['rmse']:.4f} | "
-        f"R² {g['r2'] if g['r2'] is None else round(g['r2'], 3)} | PSR ec. 19 {g['psr_ec19']:.3f}"
-    )
-    for a in rec["por_accion"]:
-        p = "-" if a["p"] is None else f"{a['p']:.3f} ({a['prueba']})"
-        print(
-            f"  {a['columna']:<18} MAE {a['mae']:.4f} RMSE {a['rmse']:.4f} | real {a['media_real']:.3f} ± {a['de_real']:.3f} | "
-            f"prescrita {a['media_prescrita']:.3f} ± {a['de_prescrita']:.3f} | p = {p}"
-        )
-    for aviso in rec["avisos"]:
-        print(f"  Aviso: {aviso}")
 
 
 IMPRESORES = {

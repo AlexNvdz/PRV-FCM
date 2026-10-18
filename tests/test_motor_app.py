@@ -373,12 +373,12 @@ def test_one_hot_no_se_permite_en_acciones_ni_con_una_categoria():
     assert "acción" in texto and "categorías" in texto
 
 
-def test_pipeline_con_one_hot_metodo_ridge_y_mascara(tmp_path):
+def test_pipeline_con_one_hot_y_mascara(tmp_path):
     ruta = tmp_path / "datos.csv"
     dataset_desercion(700).to_csv(ruta, index=False)
     objeto = esquema_desde_dict(esquema_one_hot())
     opciones = OpcionesPipeline(
-        validacion_cruzada=False, config_ag=AG_RAPIDO, config_fcm=ConfigFCM(metodo_pesos="ridge"),
+        validacion_cruzada=False, config_ag=AG_RAPIDO,
         aristas_excluidas=(("genero=F", "desercion"), ("genero=M", "desercion")),
     )
     r = ejecutar(cargar_datos(ruta, objeto), objeto, opciones)
@@ -386,7 +386,7 @@ def test_pipeline_con_one_hot_metodo_ridge_y_mascara(tmp_path):
     assert r.fcm.pesos[r.pre.indice("genero=F"), objetivo] == 0 and not r.fcm.estructura[r.pre.indice("genero=M"), objetivo]
     assert r.fcm.pesos[r.pre.indice("tutorias"), objetivo] > 0  # Más tutorías, menos deserción.
     assert r.reporte()["configuracion"]["aristas_excluidas"] == [["genero=F", "desercion"], ["genero=M", "desercion"]]
-    assert r.reporte()["configuracion"]["fcm"]["metodo_pesos"] == "ridge"
+    assert r.reporte()["configuracion"]["fcm"]["metodo_pesos"] == "bptt"
     with pytest.raises(ValueError, match="no son conceptos"):
         ejecutar(cargar_datos(ruta, objeto), objeto, OpcionesPipeline(validacion_cruzada=False, aristas_excluidas=(("nada", "desercion"),)))
 

@@ -2,9 +2,7 @@
 
 export type Rol = 'inmutable' | 'accion' | 'mutable' | 'objetivo' | 'excluir';
 export type Codificacion = 'numerica' | 'ordinal' | 'nominal' | 'one_hot' | 'numero_en_texto' | 'fecha';
-export type MetodoPesos = 'bptt' | 'ridge' | 'lasso' | 'correlacion_parcial' | 'pso' | 'expertos';
-/** «articulo»: el protocolo exacto de los artículos base; «mejorado»: sesgo, β = 0.4 y tope por ausentismo. */
-export type PerfilModelo = 'articulo' | 'mejorado';
+export type MetodoPesos = 'bptt' | 'pso';
 export type ReglaInferencia = 'kosko' | 'kosko_modificada' | 'reescalada';
 export type Activacion = 'sigmoide' | 'tanh';
 export type MetodoCorrelacion = 'spearman' | 'pearson' | 'parcial';
@@ -91,7 +89,7 @@ export interface Perfil {
 
 export type EventoMotor =
   | { evento: 'etapa'; etapa: string; mensaje: string }
-  | { evento: 'progreso'; tarea: 'validacion_cruzada' | 'busqueda_ag' | 'prescripcion' | 'reconstruccion'; hechos: number; total: number }
+  | { evento: 'progreso'; tarea: 'validacion_cruzada' | 'prescripcion'; hechos: number; total: number }
   | { evento: 'fin'; mensaje: string }
   | { evento: 'error'; mensaje: string };
 
@@ -213,8 +211,6 @@ export interface Metricas {
       coef_memoria?: number;
       coef_influencia?: number;
     };
-    /** Falta en modelos anteriores a los perfiles (equivale a «mejorado»). */
-    perfil?: PerfilModelo;
     ag: Record<string, number | string>;
     prescripcion: {
       beta_esfuerzo: number;
@@ -258,8 +254,6 @@ export interface Metricas {
     metas?: Record<string, number>;
   };
   exito_por_segmento: Record<string, { n: number; PSR_base: number; PSR: number }>;
-  /** Validación del artículo (Tablas 11 y 12): qué tan cerca quedan las acciones prescritas de las reales. Falta en modelos viejos. */
-  reconstruccion?: Reconstruccion;
   validacion_externa: {
     exactitud_prueba: number;
     PSR_externo_base: number;
@@ -268,35 +262,6 @@ export interface Metricas {
     prob_H_prescrita: number;
     por_segmento: Record<string, { n: number; PSR_externo_base: number; PSR_externo: number }>;
   };
-}
-
-export interface MetricasError {
-  mae: number;
-  mse: number;
-  rmse: number;
-  r2: number | null;
-}
-
-export interface Reconstruccion {
-  n: number;
-  /** psr_ec19: PSR de la ecuación 19 del artículo. */
-  global: MetricasError & { psr_ec19: number };
-  por_accion: (MetricasError & {
-    columna: string;
-    nombre: string;
-    media_real: number;
-    de_real: number;
-    media_prescrita: number;
-    de_prescrita: number;
-    /** Normalidad por Lilliefors en cada grupo; decide la prueba. */
-    normal_real: boolean;
-    normal_prescrita: boolean;
-    /** null solo con menos de 3 registros. */
-    prueba: 't' | 'wilcoxon' | null;
-    p: number | null;
-  })[];
-  /** Advertencias del motor, por ejemplo una PSR ec. 19 mayor que 1 (no se recorta). */
-  avisos?: string[];
 }
 
 export interface ConceptoGrafo {
@@ -513,8 +478,6 @@ export interface ModeloListo {
   tema: string;
   creado: string;
   opciones: Record<string, unknown>;
-  /** Los del perfil «articulo» llegan al final de la lista. */
-  perfil: PerfilModelo;
 }
 
 /** Resultado observado tras aplicar una prescripción (seguimiento.jsonl del modelo). */
@@ -564,17 +527,11 @@ export interface EstadoServicios {
   modelo: string;
 }
 
-/** Matriz de un experto (método «expertos»): aristas con nombres de concepto, como en /estructura. */
-export interface MatrizExperto {
-  experto: string;
-  aristas: { origen: string; destino: string; peso: number }[];
-}
-
-/** Lo que fija un perfil de entrenamiento (GET /api/perfiles). Las claves extra del motor se muestran tal cual. */
-export interface DefectosPerfil {
+/** Valores por defecto del motor (GET /api/opciones). Las claves extra del motor se muestran tal cual. */
+export interface OpcionesPorDefecto {
   metodo_pesos: MetodoPesos;
-  inferencia?: ReglaInferencia | null;
-  activacion?: Activacion | null;
+  inferencia: ReglaInferencia;
+  activacion: Activacion;
   sesgo?: boolean;
   beta: number;
   condicion_delta_max?: number | null;
@@ -585,28 +542,22 @@ export interface DefectosPerfil {
   binarizar_objetivo?: string | number | null;
   proporcion_prueba: number;
   pliegues: number;
-  busqueda_ag: boolean;
   [clave: string]: unknown;
 }
 
-export type Perfiles = Record<PerfilModelo, DefectosPerfil>;
-
-/** Opciones que dependen del perfil: sin valor, el motor usa la del perfil elegido. */
-export type OpcionDePerfil = 'proporcion_prueba' | 'pliegues' | 'metodo_pesos' | 'inferencia' | 'activacion' | 'beta' | 'permitir_reducciones' | 'meta_escalonada' | 'smote' | 'busqueda_ag' | 'binarizar_objetivo';
+/** Opciones sin valor por defecto en el servidor: sin valor, el motor usa la de GET /api/opciones. */
+export type OpcionPorDefecto = 'proporcion_prueba' | 'pliegues' | 'metodo_pesos' | 'inferencia' | 'activacion' | 'beta' | 'permitir_reducciones' | 'meta_escalonada' | 'smote' | 'binarizar_objetivo';
 
 export interface OpcionesEntrenamiento {
-  perfil: PerfilModelo;
   proporcion_prueba?: number;
   division: 'agrupada' | 'aleatoria';
   validacion_cruzada: 'completa' | 'rapida' | 'ninguna';
   pliegues?: number;
   metodo_pesos?: MetodoPesos;
-  matrices_expertos?: MatrizExperto[];
   inferencia?: ReglaInferencia;
   activacion?: Activacion;
   binarizar_objetivo?: string | number | null;
   smote?: boolean;
-  busqueda_ag?: boolean;
   balancear_niveles: boolean;
   aristas_excluidas: [string, string][];
   lambda: number;

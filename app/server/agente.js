@@ -10,7 +10,7 @@ import { chatJson, chatStream } from './ollama.js';
 import { definicionesHerramientas, ejecutarHerramienta } from './herramientas.js';
 import { sujetoDe } from './sujeto.js';
 
-const NOMBRE_METODO = { bptt: 'BPTT (gradiente exacto)', ridge: 'regresión Ridge', lasso: 'regresión Lasso', correlacion_parcial: 'correlación parcial' };
+const NOMBRE_METODO = { bptt: 'BPTT (gradiente exacto)', pso: 'PSO (enjambre de partículas)' };
 
 export const MAX_RONDAS = 5;
 
@@ -183,12 +183,11 @@ export function describirContexto({ dataset, modelo, resultados, sujeto }) {
   lineas.push(
     `- Niveles del modelo, del peor al mejor: ${nivelesModelo.join(', ')}. Los argumentos nivel y nivel_meta usan estos nombres exactos; resumen_prescripciones solo tiene registros de ${(metricas.configuracion.prescripcion?.clases_a_prescribir ?? nivelesModelo.slice(0, -1)).join(', ')}.`,
     `- Modelo PRV-FCM entrenado con ${metricas.configuracion.n_entrenamiento} registros; pesos por ${metodo}${metricas.configuracion.fcm.balancear_niveles ? ' con niveles equilibrados' : ''} (λ = ${metricas.configuracion.fcm.lambda_})${excluidas ? `, con ${excluidas} aristas excluidas por la máscara causal` : ''}; exactitud en prueba ${(100 * pred.exactitud_rendimiento).toFixed(1)} % (equilibrada ${(100 * equilibrada).toFixed(1)} %).`,
-    `- Prescripción para ${presc.n_estudiantes} ${s.plural} de prueba fuera del mejor nivel: llegan al mejor nivel ${presc.PSR_base.toFixed(1)} % con sus acciones actuales y ${presc.PSR.toFixed(1)} % con las prescritas según el FCM; un bosque aleatorio independiente lo confirma para ${ext.PSR_externo_base.toFixed(1)} % → ${ext.PSR_externo.toFixed(1)} %.`,
+    `- Prescripción para ${presc.n_estudiantes} ${s.plural} de prueba fuera del mejor nivel: llegan a su nivel meta (el siguiente al suyo si la meta es escalonada) ${presc.PSR_base.toFixed(1)} % con sus acciones actuales y ${presc.PSR.toFixed(1)} % con las prescritas según el FCM; un bosque aleatorio independiente lo confirma para ${ext.PSR_externo_base.toFixed(1)} % → ${ext.PSR_externo.toFixed(1)} %.`,
     `- Signo de los pesos: positivo = al aumentar la variable ${s.el} ${s.singular} se acerca a ${graficas.mejor_nivel} (mejor nivel); negativo = se aleja.`,
     `- Peso de cada acción (lo único que el AG cambia): ${formatearPesos(graficas.influencias.filter((i) => i.rol === 'accion'), graficas.mejor_nivel)}.`,
     `- Otras influencias fuertes, no controlables directamente: ${formatearPesos(graficas.influencias.filter((i) => i.rol !== 'accion').slice(0, 4), graficas.mejor_nivel)}.`,
-    describirPerfil(metricas.configuracion),
-    ...describirReconstruccion(metricas.reconstruccion),
+    describirRegla(metricas.configuracion),
     describirSesgo(resultados, s),
     ...describirRestriccion(metricas.configuracion.prescripcion, esquema, s),
     '- Las acciones y las variables mutables se pueden interpretar como asociaciones útiles; los pesos de variables inmutables (por ejemplo nacionalidad, género o grado) no son causas.',
@@ -198,26 +197,11 @@ export function describirContexto({ dataset, modelo, resultados, sujeto }) {
 
 const NOMBRE_INFERENCIA = { kosko: 'Kosko', kosko_modificada: 'Kosko modificada', reescalada: 'reescalada' };
 
-/** Perfil de entrenamiento (los modelos anteriores a los perfiles son «mejorado»). */
-export function describirPerfil(configuracion) {
-  const perfil = configuracion.perfil ?? 'mejorado';
+/** Regla de inferencia y activación del modelo (vacío en métricas antiguas sin ellas). */
+export function describirRegla(configuracion) {
   const { inferencia, activacion } = configuracion.fcm ?? {};
-  const regla = inferencia ? ` Regla de inferencia ${NOMBRE_INFERENCIA[inferencia] ?? inferencia} con activación ${activacion === 'tanh' ? 'tangente hiperbólica' : 'sigmoide'}.` : '';
-  return perfil === 'articulo'
-    ? `- Perfil de entrenamiento «artículo»: reproduce el protocolo de Hoyos, Aguilar y Toro (2023), sin sesgo ni tope por ausentismo.${regla}`
-    : `- Perfil de entrenamiento «mejorado»: el validado en este proyecto, con sesgo, planes moderados (β = 0.4) y tope por ausentismo.${regla}`;
-}
-
-/** Validación del artículo (Tablas 11 y 12): qué tan cerca quedan las acciones prescritas de las reales. */
-export function describirReconstruccion(reconstruccion) {
-  if (!reconstruccion?.por_accion?.length) return [];
-  const { n, global: g, por_accion: acciones } = reconstruccion;
-  const iguales = acciones.filter((a) => typeof a.p === 'number' && a.p > 0.05).map((a) => a.nombre);
-  const distintas = acciones.filter((a) => typeof a.p === 'number' && a.p <= 0.05).map((a) => a.nombre);
-  return [
-    `- Validación según el artículo con ${n} registros de prueba: PSR de la ecuación 19 ${g.psr_ec19.toFixed(3)} (cociente entre lo prescrito y lo real; el artículo espera menos de 1); error de reconstrucción de las acciones MAE ${g.mae.toFixed(3)}, RMSE ${g.rmse.toFixed(3)}${typeof g.r2 === 'number' ? `, R² ${g.r2.toFixed(2)}` : ''}. ` +
-      `Sin diferencia significativa entre lo real y lo prescrito (p > 0.05): ${iguales.join(', ') || 'ninguna acción'}. Con diferencia significativa: ${distintas.join(', ') || 'ninguna acción'}.`,
-  ];
+  if (!inferencia) return '';
+  return `- Regla de inferencia ${NOMBRE_INFERENCIA[inferencia] ?? inferencia} con activación ${activacion === 'tanh' ? 'tangente hiperbólica' : 'sigmoide'}.`;
 }
 
 /** Tope de las acciones por ausentismo (lista vacía si está desactivado, si la columna no existe o en métricas antiguas). */

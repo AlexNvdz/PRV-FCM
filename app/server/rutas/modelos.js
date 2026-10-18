@@ -87,24 +87,13 @@ const CuerpoRedactar = z.discriminatedUnion('tipo', [
   z.object({ tipo: z.literal('poblacion'), nivel: z.string().max(80).nullable().optional() }),
 ]);
 
-/** Modelos listos de todos los datasets, para /consulta: el nombre del dataset es el tema y los del perfil «articulo» van al final. */
+/** Modelos listos de todos los datasets, para /consulta: el nombre del dataset es el tema. */
 export async function modelosParaConsulta(almacen) {
   const [modelos, datasets] = await Promise.all([almacen.listarModelos(), almacen.listarDatasets()]);
   const nombres = new Map(datasets.map((d) => [d.id, d.nombre]));
-  const lista = await Promise.all(
-    modelos
-      .filter((m) => m.estado === 'listo' && nombres.has(m.datasetId))
-      .map(async ({ id, datasetId, creado, opciones }) => ({
-        id,
-        datasetId,
-        tema: nombres.get(datasetId),
-        creado,
-        opciones,
-        // Los modelos anteriores a los perfiles son «mejorado».
-        perfil: (await almacen.resultadosModelo(id)).metricas?.configuracion?.perfil ?? 'mejorado',
-      })),
-  );
-  return lista.sort((a, b) => Number(a.perfil === 'articulo') - Number(b.perfil === 'articulo'));
+  return modelos
+    .filter((m) => m.estado === 'listo' && nombres.has(m.datasetId))
+    .map(({ id, datasetId, creado, opciones }) => ({ id, datasetId, tema: nombres.get(datasetId), creado, opciones }));
 }
 
 export function rutasModelos({ almacen, motor, trabajos }) {

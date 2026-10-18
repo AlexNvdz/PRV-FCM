@@ -34,7 +34,6 @@ import numpy as np
 import pandas as pd
 
 from .api import PredictorFCM, PrescriptorAG
-from .configuracion import PERFILES
 from .esquema import (
     ESQUEMA_XAPI_DICT,
     ErrorEsquema,
@@ -56,15 +55,12 @@ from .perfilado import (
     perfil_base,
     perfilar,
 )
-from .pipeline import OpcionesPipeline, ResultadoPipeline, ejecutar, opciones_desde_dict as _opciones_pipeline, valores_de_perfil
+from .pipeline import OpcionesPipeline, ResultadoPipeline, ejecutar, opciones_desde_dict as _opciones_pipeline, valores_por_defecto
 from .preprocesamiento import Preprocesador, cargar_datos, etiquetas_objetivo, leer_csv, leer_excel
 from .reporte import numero, porcentaje, resumen_prescripciones
 
 VERSION_MOTOR = "1.2"
-NOMBRE_METODO = {
-    "bptt": "BPTT", "ridge": "Ridge", "lasso": "Lasso", "correlacion_parcial": "correlación parcial",
-    "pso": "PSO", "expertos": "la matriz de expertos",
-}
+NOMBRE_METODO = {"bptt": "BPTT", "pso": "PSO"}
 
 
 # ---------------------------------------------------------------------------
@@ -261,9 +257,9 @@ def m_prescribir_perfil(modelo: str, perfil: dict, beta: float | None = None, de
     return PrescriptorAG(_modelo(modelo)).prescribir(perfil, nivel_meta, beta, delta_max, permitir_reducciones, deseados=deseados)
 
 
-def m_perfiles() -> dict:
-    """Opciones de entrenamiento resueltas de cada perfil (inferencia y activación en None: las elige la grilla)."""
-    return {perfil: valores_de_perfil(perfil) for perfil in PERFILES}
+def m_opciones() -> dict:
+    """Opciones de entrenamiento con sus valores por defecto (los que muestra el paso 3)."""
+    return valores_por_defecto()
 
 
 def m_resumen_prescripciones(directorio: str, nivel: str | None = None) -> dict:
@@ -291,10 +287,8 @@ def m_modelo_info(modelo: str) -> dict:
         "metodo_pesos": m.fcm.config.metodo_pesos,
         "sesgo": m.fcm.config.sesgo,
         "sujeto": sujeto_a_dict(m.esquema.sujeto),
-        "perfil": m.perfil,
         "inferencia": m.fcm.config.inferencia,
         "activacion": m.fcm.config.activacion,
-        "expertos": m.expertos,
         "binarizar_objetivo": m.esquema.binarizar_objetivo,
         "conceptos": m.conceptos(),
         "aristas": m.aristas(),
@@ -306,8 +300,7 @@ def m_modelo_info(modelo: str) -> dict:
             "solo_incrementos": m.config_prescripcion.solo_incrementos,
             "condicion_columna": m.config_prescripcion.condicion_columna,
             "condicion_delta_max": m.config_prescripcion.condicion_delta_max,
-            "sembrar": m.config_prescripcion.sembrar,
-            "aptitud": m.config_prescripcion.aptitud,
+            "meta_escalonada": m.config_prescripcion.meta_escalonada,
         },
     }
 
@@ -337,7 +330,7 @@ METODOS: dict[str, Callable[..., dict]] = {
     "prescribir": m_prescribir,
     "prescribir_perfil": m_prescribir_perfil,
     "modelo_info": m_modelo_info,
-    "perfiles": m_perfiles,
+    "opciones": m_opciones,
     "recomendaciones": m_recomendaciones,
     "resumen_prescripciones": m_resumen_prescripciones,
 }
@@ -377,7 +370,7 @@ def worker() -> None:
 # Entrenamiento
 # ---------------------------------------------------------------------------
 def opciones_desde_dict(datos: dict, esquema_dict: dict) -> OpcionesPipeline:
-    """Opciones de la aplicación (JSON) -> ``OpcionesPipeline``: perfil, opciones explícitas y segmento del esquema."""
+    """Opciones de la aplicación (JSON) -> ``OpcionesPipeline``: valores por defecto, opciones explícitas y segmento del esquema."""
     return _opciones_pipeline(datos, segmento_desde_dict(esquema_dict.get("segmento")))
 
 
@@ -462,7 +455,6 @@ def entrenar(datos: Path, esquema: Path, opciones: Path | None, salida: Path) ->
             "mejor_nivel": r.esquema.mejor_nivel,
             "metodo_pesos": r.config_fcm.metodo_pesos,
             "sesgo": r.config_fcm.sesgo,
-            "perfil": r.opciones.perfil,
             "sujeto": sujeto_a_dict(r.esquema.sujeto),
             "inferencia": r.config_fcm.inferencia,
             "activacion": r.config_fcm.activacion,

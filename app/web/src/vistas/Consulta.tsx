@@ -10,8 +10,8 @@ import { api } from '../api';
 import { ResultadoPrescripcion } from '../componentes/prescripcion';
 import { Aviso, Boton, Cargando, Clase, Encabezado, estiloControl, NivelChip, Seccion, Vacio } from '../componentes/ui';
 import { nivelesDe, useDataset, useModelo } from '../hooks';
-import type { ColumnaEsquema, Dataset, Esquema, MetodoPesos, ModeloDetalle, ModeloListo, Prescripcion } from '../tipos';
-import { descargarCsv, esEscalonada, etiquetaAccion, fecha, mayuscula, NOMBRE_METODO, NOMBRE_PERFIL, NOMBRE_ROL, num, sujetoDe } from '../utilidades';
+import type { ColumnaEsquema, Dataset, Esquema, ModeloDetalle, ModeloListo, Prescripcion } from '../tipos';
+import { descargarCsv, esEscalonada, etiquetaAccion, fecha, mayuscula, NOMBRE_ROL, nombreMetodo, num, sujetoDe } from '../utilidades';
 import { Campo } from './PerfilRiesgo';
 
 type Valores = Record<string, string | number>;
@@ -402,17 +402,16 @@ export function Consulta() {
   const [params, setParams] = useSearchParams();
   const modelos = useQuery({ queryKey: ['modelos-listos'], queryFn: api.modelos });
   const lista = modelos.data ?? [];
-  // Sin elección, el primero del perfil «mejorado» (la lista los trae antes que los del artículo).
-  const modeloId = params.get('modelo') ?? lista.find((m) => m.perfil !== 'articulo')?.id ?? null;
+  // Sin elección, el primero de la lista.
+  const modeloId = params.get('modelo') ?? lista[0]?.id ?? null;
   const modelo = useModelo(modeloId);
   const dataset = useDataset(modelo.data?.datasetId);
   const opcion = (m: ModeloListo) => (
     <option key={m.id} value={m.id}>
-      {m.tema}: {fecha(m.creado)}, perfil {NOMBRE_PERFIL[m.perfil].toLowerCase()}
-      {m.opciones.metodo_pesos ? `, ${NOMBRE_METODO[m.opciones.metodo_pesos as MetodoPesos]}` : ''}
+      {m.tema}: {fecha(m.creado)}
+      {m.opciones.metodo_pesos ? `, ${nombreMetodo(String(m.opciones.metodo_pesos))}` : ''}
     </option>
   );
-  const experimentales = lista.filter((m) => m.perfil === 'articulo');
   const elegido = lista.find((m) => m.id === modeloId);
   const listo = modelo.data?.esquema && modelo.data.graficas;
 
@@ -435,15 +434,9 @@ export function Consulta() {
               <span className="text-tinta">Modelo</span>
               <select className={estiloControl} value={modeloId ?? ''} onChange={(e) => setParams(e.target.value ? { modelo: e.target.value } : {})}>
                 {!modeloId && <option value="">Elija un tema y un modelo</option>}
-                {lista.filter((m) => m.perfil !== 'articulo').map(opcion)}
-                {experimentales.length > 0 && <optgroup label="Solo para experimentos">{experimentales.map(opcion)}</optgroup>}
+                {lista.map(opcion)}
               </select>
             </label>
-          )}
-          {elegido?.perfil === 'articulo' && (
-            <Aviso tipo="aviso" className="mt-3 max-w-2xl">
-              Este modelo reproduce el artículo sin las mejoras: sus recomendaciones pueden ser extremas o ir en la dirección equivocada. Úselo para comparar, no para decidir.
-            </Aviso>
           )}
           {modelo.isLoading && <Cargando texto="Cargando el modelo…" />}
           {modelo.isError && <Aviso tipo="error">{modelo.error.message}</Aviso>}

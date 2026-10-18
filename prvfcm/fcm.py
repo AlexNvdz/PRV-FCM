@@ -39,21 +39,8 @@ estiman las aristas que permite la estructura (y la máscara causal opcional):
 * ``bptt`` (por defecto): minimiza el error cuadrático del estado final de la
   inferencia más una penalización L2, con gradiente exacto (BPTT) y L-BFGS-B
   con los pesos y los sesgos acotados a [-1, 1].
-* ``ridge`` y ``lasso``: regresión lineal regularizada, una por concepto
-  dinámico. Su valor observado y es un punto fijo de la regla si
-  sum_j w_ji A_j + b_i = (logit(y) / lambda - k2 * y) / k1; ese es el objetivo
-  de la regresión, y el sesgo es su intercepto recortado a [-1, 1]. Los
-  coeficientes se truncan a (-1, 1) con la tangente hiperbólica.
-* ``correlacion_parcial``: w_ji es la correlación parcial entre C_j y C_i
-  dados los demás conceptos (ya está en [-1, 1]); b = 0. Describe asociaciones
-  directas, pero no calibra la inferencia.
 * ``pso``: optimización por enjambre de partículas (ec. 4-5 de PRV-FCM) con la
   misma pérdida que BPTT; cada partícula es una W candidata (y b, con sesgo).
-* ``expertos``: W dada por expertos (media aritmética de sus matrices, García
-  et al., 2025); b = 0.
-
-La inversión del punto fijo de Ridge y Lasso vale en todas las variantes: la
-entrada es afín en A y la activación es invertible.
 """
 from __future__ import annotations
 
@@ -63,19 +50,15 @@ import numpy as np
 import pandas as pd
 from scipy.linalg import block_diag
 from scipy.optimize import minimize
-from scipy.special import expit, logit
+from scipy.special import expit
 from sklearn.covariance import LedoitWolf
-from sklearn.linear_model import Lasso, Ridge
 
 from .configuracion import ConfigFCM
 
-METODOS_PESOS = ("bptt", "ridge", "lasso", "correlacion_parcial", "pso", "expertos")
+METODOS_PESOS = ("bptt", "pso")
 INFERENCIAS = ("kosko", "kosko_modificada", "reescalada")
 ACTIVACIONES = ("sigmoide", "tanh")
 
-# La regresión lleva el valor observado a [margen, 1 - margen] antes del logit,
-# que es infinito en 0 y en 1. Con 0.05 la exactitud en xAPI es la más alta.
-MARGEN_REGRESION = 0.05
 
 
 def sigmoide(x: np.ndarray, lambda_: float = 1.0) -> np.ndarray:
@@ -511,54 +494,6 @@ def pesos_equilibrados(etiquetas: np.ndarray) -> np.ndarray:
     return pesos / pesos.mean()
 
 
-def pesos_por_regresion(
-    X: np.ndarray, estructura: np.ndarray, config: ConfigFCM, pesos_muestras: np.ndarray | None = None
-) -> tuple[np.ndarray, np.ndarray]:
-    """Pesos y sesgos por regresión Ridge o Lasso, una por concepto que recibe aristas.
-
-    Para cada concepto dinámico i con fuentes S (aristas permitidas C_j -> C_i):
-
-        z_i = (logit(y_i) / lambda - k2 * y_i) / k1,   y_i recortado a [margen, 1 - margen]
-        Ridge:  min_w ||z_i - b_i - X_S w||^2 + alpha * n * ||w||^2   (MSE + alpha ||w||^2, la escala de BPTT)
-        Lasso:  min_w ||z_i - b_i - X_S w||^2 / (2n) + alpha * ||w||_1
-        w_ji = tanh(coeficiente_j)
-
-    Con esos pesos, el valor observado de C_i es (por mínimos cuadrados) un
-    punto fijo de la regla. En general (``parametros_regla``), la entrada de la
-    regresión es u = a*X + c y z_i = (logit(y_i) / lambda_e - m * (a*y_i + c)) / k1.
-    Con sesgo, b_i es el
-    intercepto c de la misma regresión (sin penalizar) recortado a
-    [peso_min, peso_max], y los pesos se ajustan con b_i fijo: si c cabe en el
-    rango es el ajuste con intercepto; si no (en xAPI, c = -2.3), los pesos
-    compensan la parte recortada. Con b_i = tanh(c) sin reajustar, la
-    exactitud en xAPI cae de 77 % a 52 %. Sin sesgo, b = 0.
-    """
-    if config.metodo_pesos not in ("ridge", "lasso"):
-        raise ValueError(f"pesos_por_regresion usa ridge o lasso, no {config.metodo_pesos}.")
-    X = np.asarray(X, dtype=float)
-    n = X.shape[0]
-
-    def regresion(intercepto: bool) -> Ridge | Lasso:
-        if config.metodo_pesos == "ridge":
-            return Ridge(alpha=config.alpha_l2 * n, fit_intercept=intercepto)
-        return Lasso(alpha=config.alpha_l2, fit_intercept=intercepto, max_iter=20_000)
-
-    memoria, a, c, lambda_ = parametros_regla(config)
-    U = X if a == 1.0 and c == 0.0 else a * X + c
-    pesos = np.zeros((X.shape[1], X.shape[1]))
-    sesgo = np.zeros(X.shape[1])
-    for i in np.flatnonzero(estructura.any(axis=0)):
-        fuentes = np.flatnonzero(estructura[:, i])
-        y = np.clip(X[:, i], MARGEN_REGRESION, 1.0 - MARGEN_REGRESION)
-        z = (logit(y) / lambda_ - memoria * (y if a == 1.0 and c == 0.0 else a * y + c)) / config.coef_influencia
-        if config.sesgo:
-            intercepto = regresion(True).fit(U[:, fuentes], z, sample_weight=pesos_muestras).intercept_
-            sesgo[i] = np.clip(intercepto, config.peso_min, config.peso_max)
-        modelo = regresion(False).fit(U[:, fuentes], z - sesgo[i], sample_weight=pesos_muestras)
-        pesos[fuentes, i] = np.tanh(modelo.coef_)
-    return pesos, sesgo
-
-
 def correlaciones_parciales(X: np.ndarray) -> np.ndarray:
     """Correlación parcial de cada par de columnas dadas las demás.
 
@@ -573,11 +508,6 @@ def correlaciones_parciales(X: np.ndarray) -> np.ndarray:
     return np.clip(parcial, -1.0, 1.0)
 
 
-def pesos_por_correlacion_parcial(X: np.ndarray, estructura: np.ndarray) -> np.ndarray:
-    """w_ji = correlación parcial entre C_j y C_i en las aristas permitidas; cero en el resto."""
-    return np.where(estructura, correlaciones_parciales(X), 0.0)
-
-
 def entrenar_fcm(
     X: np.ndarray,
     indices_fijos: np.ndarray,
@@ -588,18 +518,15 @@ def entrenar_fcm(
     aristas_excluidas: np.ndarray | None = None,
     pesos_muestras: np.ndarray | None = None,
     semilla: int | None = None,
-    pesos_expertos: np.ndarray | None = None,
 ) -> tuple[MapaCognitivoDifuso, np.ndarray]:
     """Construye el FCM y aprende sus pesos con una matriz de entrenamiento.
 
     ``aristas_excluidas`` es la máscara de dirección causal opcional: una matriz
     booleana (n, n) en la que ``True`` en [j, i] elimina la arista C_j -> C_i
     aunque la estructura la permita. El método de extracción de pesos es
-    ``config.metodo_pesos``; con ``config.sesgo`` también se aprende b. ``pesos_muestras`` pondera cada registro en BPTT,
-    Ridge y Lasso (ver ``pesos_equilibrados``); la correlación parcial no los usa.
-    ``semilla`` hace reproducible el PSO. Con ``metodo_pesos = "expertos"``,
-    ``pesos_expertos`` es la matriz (n, n) de consenso (ver
-    ``pipeline.matriz_expertos``), recortada a la estructura; b = 0.
+    ``config.metodo_pesos`` (BPTT o PSO); con ``config.sesgo`` también se aprende b.
+    ``pesos_muestras`` pondera cada registro (ver ``pesos_equilibrados``).
+    ``semilla`` hace reproducible el PSO.
 
     Los conceptos dinámicos parten de su media en ``X``. Devuelve el FCM y esas
     medias, que son el estado inicial neutro para predecir con datos nuevos.
@@ -611,17 +538,8 @@ def entrenar_fcm(
         estructura &= ~np.asarray(aristas_excluidas, dtype=bool)
     fcm = MapaCognitivoDifuso(estructura, indices_fijos, config, nombres)
     medias = X[:, indices_dinamicos].mean(axis=0)
-    if config.metodo_pesos in ("bptt", "pso"):
-        fcm.ajustar(
-            con_dinamicos_neutros(X, indices_dinamicos, medias), X, pesos_muestras=pesos_muestras,
-            pso=config.metodo_pesos == "pso", rng=np.random.default_rng(semilla),
-        )
-    elif config.metodo_pesos == "expertos":
-        if pesos_expertos is None:
-            raise ValueError("El método de expertos necesita al menos una matriz de expertos.")
-        fcm.pesos = np.where(estructura, pesos_expertos, 0.0)
-    elif config.metodo_pesos == "correlacion_parcial":
-        fcm.pesos = pesos_por_correlacion_parcial(X, estructura)
-    else:
-        fcm.pesos, fcm.sesgo = pesos_por_regresion(X, estructura, config, pesos_muestras)
+    fcm.ajustar(
+        con_dinamicos_neutros(X, indices_dinamicos, medias), X, pesos_muestras=pesos_muestras,
+        pso=config.metodo_pesos == "pso", rng=np.random.default_rng(semilla),
+    )
     return fcm, medias

@@ -22,7 +22,7 @@ import type {
   PaginaFilas,
   PedidoRedaccion,
   PerfilBase,
-  Perfiles,
+  OpcionesPorDefecto,
   Prescripcion,
   RegistroSeguimiento,
   ResumenPrescripciones,
@@ -76,7 +76,7 @@ const cuerpo = (datos: unknown) => JSON.stringify(datos);
 
 export const api = {
   estado: () => pedir<EstadoServicios>('/api/estado'),
-  perfiles: () => pedir<Perfiles>('/api/perfiles'),
+  opciones: () => pedir<OpcionesPorDefecto>('/api/opciones'),
 
   datasets: () => pedir<DatasetResumen[]>('/api/datasets'),
   dataset: (id: string) => pedir<Dataset>(`/api/datasets/${id}`),

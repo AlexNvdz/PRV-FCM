@@ -37,13 +37,11 @@ def guardar_modelo(r: ResultadoPipeline, ruta: Path) -> None:
             "estructura": r.fcm.estructura.astype(int).tolist(),
             "pesos": r.fcm.pesos.tolist(),
             "sesgo": r.fcm.sesgo.tolist(),
-            "expertos": [str(m.get("experto", "")) for m in r.opciones.matrices_expertos] if r.config_fcm.metodo_pesos == "expertos" else [],
             "indices_fijos": r.fcm.indices_fijos.tolist(),
             "config": dataclasses.asdict(r.config_fcm),
         },
         "medias_dinamicos": r.medias_dinamicos.tolist(),
         "config_ag": dataclasses.asdict(r.config_ag),
-        "perfil": r.opciones.perfil,
         "config_prescripcion": dataclasses.asdict(r.config_prescripcion),
         "ids_prueba": [int(i) for i in r.prueba.index],
         "semilla": r.opciones.semilla,
@@ -69,12 +67,12 @@ class ModeloPRVFCM:
         self.fcm.pesos = np.array(f["pesos"], dtype=float)
         if "sesgo" in f:
             self.fcm.sesgo = np.array(f["sesgo"], dtype=float)
-        self.expertos = list(f.get("expertos", []))
-        self.perfil = str(datos.get("perfil", "mejorado"))
         self.medias_dinamicos = np.array(datos["medias_dinamicos"], dtype=float)
         self.config_ag = ConfigAG(**datos["config_ag"])
-        presc = dict(datos["config_prescripcion"])
-        presc.setdefault("meta_escalonada", False)  # Modelos anteriores: todos apuntaban al mejor nivel.
+        # Los modelos anteriores traen claves que ya no existen (sembrar, aptitud) y no tienen la meta escalonada.
+        campos = {c.name for c in dataclasses.fields(ConfigPrescripcion)}
+        presc = {k: v for k, v in datos["config_prescripcion"].items() if k in campos}
+        presc.setdefault("meta_escalonada", False)
         presc["clases_a_prescribir"] = tuple(presc["clases_a_prescribir"])
         self.config_prescripcion = ConfigPrescripcion(**presc)
         self.ids_prueba = set(datos.get("ids_prueba", []))

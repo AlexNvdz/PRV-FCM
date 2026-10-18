@@ -11,7 +11,7 @@ import { ejecutarHerramienta, leerCorrelaciones } from '../herramientas.js';
 import { ErrorMotor } from '../motor.js';
 import { crearBuscadorColumnas } from '../rutas/chat.js';
 import { opcionesMotor, OpcionesEntrenamiento } from '../rutas/datasets.js';
-import { modelosParaConsulta, validarSeguimiento } from '../rutas/modelos.js';
+import { validarSeguimiento } from '../rutas/modelos.js';
 
 function probarOrigen(headers) {
   let status = 200;
@@ -122,31 +122,26 @@ test('la validación cruzada rápida usa una rejilla pequeña', () => {
 });
 
 test('las opciones aceptan el método de pesos y la máscara causal', () => {
-  // Sin opciones explícitas, el perfil decide el método y β: el servidor no pone valores por defecto.
+  // Sin opciones explícitas, el motor decide el método y β: el servidor no pone valores por defecto.
   const porDefecto = OpcionesEntrenamiento.parse({});
-  assert.equal(porDefecto.perfil, 'mejorado');
   assert.equal(porDefecto.metodo_pesos, undefined);
   assert.equal(porDefecto.beta, undefined);
   assert.equal('smote' in opcionesMotor(porDefecto), false);
   assert.deepEqual(porDefecto.aristas_excluidas, []);
-  const ridge = opcionesMotor(OpcionesEntrenamiento.parse({ metodo_pesos: 'ridge', aristas_excluidas: [['gender', 'Class']] }));
-  assert.equal(ridge.metodo_pesos, 'ridge');
-  assert.deepEqual(ridge.aristas_excluidas, [['gender', 'Class']]);
-  assert.throws(() => OpcionesEntrenamiento.parse({ metodo_pesos: 'svm' }));
+  const pso = opcionesMotor(OpcionesEntrenamiento.parse({ metodo_pesos: 'pso', aristas_excluidas: [['gender', 'Class']] }));
+  assert.equal(pso.metodo_pesos, 'pso');
+  assert.deepEqual(pso.aristas_excluidas, [['gender', 'Class']]);
+  // Solo BPTT y PSO: los métodos retirados se rechazan.
+  for (const metodo of ['ridge', 'lasso', 'expertos', 'svm']) assert.throws(() => OpcionesEntrenamiento.parse({ metodo_pesos: metodo }));
   assert.throws(() => OpcionesEntrenamiento.parse({ aristas_excluidas: [['solo-origen']] }));
 });
 
-test('las opciones del artículo: perfil, expertos, binarización y pliegues explícitos', () => {
-  const articulo = opcionesMotor(OpcionesEntrenamiento.parse({ perfil: 'articulo', smote: true, inferencia: 'reescalada', activacion: 'tanh', binarizar_objetivo: 'M' }));
-  assert.equal(articulo.perfil, 'articulo');
-  assert.equal(articulo.binarizar_objetivo, 'M');
+test('las opciones de regla, SMOTE, binarización y pliegues explícitos', () => {
+  const opciones = opcionesMotor(OpcionesEntrenamiento.parse({ smote: true, inferencia: 'reescalada', activacion: 'tanh', binarizar_objetivo: 'M' }));
+  assert.equal(opciones.binarizar_objetivo, 'M');
+  assert.equal(opciones.inferencia, 'reescalada');
+  assert.equal('perfil' in OpcionesEntrenamiento.parse({ perfil: 'articulo' }), false); // Ya no hay perfiles: se ignora.
   assert.equal(OpcionesEntrenamiento.parse({ binarizar_objetivo: 12.5 }).binarizar_objetivo, 12.5);
-  assert.throws(() => OpcionesEntrenamiento.parse({ perfil: 'otro' }));
-  // Expertos: hace falta al menos una matriz y cada peso va en [-1, 1].
-  assert.throws(() => OpcionesEntrenamiento.parse({ metodo_pesos: 'expertos' }), /al menos una matriz/);
-  const matriz = { experto: 'Docente A', aristas: [{ origen: 'raisedhands', destino: 'Class', peso: 0.6 }] };
-  assert.equal(OpcionesEntrenamiento.parse({ metodo_pesos: 'expertos', matrices_expertos: [matriz] }).matrices_expertos.length, 1);
-  assert.throws(() => OpcionesEntrenamiento.parse({ metodo_pesos: 'expertos', matrices_expertos: [{ ...matriz, aristas: [{ ...matriz.aristas[0], peso: 1.5 }] }] }));
   // La CV rápida usa 3 pliegues salvo que se pidan otros; fuera de rango se rechaza.
   assert.equal(opcionesMotor(OpcionesEntrenamiento.parse({ validacion_cruzada: 'rapida', pliegues: 10 })).pliegues, 10);
   assert.throws(() => OpcionesEntrenamiento.parse({ pliegues: 1 }));
@@ -262,34 +257,6 @@ test('prescribir_perfil parte del perfil base, cambia los valores pedidos y usa 
   assert.equal(params.beta, 0.4);
   assert.deepEqual(llamadas[0][1].id, 3);
   assert.equal(eventos[0].tipo, 'perfil');
-});
-
-test('la lista de /consulta trae el perfil de cada modelo y deja los del artículo al final', async () => {
-  const raiz = await fs.mkdtemp(path.join(os.tmpdir(), 'pizarra-'));
-  try {
-    const almacen = new Almacen(raiz);
-    await almacen.iniciar();
-    const origen = path.join(raiz, 'origen.csv');
-    await fs.writeFile(origen, 'a,b\n1,2\n');
-    const dataset = await almacen.crearDataset({ nombre: 'heart', archivo: origen, origen: 'copiar' });
-    const crear = async (perfil) => {
-      const modelo = await almacen.crearModelo({ datasetId: dataset.id, opciones: {} });
-      await almacen.guardarModelo({ ...modelo, estado: 'listo' });
-      if (perfil) await Almacen.escribirJson(path.join(almacen.dirModelo(modelo.id), 'metricas.json'), { configuracion: { perfil } });
-      return modelo.id;
-    };
-    const articulo = await crear('articulo');
-    const antiguo = await crear(null); // Sin perfil en las métricas: «mejorado».
-    const mejorado = await crear('mejorado');
-    await almacen.crearModelo({ datasetId: dataset.id, opciones: {} }); // En curso: no aparece.
-    const lista = await modelosParaConsulta(almacen);
-    assert.deepEqual(new Set(lista.slice(0, 2).map((m) => m.id)), new Set([antiguo, mejorado]));
-    assert.deepEqual(lista.map((m) => m.perfil), ['mejorado', 'mejorado', 'articulo']);
-    assert.equal(lista[2].id, articulo);
-    assert.equal(lista[2].tema, 'heart');
-  } finally {
-    await fs.rm(raiz, { recursive: true, force: true });
-  }
 });
 
 test('el almacén crea, lista y elimina datasets con sus modelos', async () => {

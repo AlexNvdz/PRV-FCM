@@ -77,9 +77,9 @@ export const GLOSARIO = {
     termino: 'α (alfa)',
     expansion: 'Fuerza de la regularización',
     definicion:
-      'Penaliza los pesos grandes al aprender W, para que el mapa no se ajuste de más a los datos de entrenamiento. Con BPTT y Ridge la penalización es L2; con Lasso, L1, que puede dejar pesos en 0. La validación cruzada completa prueba 0,0001; 0,001 y 0,01; sin validación se usa 0,001.',
+      'Penaliza los pesos grandes al aprender W, para que el mapa no se ajuste de más a los datos de entrenamiento. Con BPTT la penalización es L2: suma los cuadrados de los pesos y los encoge sin anularlos. La validación cruzada completa prueba 0,0001; 0,001 y 0,01; sin validación se usa 0,001.',
     donde: 'Paso 3 («Selección de λ y α» y dato «λ y α»).',
-    ver: ['regularizacion', 'l1-l2', 'validacion-cruzada'],
+    ver: ['regularizacion', 'validacion-cruzada'],
     claves: 'alpha regularizacion',
     simbolo: true,
   },
@@ -234,7 +234,7 @@ export const GLOSARIO = {
     definicion:
       'Convierte un objetivo de varios niveles en dos: éxito desde el nivel elegido (≥N) y el resto (<N). En un objetivo numérico, éxito es alcanzar un umbral en sus unidades (o no superarlo, si el objetivo está invertido). Reproduce los artículos, que miden éxito o fracaso. No se ofrece el peor nivel: todos serían éxito.',
     donde: 'Paso 3, «Binarizar el objetivo».',
-    ver: ['nivel', 'objetivo', 'perfil-entrenamiento'],
+    ver: ['nivel', 'objetivo'],
     claves: 'binario dos clases umbral exito fracaso',
   },
   bosque: {
@@ -251,10 +251,10 @@ export const GLOSARIO = {
     termino: 'BPTT',
     expansion: 'Backpropagation Through Time (retropropagación a través del tiempo)',
     definicion:
-      'Método por defecto para aprender la matriz W. Repite 30 iteraciones de la regla del FCM como si fueran capas de una red y calcula de forma exacta cómo cambia el error, entre la activación final del objetivo y su valor observado, al mover cada peso (el gradiente). Con ese gradiente, el optimizador L-BFGS-B ajusta los pesos dentro de [−1, 1], con una penalización L2. En la fórmula, v_r es el peso de cada registro: 1 para todos, salvo si equilibra los niveles. Es el método más preciso (79 % de exactitud en el dataset del proyecto) y el más lento.',
+      'Método por defecto para aprender la matriz W. Repite 30 iteraciones de la regla del FCM como si fueran capas de una red y calcula de forma exacta cómo cambia el error, entre la activación final del objetivo y su valor observado, al mover cada peso (el gradiente). Con ese gradiente, el optimizador L-BFGS-B ajusta los pesos dentro de [−1, 1], con una penalización L2. En la fórmula, v_r es el peso de cada registro: 1 para todos, salvo si equilibra los niveles. Es el método recomendado (79 % de exactitud en el dataset del proyecto) y mucho más rápido que PSO.',
     formula: 'L(W) = media_r [ v_r · (A_T,r − y_r)² ] + α · Σ w²',
     donde: 'Paso 3, «Método de extracción de la matriz de pesos W».',
-    ver: ['gradiente', 'lbfgsb', 'l1-l2', 'ridge'],
+    ver: ['gradiente', 'lbfgsb'],
     claves: 'backpropagation retropropagacion gradiente exacto',
   },
   cambio: {
@@ -327,15 +327,6 @@ export const GLOSARIO = {
     ver: ['c-n', 'c-t', 'c-p', 'c-s', 'activacion'],
     claves: 'nodo variable',
   },
-  consenso: {
-    termino: 'Matriz de consenso',
-    definicion:
-      'Media de las matrices de los expertos, arista por arista. Si un experto no dio una arista, cuenta 0 para él. Es la W que usa el método de expertos.',
-    formula: 'w_ji = (1/E) · Σ_e w_ji(e)',
-    donde: 'Paso 3, método «Matriz de expertos».',
-    ver: ['expertos', 'w'],
-    claves: 'media expertos',
-  },
   consulta: {
     termino: 'Consulta',
     definicion:
@@ -375,9 +366,9 @@ export const GLOSARIO = {
   'correlacion-parcial': {
     termino: 'Correlación parcial',
     definicion:
-      'Correlación entre dos variables después de descontar el efecto de todas las demás: mide la relación directa. Se obtiene de la inversa de la matriz de covarianzas (P, la matriz de precisión) estimada con la contracción de Ledoit-Wolf. Como método de W describe bien la estructura, pero no calibra la inferencia: 48 % de exactitud en el dataset del proyecto. No tiene sesgo (b = 0) ni admite equilibrar los niveles.',
-    formula: 'w_ji = −P_ji / √(P_jj · P_ii)',
-    donde: 'Paso 3 (método de W) y método «Parcial» del mapa de calor de correlaciones.',
+      'Correlación entre dos variables después de descontar el efecto de todas las demás: mide la relación directa. Se obtiene de la inversa de la matriz de covarianzas (P, la matriz de precisión) estimada con la contracción de Ledoit-Wolf.',
+    formula: 'r_ij = −P_ij / √(P_ii · P_jj)',
+    donde: 'Datos, pestaña «Relaciones entre variables» (método «Parcial» del mapa de calor de correlaciones).',
     ver: ['correlacion', 'covarianza', 'ledoit-wolf'],
   },
   'aptitud-normalizada': {
@@ -508,7 +499,7 @@ export const GLOSARIO = {
   equilibrar: {
     termino: 'Equilibrar los niveles del objetivo',
     definicion:
-      'Opción del paso 3 que pondera cada registro por la inversa de la frecuencia de su nivel, para que cada nivel pese lo mismo al aprender W. Sin ella, con un nivel raro (por ejemplo, el 15 % deserta), el mapa tiende a predecir el nivel frecuente y no detecta a quienes están en riesgo. Con ella, λ y α se eligen por exactitud equilibrada. Se activa sola si un nivel es menos del 25 % de los registros y el dataset aún no tiene entrenamientos. No aplica a la correlación parcial.',
+      'Opción del paso 3 que pondera cada registro por la inversa de la frecuencia de su nivel, para que cada nivel pese lo mismo al aprender W. Sin ella, con un nivel raro (por ejemplo, el 15 % deserta), el mapa tiende a predecir el nivel frecuente y no detecta a quienes están en riesgo. Con ella, λ y α se eligen por exactitud equilibrada. Se activa sola si un nivel es menos del 25 % de los registros y el dataset aún no tiene entrenamientos.',
     formula: 'v_r = n / (k · n_nivel), con media 1',
     donde: 'Paso 3, casilla «Equilibrar los niveles del objetivo al aprender W».',
     ver: ['exactitud-equilibrada', 'desercion', 'recall'],
@@ -586,14 +577,6 @@ export const GLOSARIO = {
     donde: 'Paso 2, rol «Excluida».',
     ver: ['rol', 'fuga'],
     claves: 'excluir',
-  },
-  expertos: {
-    termino: 'Matriz de expertos',
-    definicion:
-      'Método de W de García et al. (2025): cada experto da, en un CSV, el peso que cree que tiene cada arista (columnas origen, destino y peso, de −1 a 1). El FCM usa el consenso. No aprende de los datos ni tiene sesgo. Los nombres son los de las columnas (en una columna one-hot, «columna=categoría») y solo valen las aristas de la estructura.',
-    donde: 'Paso 3, método «Matriz de expertos».',
-    ver: ['consenso', 'estructura', 'w'],
-    claves: 'experto csv conocimiento',
   },
   f1: {
     termino: 'F1 y F1 macro',
@@ -759,24 +742,10 @@ export const GLOSARIO = {
     donde: 'Paso 2 (rol «Inmutable (C_S)»), mapa del FCM (puntos grises) y perfil de riesgo.',
     ver: ['c-s', 'perfil-inmutable', 'sesgo'],
   },
-  intercepto: {
-    termino: 'Intercepto',
-    definicion:
-      'Término constante de una regresión. En Ridge y Lasso, el intercepto c es el sesgo del concepto (b_i = tanh(c)) y no se penaliza. En un modelo sin sesgo, la regresión se ajusta sin intercepto.',
-    ver: ['ridge', 'lasso', 'sesgo'],
-  },
   iteracion: {
     termino: 'Iteración',
     definicion: 'Un paso de la regla de inferencia: todas las activaciones dinámicas se recalculan una vez a partir de las del paso anterior.',
     ver: ['inferencia', 'a-i'],
-  },
-  'l1-l2': {
-    termino: 'L1 y L2',
-    expansion: 'Tipos de penalización',
-    definicion:
-      'L2 suma los cuadrados de los pesos (‖w‖²) y los encoge sin anularlos; la usan BPTT y Ridge. L1 suma sus valores absolutos (‖w‖₁) y puede dejar pesos exactamente en 0; la usa Lasso.',
-    ver: ['regularizacion', 'alfa'],
-    claves: 'norma',
   },
   lbfgsb: {
     termino: 'L-BFGS-B',
@@ -787,16 +756,6 @@ export const GLOSARIO = {
     ver: ['bptt', 'gradiente'],
     claves: 'lbfgs optimizador',
   },
-  lasso: {
-    termino: 'Lasso',
-    expansion: 'Regresión con penalización L1',
-    definicion:
-      'Método de W: una regresión lineal por concepto dinámico que explica el valor z con el que el dato observado del objetivo sería un punto fijo de la regla; su intercepto es el sesgo. La penalización L1 anula los pesos débiles y deja un mapa más simple. Los coeficientes se truncan a (−1, 1) con tanh. Es casi instantáneo; 76 % de exactitud en el dataset del proyecto.',
-    formula: 'min ‖z − X·w − c‖² / (2n) + α·‖w‖₁,   w_ji = tanh(β_j),   b_i = tanh(c)',
-    donde: 'Paso 3, método «Regresión Lasso».',
-    ver: ['ridge', 'l1-l2', 'tanh', 'logit'],
-    claves: 'regresion',
-  },
   'ledoit-wolf': {
     termino: 'Ledoit-Wolf',
     expansion: 'Contracción de la covarianza',
@@ -804,21 +763,6 @@ export const GLOSARIO = {
       'Técnica que estabiliza la matriz de covarianzas mezclándola con una matriz más simple, para que su inversa no sea errática cuando hay variables muy correlacionadas o pocos datos. La usa la correlación parcial.',
     ver: ['correlacion-parcial', 'covarianza'],
     claves: 'contraccion shrinkage',
-  },
-  lilliefors: {
-    termino: 'Prueba de Lilliefors',
-    definicion:
-      'Prueba de normalidad: una variante de Kolmogórov-Smirnov que estima la media y la desviación de los datos. En la validación del artículo decide qué prueba compara lo real con lo prescrito: si los dos grupos son normales, t de Student; si no, Wilcoxon.',
-    donde: 'Informe, «Validación según el artículo» (Tabla 12).',
-    ver: ['prueba-t-wilcoxon', 'reconstruccion'],
-    claves: 'normalidad kolmogorov',
-  },
-  logit: {
-    termino: 'Logit',
-    definicion:
-      'Inversa de la sigmoide: logit(y) = ln(y / (1 − y)). Ridge y Lasso la usan para calcular qué influencia necesita el objetivo para quedar en su valor observado. Como es infinita en 0 y en 1, antes se recorta el valor a [0,05; 0,95].',
-    formula: 'z = (logit(y)/λ − k2·y) / k1',
-    ver: ['sigmoide', 'ridge', 'lasso'],
   },
   mae: {
     termino: 'MAE',
@@ -901,11 +845,11 @@ export const GLOSARIO = {
   'meta-escalonada': {
     termino: 'Meta escalonada',
     definicion:
-      'Cada registro apunta al nivel siguiente al suyo en vez de saltar al mejor: uno en L apunta a M y uno en M, a H. Así la meta es alcanzable con cambios moderados. Es la opción del perfil mejorado; el del artículo apunta siempre al mejor nivel. Con un objetivo de dos niveles no cambia nada, porque el siguiente ya es el mejor. La tasa de éxito cuenta a quien llega a su meta o a un nivel mejor; la probabilidad del mejor nivel según el bosque sigue midiendo el mejor nivel. En una prescripción individual, «Nivel siguiente (meta escalonada)» toma el siguiente al nivel observado del registro o, en un perfil, al que infiere el FCM.',
+      'Cada registro apunta al nivel siguiente al suyo en vez de saltar al mejor: uno en L apunta a M y uno en M, a H. Así la meta es alcanzable con cambios moderados. Está activa por defecto; sin ella, cada registro apunta al mejor nivel, como en el artículo. Con un objetivo de dos niveles no cambia nada, porque el siguiente ya es el mejor. La tasa de éxito cuenta a quien llega a su meta o a un nivel mejor; la probabilidad del mejor nivel según el bosque sigue midiendo el mejor nivel. En una prescripción individual, «Nivel siguiente (meta escalonada)» toma el siguiente al nivel observado del registro o, en un perfil, al que infiere el FCM.',
     formula: 'D_T = valor del nivel siguiente al observado;   éxito ⇔ nivel(A*_T) ≥ meta',
     donde:
       'Paso 3 (casilla «Meta escalonada»), paso 4 (frase principal, tabla de métricas, filtro «Llega a su meta», columna «Meta», gráfica antes y después, selector de meta), Resumen, Informe y Consulta.',
-    ver: ['meta', 'mejor-nivel', 'psr', 'perfil-entrenamiento'],
+    ver: ['meta', 'mejor-nivel', 'psr'],
     claves: 'escalonada nivel siguiente intermedia gradual L M H',
   },
   'modelo-activo': {
@@ -1067,14 +1011,6 @@ export const GLOSARIO = {
     donde: 'Datos, mapa de calor de correlaciones (método «Pearson»).',
     ver: ['correlacion', 'spearman', 'monotona'],
   },
-  'perfil-entrenamiento': {
-    termino: 'Perfil de entrenamiento',
-    definicion:
-      '«Artículo» reproduce el protocolo de Hoyos, Aguilar y Toro (2023): PSO, sin sesgo, β = 0, sin tope por ausentismo, SMOTE, mutables dinámicos, 10 pliegues, aptitud de la Tabla 4, AG sin siembra de las acciones actuales y búsqueda de los parámetros del AG; la validación cruzada elige la regla de inferencia y la activación. «Mejorado» es lo que este proyecto validó: BPTT, Kosko modificada con sigmoide, sesgo, β = 0,4, tope por ausentismo y meta escalonada. Cada opción que usted cambie manda sobre el perfil; los valores exactos se leen del motor y se muestran junto al selector.',
-    donde: 'Paso 3, «Perfil de entrenamiento».',
-    ver: ['pso', 'regla-inferencia', 'smote', 'beta', 'sesgo', 'tope-ausentismo', 'meta-escalonada'],
-    claves: 'articulo mejorado protocolo',
-  },
   'perfil-inmutable': {
     termino: 'Perfil inmutable',
     definicion:
@@ -1180,21 +1116,13 @@ export const GLOSARIO = {
     ver: ['fcm', 'ag'],
     claves: 'prescriptivo metodo',
   },
-  'prueba-t-wilcoxon': {
-    termino: 'Pruebas t y de Wilcoxon',
-    definicion:
-      'Comparan, acción por acción, los valores reales con los prescritos en los mismos registros. La t de Student (⋆) supone que los datos son normales; la de Wilcoxon (†) no, porque usa rangos. Con p mayor que 0,05 no hay diferencia significativa: el modelo reproduce bien esa acción.',
-    donde: 'Informe, Tabla 12.',
-    ver: ['lilliefors', 'reconstruccion'],
-    claves: 'p valor significancia student pareada rangos',
-  },
   pso: {
     termino: 'PSO',
     expansion: 'Particle Swarm Optimization (optimización por enjambre de partículas)',
     definicion:
-      'Método de W del artículo. Cada partícula es una matriz W completa; el enjambre se mueve hacia las mejores matrices que encontró cada partícula y todo el grupo, buscando el menor error entre el estado final del FCM y los datos. No usa el gradiente y es más lento que BPTT. El perfil «artículo» usa la ecuación 4 literal (ω = c1 = c2 = 1), que tiende a estancarse; con el perfil «mejorado» usa los coeficientes de Clerc.',
-    donde: 'Paso 3, método «PSO (artículo)».',
-    ver: ['bptt', 'perfil-entrenamiento', 'w'],
+      'Método de W del artículo base. Cada partícula es una matriz W completa; el enjambre se mueve hacia las mejores matrices que encontró cada partícula y todo el grupo, buscando el menor error entre el estado final del FCM y los datos. No usa el gradiente y es más lento que BPTT. Usa los coeficientes de Clerc: con los de la ecuación 4 literal (ω = c1 = c2 = 1) el enjambre tiende a estancarse.',
+    donde: 'Paso 3, método «PSO».',
+    ver: ['bptt', 'w'],
     claves: 'enjambre particulas swarm',
   },
   psr: {
@@ -1204,23 +1132,14 @@ export const GLOSARIO = {
       'Porcentaje de estudiantes prescritos cuya activación final del objetivo queda dentro de la tolerancia de la meta: los que el FCM ubica en el mejor nivel o, con la meta escalonada, en su meta o en un nivel mejor. Se calcula con las acciones actuales y con las prescritas; la diferencia es la mejora que el FCM atribuye a la prescripción. La cifra equivalente del bosque aleatorio es la estimación prudente.',
     formula: 'tasa de éxito = % de estudiantes con |A*_T − D_T| ≤ tolerancia',
     donde: 'Resumen, paso 4 («Tasa de éxito prescriptivo (FCM)»), Informe y asistente.',
-    ver: ['tolerancia', 'bosque', 'mae', 'psr-ec19'],
+    ver: ['tolerancia', 'bosque', 'mae'],
     claves: 'exito prescriptivo tasa llega al mejor nivel llega a su meta',
-  },
-  'psr-ec19': {
-    termino: 'PSR (ecuación 19)',
-    expansion: 'Prescriptive Success Rate del artículo',
-    definicion:
-      'La PSR tal como la define la ecuación 19 de Hoyos, Aguilar y Toro (2023): un cociente entre lo que suman las acciones prescritas y lo que suman las reales en el conjunto de prueba. El artículo espera un valor menor que 1; si sale mayor, el Informe lo avisa y no lo recorta. No es la tasa de éxito prescriptivo de la aplicación, que cuenta cuántos estudiantes llegan a la meta según el FCM.',
-    donde: 'Informe, «Validación según el artículo».',
-    ver: ['psr', 'reconstruccion'],
-    claves: 'ecuacion 19 articulo',
   },
   'punto-fijo': {
     termino: 'Punto fijo',
     definicion:
-      'Estado en el que aplicar la regla de inferencia ya no cambia las activaciones; la inferencia converge a él. Ridge y Lasso buscan pesos con los que el valor observado del objetivo sea un punto fijo.',
-    ver: ['convergencia', 'ridge'],
+      'Estado en el que aplicar la regla de inferencia ya no cambia las activaciones; la inferencia converge a él.',
+    ver: ['convergencia'],
   },
   qwen: {
     termino: 'qwen2.5:7b',
@@ -1229,16 +1148,6 @@ export const GLOSARIO = {
     donde: 'Asistente, «Sugerir con IA» y «Redactar con qwen2.5».',
     ver: ['ollama', 'ia', 'asistente'],
     claves: 'modelo de lenguaje llm',
-  },
-  r2: {
-    termino: 'R²',
-    expansion: 'Coeficiente de determinación',
-    definicion:
-      'Qué parte de la variación de los valores reales explica lo prescrito: 1 es perfecto, 0 equivale a decir siempre la media, y es negativo si lo hace peor que la media.',
-    formula: 'R² = 1 − Σ (y − ŷ)² / Σ (y − ȳ)²',
-    donde: 'Informe, Tabla 11.',
-    ver: ['mae', 'rmse', 'reconstruccion'],
-    claves: 'r cuadrado determinacion',
   },
   rango: {
     termino: 'Rango',
@@ -1255,15 +1164,6 @@ export const GLOSARIO = {
     donde: 'Paso 3, tabla «Por nivel».',
     ver: ['precision', 'exactitud-equilibrada', 'equilibrar'],
     claves: 'sensibilidad exhaustividad',
-  },
-  reconstruccion: {
-    termino: 'Reconstrucción',
-    expansion: 'Validación según el artículo',
-    definicion:
-      'Protocolo de evaluación del artículo: en el conjunto de prueba compara las acciones que prescribe el AG con las que había en los datos. Tabla 11: MAE, MSE, RMSE y R² por acción. Tabla 12: media ± DE real frente a prescrita y una prueba t o de Wilcoxon, según Lilliefors. Sin diferencia significativa, el modelo reproduce lo observado. Mide otra cosa que la tasa de éxito, que cuenta quién llega a la meta. Muchas combinaciones de acciones llevan al mismo estado, así que la prescripción no tiene por qué parecerse a lo observado.',
-    donde: 'Informe, «Validación según el artículo». Falta en los modelos entrenados antes de esta versión.',
-    ver: ['r2', 'prueba-t-wilcoxon', 'lilliefors', 'psr-ec19'],
-    claves: 'tabla 11 tabla 12 real prescrito',
   },
   'recomendaciones-csv': {
     termino: 'Recomendaciones (CSV)',
@@ -1291,7 +1191,7 @@ export const GLOSARIO = {
   'regla-inferencia': {
     termino: 'Reglas de inferencia',
     definicion:
-      'Cómo se actualiza cada concepto dinámico en cada iteración. Kosko: solo la suma ponderada de los demás. Kosko modificada: suma además su propia activación previa (memoria). Reescalada: pasa las activaciones a [−1, 1] con 2v − 1 antes de sumar, para que un concepto en 0 reste en lugar de no aportar. El perfil «mejorado» usa la modificada; el del artículo deja que la validación cruzada elija.',
+      'Cómo se actualiza cada concepto dinámico en cada iteración. Kosko: solo la suma ponderada de los demás. Kosko modificada: suma además su propia activación previa (memoria). Reescalada: pasa las activaciones a [−1, 1] con 2v − 1 antes de sumar, para que un concepto en 0 reste en lugar de no aportar. La modificada es la opción por defecto.',
     formula: 'Kosko: f(Σ_j≠i w_ji·v_j)   modificada: f(v_i + Σ w_ji·v_j)   reescalada: f((2v_i − 1) + Σ w_ji·(2v_j − 1))',
     donde: 'Paso 3, «Regla de inferencia».',
     ver: ['kosko', 'reescalada', 'activacion', 'tanh'],
@@ -1317,7 +1217,7 @@ export const GLOSARIO = {
   regularizacion: {
     termino: 'Regularización',
     definicion: 'Penalización que se suma al error para preferir pesos pequeños o pocos pesos; reduce el sobreajuste. Su fuerza es α.',
-    ver: ['alfa', 'l1-l2', 'sobreajuste'],
+    ver: ['alfa', 'sobreajuste'],
   },
   'reporte-inicial': {
     termino: 'Reporte inicial',
@@ -1333,16 +1233,6 @@ export const GLOSARIO = {
     donde: 'Resultado de una prescripción individual e Informe.',
     ver: ['frenos', 'redaccion', 'asociacion'],
     claves: 'frases lenguaje natural',
-  },
-  ridge: {
-    termino: 'Ridge',
-    expansion: 'Regresión con penalización L2',
-    definicion:
-      'Método de W: una regresión lineal por concepto dinámico que explica el valor z con el que el dato observado del objetivo sería un punto fijo de la regla; su intercepto es el sesgo. La penalización L2 encoge los pesos. Los coeficientes se truncan a (−1, 1) con tanh. Es casi instantáneo; 77 % de exactitud en el dataset del proyecto.',
-    formula: 'min ‖z − X·w − c‖² + α·n·‖w‖²,   w_ji = tanh(β_j),   b_i = tanh(c)',
-    donde: 'Paso 3, método «Regresión Ridge».',
-    ver: ['lasso', 'l1-l2', 'tanh', 'logit', 'punto-fijo'],
-    claves: 'regresion',
   },
   rmse: {
     termino: 'RMSE',
@@ -1388,18 +1278,18 @@ export const GLOSARIO = {
     termino: 'Sesgo',
     expansion: 'Bias, b_i',
     definicion:
-      'Término constante que la regla de inferencia suma a la entrada de cada concepto dinámico, igual para todos los estudiantes. Equivale al peso de un concepto que siempre vale 1: si es negativo, el objetivo tiende al peor nivel antes de sumar las influencias; si es positivo, al mejor. Se aprende con los pesos y queda en [−1, 1]: BPTT lo optimiza junto con W, en Ridge y Lasso es el intercepto y con la correlación parcial vale 0. No es una variable ni una arista: el AG no lo cambia y la máscara no lo excluye. Los modelos entrenados antes de que la regla tuviera sesgo no lo tienen; en ellos, los pesos grandes de los inmutables hacían su papel.',
+      'Término constante que la regla de inferencia suma a la entrada de cada concepto dinámico, igual para todos los estudiantes. Equivale al peso de un concepto que siempre vale 1: si es negativo, el objetivo tiende al peor nivel antes de sumar las influencias; si es positivo, al mejor. Se aprende con los pesos y queda en [−1, 1]: BPTT y PSO lo optimizan junto con W. No es una variable ni una arista: el AG no lo cambia y la máscara no lo excluye. Los modelos entrenados antes de que la regla tuviera sesgo no lo tienen; en ellos, los pesos grandes de los inmutables hacían su papel.',
     formula: 'A_i(t+1) = f( k2·A_i(t) + k1·(Σ_j w_ji·A_j(t) + b_i) )',
     donde:
       'Paso 3 (dato «Método de W», mapa del FCM bajo el objetivo y su vista de tabla), paso 4 (cuenta de la inferencia paso a paso y gráfica «Qué empuja al objetivo») y contexto del asistente.',
-    ver: ['kosko', 'intercepto', 'inmutable', 'aporte'],
+    ver: ['kosko', 'inmutable', 'aporte'],
     claves: 'bias b constante termino independiente',
   },
   sigmoide: {
     termino: 'Sigmoide',
     definicion: 'Función en forma de S que convierte cualquier número en un valor entre 0 y 1. Es la función de activación del FCM; λ controla su pendiente.',
     formula: 'f(x) = 1 / (1 + e^(−λx))',
-    ver: ['lambda', 'kosko', 'logit'],
+    ver: ['lambda', 'kosko'],
     claves: 'funcion de activacion f(x) logistica',
   },
   simulador: {
@@ -1462,10 +1352,10 @@ export const GLOSARIO = {
     termino: 'Tanh',
     expansion: 'Tangente hiperbólica',
     definicion:
-      'Función que lleva cualquier número al intervalo (−1, 1). Trunca los coeficientes de Ridge y Lasso al rango de un peso y, como función de activación, se reescala a (0, 1) para que la activación siga entre 0 y 1.',
-    formula: 'w_ji = tanh(β_j) ∈ (−1, 1);   activación: f(x) = (tanh(λx) + 1) / 2',
-    ver: ['ridge', 'lasso', 'intervalos', 'regla-inferencia'],
-    claves: 'tangente hiperbolica truncamiento',
+      'Función que lleva cualquier número al intervalo (−1, 1). Como función de activación se reescala a (0, 1), para que la activación siga entre 0 y 1.',
+    formula: 'f(x) = (tanh(λx) + 1) / 2',
+    ver: ['intervalos', 'regla-inferencia'],
+    claves: 'tangente hiperbolica',
   },
   'tipo-pandas': {
     termino: 'Tipo (pandas)',

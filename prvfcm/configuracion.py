@@ -268,12 +268,12 @@ class ConfigFCM:
     max_iter: int = 100            # Iteraciones máximas de inferencia.
     peso_min: float = -1.0         # Rango permitido de los pesos causales.
     peso_max: float = 1.0
-    alpha_l2: float = 1e-3         # Regularización del aprendizaje de pesos (L2; L1 con "lasso").
+    alpha_l2: float = 1e-3         # Regularización L2 del aprendizaje de pesos.
     pasos_entrenamiento: int = 30  # Iteraciones desplegadas al aprender los pesos.
     max_iter_optimizador: int = 500
-    metodo_pesos: str = "bptt"     # "bptt", "ridge", "lasso" o "correlacion_parcial" (ver fcm.METODOS_PESOS).
-    # Pondera cada registro por la inversa de la frecuencia de su nivel del objetivo al aprender W
-    # (BPTT, Ridge y Lasso). Útil con objetivos desbalanceados, como la deserción.
+    metodo_pesos: str = "bptt"     # "bptt" (recomendado) o "pso" (ver fcm.METODOS_PESOS).
+    # Pondera cada registro por la inversa de la frecuencia de su nivel del objetivo al aprender W.
+    # Útil con objetivos desbalanceados, como la deserción.
     balancear_niveles: bool = False
     # Sesgo b_i en la regla: A_i(t+1) = f(k2*A_i + k1*(sum_j w_ji*A_j + b_i)). Solo en los conceptos
     # que reciben aristas; equivale al peso de un concepto constante igual a 1.
@@ -284,7 +284,7 @@ class ConfigFCM:
     inferencia: str = "kosko_modificada"
     activacion: str = "sigmoide"
     # PSO (metodo_pesos = "pso", ec. 4-5 de PRV-FCM): v <- w*v + c1*r1*(pbest - W) + c2*r2*(gbest - W),
-    # |v| <= vmax (el rango de los pesos). El perfil "articulo" usa la ecuación literal (w = c1 = c2 = 1).
+    # |v| <= vmax (el rango de los pesos). Constantes de Clerc; la ec. 4 literal (w = c1 = c2 = 1) se estanca.
     pso_particulas: int = 30
     pso_iteraciones: int = 200
     pso_inercia: float = 0.7298
@@ -305,11 +305,9 @@ class ConfigSeleccion:
     pliegues: int = 5
     rejilla_lambda: tuple[float, ...] = (0.5, 1.0, 2.0, 3.0, 5.0, 10.0)
     rejilla_alpha: tuple[float, ...] = (1e-4, 1e-3, 1e-2)
-    rejilla_inferencia: tuple[str, ...] = ("kosko_modificada",)
-    rejilla_activacion: tuple[str, ...] = ("sigmoide",)
     trabajos: int = -1  # Procesos de la validación cruzada (joblib); -1 = todos los núcleos. No cambia el resultado.
-    # Iteraciones del PSO dentro de la validación cruzada (None = las del modelo final): con 10 pliegues y la
-    # grilla de reglas, el PSO completo tarda demasiado en datasets grandes. El modelo final usa el PSO completo.
+    # Iteraciones del PSO dentro de la validación cruzada (None = las del modelo final): el PSO completo
+    # en cada pliegue tarda demasiado en datasets grandes. El modelo final usa el PSO completo.
     pso_iteraciones: int | None = None
 
 
@@ -349,11 +347,6 @@ class ConfigPrescripcion:
     # que no está en el esquema: sin tope.
     condicion_columna: str | None = "StudentAbsenceDays"
     condicion_delta_max: float = 0.15
-    # Las acciones actuales entran en la población inicial del AG (la prescripción nunca empeora).
-    sembrar: bool = True
-    # Aptitud: "error" (error absoluto ponderado al estado deseado) o "tabla4" (PRV-FCM, Tabla 4:
-    # suma de |f(un paso de inferencia sobre el estado final) - deseado|; ver prescripcion.aptitud_tabla4).
-    aptitud: str = "error"
     # Éxito prescriptivo: |A_i* - D_i| <= tolerancia para todos los conceptos objetivo.
     # Con 0.25 y Class deseada = 1 equivale a alcanzar el nivel H.
     tolerancia_exito: float = 0.25
@@ -362,45 +355,3 @@ class ConfigPrescripcion:
     # Meta escalonada: cada registro apunta al nivel siguiente al suyo (L -> M, M -> H), no al
     # mejor de una vez; el éxito es llegar a esa meta o a uno mejor. False: todos apuntan al mejor.
     meta_escalonada: bool = True
-
-
-# ---------------------------------------------------------------------------
-# Perfiles de configuración
-# ---------------------------------------------------------------------------
-# Valores de las opciones de entrenamiento (las claves de pipeline.opciones_desde_dict) que cada
-# perfil cambia respecto a los valores por defecto. "mejorado" es la configuración de este proyecto;
-# "articulo" sigue a PRV-FCM (Hoyos, Aguilar y Toro, 2023): sin sesgo, PSO, mutables dinámicos,
-# aptitud de la Tabla 4, AG sin siembra ni penalización del esfuerzo, SMOTE y 10 pliegues. Las
-# opciones explícitas mandan sobre el perfil.
-PERFILES: dict[str, dict] = {
-    "mejorado": {},
-    "articulo": {
-        "metodo_pesos": "pso",
-        "sesgo": False,
-        # Ec. 4 literal con el límite de velocidad del PSO original (Vmax = 2, el rango de los pesos).
-        "pso": {"inercia": 1.0, "c1": 1.0, "c2": 1.0},
-        # Desviación por tiempo: la validación cruzada elige los hiperparámetros con 40 iteraciones de PSO.
-        "pso_iteraciones_cv": 40,
-        "tolerancia": 1e-4,
-        "mutables_dinamicos": True,
-        "smote": True,
-        "pliegues": 10,
-        # inferencia y activacion en None: las elige la validación cruzada en su grilla. Con tanh la
-        # reescalada coincide con Kosko modificada, así que ese par no se evalúa. La grilla ya
-        # multiplica por 5 las combinaciones: un solo alpha.
-        "inferencia": None,
-        "activacion": None,
-        "rejilla_inferencia": ["kosko", "kosko_modificada", "reescalada"],
-        "rejilla_activacion": ["sigmoide", "tanh"],
-        "rejilla_alpha": [1e-3],
-        "beta": 0.0,
-        "condicion_delta_max": None,
-        "sembrar": False,
-        "permitir_reducciones": True,
-        "meta_escalonada": False,
-        "aptitud": "tabla4",
-        "busqueda_ag": True,
-        # Configuración del AG que el artículo reporta para el rendimiento académico, sin parada temprana.
-        "ag": {"tam_poblacion": 200, "generaciones": 50, "tasa_cruce": 0.2, "tasa_mutacion": 0.3, "paciencia": 50},
-    },
-}
