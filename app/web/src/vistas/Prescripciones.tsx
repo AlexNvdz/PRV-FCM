@@ -22,8 +22,8 @@ function Aptitud({ m, s, escalonada }: { m: Metricas; s: SujetoTexto; escalonada
     <details className="mt-6 max-w-4xl rounded-lg border border-linea px-4 py-3 text-sm">
       <summary className="cursor-pointer font-medium text-tinta">Cómo decide el algoritmo genético</summary>
       <div className="mt-3 space-y-3">
-        <Formula lectura="Función de costo (aptitud) a minimizar: distancia del objetivo a la meta más el costo de intervención, la magnitud media del cambio en las acciones.">
-          costo(a) = |A*_T(a) − D_T| + β · media_k |a_k − a_k,actual|
+        <Formula lectura="Función de costo (aptitud) a minimizar: lo que le falta al objetivo para llegar a la meta (pasarse no cuenta) más el costo de intervención, la magnitud media del cambio en las acciones.">
+          costo(a) = máx(D_T − A*_T(a), 0) + β · media_k |a_k − a_k,actual|
         </Formula>
         <p className="text-xs text-tinta-2">
           Cada cromosoma <span className="font-mono">a</span> es un valor en [0, 1] por acción <Clase letra="P" />. Para evaluarlo, el FCM parte del perfil {s.del} {s.singular}

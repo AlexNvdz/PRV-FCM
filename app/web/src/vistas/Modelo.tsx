@@ -72,7 +72,7 @@ const MODOS_CV = [
 ] as const;
 
 const METODOS: { valor: MetodoPesos; texto: string; ayuda: string }[] = [
-  { valor: 'bptt', texto: 'BPTT (recomendado)', ayuda: 'Gradiente exacto a través de las iteraciones del FCM y L-BFGS-B con W en [−1, 1]. 79 % de exactitud en xAPI.' },
+  { valor: 'bptt', texto: 'BPTT (recomendado)', ayuda: 'Gradiente exacto a través de las iteraciones del FCM y L-BFGS-B con W en [−1, 1]. 73,5 % de exactitud en xAPI.' },
   { valor: 'pso', texto: 'PSO', ayuda: 'Enjambre de partículas: cada partícula es una W completa y el enjambre busca la de menor error del estado final. Más lento que BPTT.' },
 ];
 
@@ -361,7 +361,7 @@ function FormularioEntrenamiento({ dataset, alIniciar, ocupado }: { dataset: Dat
         </summary>
         <p className="mt-2 text-xs text-tinta-2">
           Desmarque las conexiones que considere lógicamente imposibles. El peso de una arista excluida queda en 0 y el resto se reajusta sin ella. El sesgo
-          no es una arista: no se puede excluir. Con sesgo, quitar inmutables casi no cambia la exactitud (en xAPI, 78,8 % sin C1-C8 frente a 78,9 %).
+          no es una arista: no se puede excluir. Con sesgo, quitar inmutables casi no cambia la exactitud.
         </p>
         <div className="mt-3">
           <EditorMascara dataset={dataset} excluidas={opciones.aristas_excluidas} alCambiar={ponerExcluidas} />

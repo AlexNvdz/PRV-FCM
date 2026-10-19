@@ -1,5 +1,9 @@
 # Heart: ¿por qué el perfil «articulo» recomienda subir el colesterol?
 
+> Histórico. Los perfiles «articulo» y «mejorado», la aptitud de la Tabla 4 y la
+> reconstrucción se retiraron en octubre de 2026 (README, «Historia»); el código
+> que generó este archivo está en el commit `df57bfe`.
+
 En la prueba de la aplicación, el modelo de heart con el perfil «articulo» recomendó
 subir el colesterol de un paciente de 307 a 557 mg/dL. Aquí se reproduce el caso y
 se separan sus causas. Todo con semilla 42, `data/heart.csv`, el esquema

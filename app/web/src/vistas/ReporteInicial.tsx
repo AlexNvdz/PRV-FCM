@@ -217,7 +217,7 @@ export function ReporteInicial({ dataset, alContinuar }: { dataset: Dataset; alC
         descripcion="Cada columna se convierte en un concepto del mapa con activación entre 0 y 1. La codificación de cada una se elige en el paso 2."
       >
         <div className="grid gap-3 lg:grid-cols-2">
-          <Formula lectura="Fuzzificación Min-Max: 0 es el mínimo observado y 1 el máximo.">x′ = (x − mín) / (máx − mín)</Formula>
+          <Formula lectura="Fuzzificación Min-Max: 0 es el mínimo observado y 1 el máximo; en numéricas y fechas, una cola de atípicos más allá de 3 rangos intercuartílicos con como mucho el 1 % de los registros se recorta a esa cerca.">x′ = (x − mín) / (máx − mín), recortado a [0, 1]</Formula>
           <Formula lectura="Ordinal o label encoding: cada categoría toma su posición en el orden definido y luego pasa por Min-Max.">
             «Bajo», «Medio», «Alto» → 0, 1, 2 → 0, 0,5, 1
           </Formula>

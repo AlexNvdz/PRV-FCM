@@ -556,8 +556,8 @@ function Paso3() {
         </p>
         <Defs>
           <Def t="BPTT (recomendado)">
-            <T a="bptt">Gradiente exacto</T> a través de las iteraciones del FCM y optimizador <T a="lbfgsb" /> con W en [−1, 1]. Es el más preciso (79 %
-            en el dataset del proyecto) y el método por defecto.
+            <T a="bptt">Gradiente exacto</T> a través de las iteraciones del FCM y optimizador <T a="lbfgsb" /> con W en [−1, 1]. Es el más preciso (73,5 %
+            en xAPI con tres niveles) y el método por defecto.
           </Def>
           <Def t="PSO">
             <T a="pso">Enjambre de partículas</T>, el método del artículo: cada partícula es una W completa. No usa el gradiente y es más lento que BPTT;
@@ -1223,7 +1223,7 @@ function Formulas() {
   return (
     <>
       <Bloque id="formulas-datos" titulo="Codificación y normalización">
-        <Formula lectura="Fuzzificación Min-Max: 0 es el mínimo observado y 1 el máximo.">x′ = (x − mín) / (máx − mín)</Formula>
+        <Formula lectura="Fuzzificación Min-Max: 0 es el mínimo observado y 1 el máximo; en numéricas y fechas, una cola de atípicos más allá de 3 rangos intercuartílicos con como mucho el 1 % de los registros se recorta a esa cerca.">x′ = (x − mín) / (máx − mín), recortado a [0, 1]</Formula>
         <Formula lectura="Ordinal: posición en el orden definido y luego Min-Max.">«Bajo», «Medio», «Alto» → 0, 1, 2 → 0; 0,5; 1</Formula>
         <Formula lectura="Nominal con media del objetivo: n_c registros de la categoría, media_c su media del objetivo normalizado y media_global la de todos.">
           x = (n_c · media_c + 10 · media_global) / (n_c + 10)
@@ -1257,13 +1257,13 @@ function Formulas() {
       </Bloque>
 
       <Bloque id="formulas-prescripcion" titulo="Prescripción">
-        <Formula lectura="Costo que minimiza el AG: distancia a la meta más β por el cambio medio de las acciones, en la escala [0, 1].">
-          costo(a) = |A*_T(a) − D_T| + β · media_k |a_k − a_k,actual|
+        <Formula lectura="Costo que minimiza el AG: lo que falta para la meta (pasarse no cuenta) más β por el cambio medio de las acciones, en la escala [0, 1].">
+          costo(a) = máx(D_T − A*_T(a), 0) + β · media_k |a_k − a_k,actual|
         </Formula>
         <Formula lectura="Tolerancia de éxito: la mitad del salto entre el mejor nivel y el anterior (0,25 con tres niveles).">
           tolerancia = (1 − valor del nivel anterior al mejor) / 2
         </Formula>
-        <Formula lectura="Éxito de un estudiante: la activación final queda dentro de la tolerancia de la meta.">éxito ⇔ |A*_T − D_T| ≤ tolerancia</Formula>
+        <Formula lectura="Éxito sin meta escalonada: la activación final queda dentro de la tolerancia del mejor nivel.">éxito ⇔ |A*_T − 1| ≤ tolerancia</Formula>
         <Formula lectura="Meta escalonada: la meta es el nivel siguiente al observado y hay éxito si el nivel más cercano a la activación final es la meta o uno mejor.">
           D_T = valor del nivel siguiente al observado;   éxito ⇔ nivel(A*_T) ≥ meta
         </Formula>

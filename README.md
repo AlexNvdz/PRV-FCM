@@ -25,8 +25,8 @@ modelo-prescriptivo/
 ├── main.py                    Pipeline completo (etapas 1-4) y línea de comandos
 ├── data/
 │   ├── xAPI-Edu-Data.csv      Dataset por defecto (480 registros, 17 columnas)
-│   ├── marketing_campaign.csv, heart.csv  Datasets de los experimentos (su esquema se define en la aplicación)
-│   └── ObesityDataSet_raw_and_data_sinthetic.csv, winequality-white.csv  Datasets nuevos, sin esquema todavía
+│   ├── marketing_campaign.csv, heart.csv  Datasets de los experimentos
+│   └── ObesityDataSet_raw_and_data_sinthetic.csv, winequality-white.csv  Obesidad y vino blanco (los esquemas de todos se definen en la aplicación)
 ├── prvfcm/
 │   ├── configuracion.py       Conceptos C1-C16, codificación e hiperparámetros
 │   ├── preprocesamiento.py    Etapa 1: carga (CSV o Excel), división agrupada, codificación, Min-Max, segmentación
@@ -316,14 +316,15 @@ se eligen al entrenar, no en la validación cruzada. Los ajustes (pliegue ×
 combinación) corren en paralelo con
 joblib; el resultado no depende del número de procesos.
 
-| λ (α = 0.001) | 0.5 | **1** | 2 | 3 | 5 | 10 |
+| λ (α = 0.001) | 0.5 | 1 | **2** | 3 | 5 | 10 |
 |---|---|---|---|---|---|---|
-| Exactitud de validación | 65.6 % | **78.2 %** | 77.8 % | 76.5 % | 54.5 % | 29.2 % |
+| Exactitud de validación | 64.8 % | 73.5 % | **76.6 %** | 74.4 % | 50.9 % | 29.9 % |
 
-Resultado: λ = 1 y α = 0.001 (78.2 % ± 4.7). λ = 10 es el valor que el artículo
+Resultado: λ = 2 y α = 0.0001 (76.9 % ± 4.8; con el dataset expandido de 4800
+filas eran λ = 1 y α = 0.001, 78.2 %). λ = 10 es el valor que el artículo
 reporta para este dataset. Aquí, con los pesos iniciales en cero, la sigmoide
 arranca saturada (f(10 · 0.5) ≈ 0.99), el gradiente casi se anula y el FCM
-predice H para todos: 29.2 %, la proporción de H. El artículo aprende los pesos
+predice H para todos: 29.9 %, cerca de la proporción de H. El artículo aprende los pesos
 con PSO y clasifica en dos clases. La figura `seleccion_hiperparametros.png`
 muestra la rejilla completa.
 
@@ -332,17 +333,21 @@ muestra la rejilla completa.
 * **Cromosoma:** 4 genes reales en [0, 1], uno por acción (C9-C12). Por defecto
   cada gen está acotado a `[valor actual, 1]`: las acciones no bajan.
   `--delta-max` limita el aumento y `--permitir-reducciones` quita el límite inferior.
+  Una acción ordinal solo toma los valores de sus categorías (ver «Marketing»).
 * **Costo** (a minimizar), con `A*` el estado de convergencia del FCM y `D` el
-  estado deseado (`Class = 1`, nivel H):
+  estado deseado (en el objetivo, el valor del nivel meta: el siguiente al
+  observado con la meta escalonada, o `Class = 1`, nivel H, sin ella):
 
   ```
-  costo(a) = Σ_i p_i·|A*_i(a) - D_i| / Σ_i p_i  +  β · media_k |a_k - a_k,actual|
+  costo(a) = Σ_i p_i·e_i(a) / Σ_i p_i  +  β · media_k |a_k - a_k,actual|
+  e_T(a) = max(D_T - A*_T(a), 0)      objetivo: solo lo que falta para la meta
+  e_i(a) = |A*_i(a) - D_i|            mutables dinámicos con valor deseado
   ```
 
-  El primer término es el error absoluto ponderado. El segundo penaliza el
-  esfuerzo: con β = 0.4 (defecto) cada estudiante recibe un plan propio y el
-  tasa de éxito casi no baja (ver Limitaciones); con `--beta 0` queda solo el error
-  absoluto.
+  El primer término es el error ponderado; en el objetivo pasarse de la meta no
+  es error (ver «Meta escalonada»). El segundo penaliza el esfuerzo: con β = 0.4
+  (defecto) cada estudiante recibe un plan propio y la tasa de éxito casi no
+  baja (ver Limitaciones); con `--beta 0` queda solo el error.
 * **Tope por ausentismo.** Si el estudiante tiene más de 7 ausencias
   (StudentAbsenceDays = Above-7), cada acción sube como máximo 0.15 de su rango
   (`--tope-ausentismo`; `--sin-tope-ausentismo` lo quita). Sin tope, el FCM lleva
@@ -363,7 +368,9 @@ muestra la rejilla completa.
 * **Operadores:** selección por torneo (k = 3), cruce uniforme o de un punto
   (tasa 0.9), mutación gaussiana por gen (tasa 0.25, σ = 0.15 del rango) y
   elitismo (2 individuos). La población inicial incluye las acciones actuales,
-  así que la prescripción nunca es peor que no actuar. El AG se detiene tras 25
+  así que la prescripción nunca es peor que no actuar. El historial empieza en la
+  generación 0 (la población inicial) y guarda por generación el mejor costo, el
+  costo medio y las mejores acciones. El AG se detiene tras 25
   generaciones sin mejora. En 20 estudiantes, el AG obtuvo un costo igual o
   menor que una búsqueda exhaustiva en una rejilla de 21⁴ puntos. Con la
   configuración del artículo (población 200, 50 generaciones, cruce 0.2,
@@ -371,7 +378,8 @@ muestra la rejilla completa.
   estudiante no cambia.
 * **Meta y perfil de riesgo** (aplicación). La meta `D` puede ser cualquier
   nivel del objetivo (por ejemplo M en vez de H): el AG busca entonces el menor
-  cambio que lleva al estudiante a ese nivel, sin pasarse. Un perfil de riesgo
+  cambio que lleva al estudiante a ese nivel (pasarse no reduce el error y cuesta
+  esfuerzo). Un perfil de riesgo
   es un estudiante escrito a mano (o cargado y editado): el objetivo parte de su
   media de entrenamiento y el AG calcula el valor exacto de cada acción.
 * **Valores deseados** (`deseados`, PRV-FCM sección 4.2: v_s(0)). El usuario da
@@ -382,16 +390,17 @@ muestra la rejilla completa.
 
 ### 4. Evaluación
 
-Se evalúan los 982 estudiantes de prueba con `Class` L o M. Cada métrica compara
-el estado de convergencia con el estado deseado:
+Se evalúan los estudiantes de prueba con `Class` L o M (112 con la
+configuración por defecto). Cada métrica compara el estado de convergencia con
+la meta `D` de cada uno (el valor de su nivel meta):
 
-* **MAE** = media de `|A*_Class - 1|`, **MSE** = media de `(A*_Class - 1)²`,
+* **MAE** = media de `|A*_Class - D|`, **MSE** = media de `(A*_Class - D)²`,
   **RMSE** = raíz del MSE.
-* **Tasa de éxito prescriptivo** = % de estudiantes con
-  `|A*_Class - 1| ≤ 0.25`, es decir, con rendimiento H según el FCM (la
-  tolerancia es la mitad del salto desde el nivel anterior; 0.5 con dos
-  niveles). En `metricas.json` son las claves `PSR` y `PSR_base`. No es la PSR
-  del artículo (ec. 19).
+* **Tasa de éxito prescriptivo** = % de estudiantes cuyo nivel según el FCM (el
+  más cercano a `A*_Class`) es su meta o uno mejor. Sin meta escalonada es
+  `|A*_Class - 1| ≤ 0.25`, rendimiento H (la tolerancia es la mitad del salto
+  desde el nivel anterior; 0.5 con dos niveles). En `metricas.json` son las
+  claves `PSR` y `PSR_base`. No es la PSR del artículo (ec. 19).
 
 Todas se reportan también con las acciones actuales (línea base). Hay tres
 evaluaciones complementarias:
@@ -631,11 +640,13 @@ encima, sin saltos de todo o nada.
 | heart | acciones `trestbps`, `chol` y `thalach` (pueden bajar); mutables dinámicos; Kosko; β = 0.1; tope 0.3 | 88.9 % (53.3 %) | 16.7 → 35.7 % | 11.9 → 16.7 % | 1.00 |
 | marketing | campañas; contadores dinámicos; Kosko; β = 1.25; λ ≤ 1.5 | 88.9 % (85.0 %) | 1.9 → 57.6 % | 1.2 → 10.5 % | 0.90 |
 | obesidad | hábitos como acciones (orden: subir = hábito sano), `Weight` dinámico, éxito = peso normal o menos; β = 1; λ ≤ 1.5; tope 0.3 | 86.9 % (73.5 %) | 4.5 → 25.7 % | 0.6 → 0.9 % | 0.88 |
-| vino blanco | alcohol, azúcar, sulfatos, cítrico y SO2 libre como acciones; densidad, pH y SO2 total dinámicos; calidad 3-9; β = 1; λ ≤ 1.5; tope 0.3 | 52.4 % (44.9 %) | 23.9 → 57.8 % | 18.0 → 38.9 % | 0.87 |
+| vino blanco | alcohol, azúcar, sulfatos, cítrico y SO2 libre como acciones; densidad, pH y SO2 total dinámicos; calidad 3-9; W por PSO; β = 1; tope 0.3 | 51.2 % (44.9 %) | 26.4 → 57.8 % | 18.0 → 38.6 % | 0.89 |
 
 «λ ≤ 1.5» es la rejilla `rejilla_lambda: [0.5, 1, 1.5]` de la validación cruzada
 (opción de la API de entrenamiento; la interfaz no la muestra). «Tope 0.3» es el
-cambio máximo por acción (`delta_max`, 30 % del rango).
+cambio máximo por acción (`delta_max`, 30 % del rango). El modelo de vino lo
+entrenó el usuario con PSO y validación cruzada completa (21 min; con BPTT,
+segundos: 52.4 %, éxito 23.9 → 57.8 %, bosque 18.0 → 38.9 %).
 
 * **Acciones disparadas.** Sin tope, a quien está lejos de su meta el AG le pedía
   casi todo el rango (en xAPI, el estudiante 98, de M a H: raisedhands 10 → 100
@@ -662,7 +673,7 @@ cambio máximo por acción (`delta_max`, 30 % del rango).
   pacientes quedaba igual aun con β = 0.1: sus pesos hacia `target` son
   pequeños (−0.22 y −0.08), así que β no era el problema. Con `thalach`
   (frecuencia cardiaca máxima, que sube con el entrenamiento aeróbico) como
-  acción, todos reciben un cambio pequeño y el bosque confirma 11.9 → 19.0 %.
+  acción, todos reciben un cambio pequeño y el bosque confirma 11.9 → 16.7 %.
 * **λ ≤ 1.5.** En marketing sube el trazo (0.84 → 0.91) con el mismo bosque; en
   vino el bosque pasa de 35.1 % a 45.0 %; en obesidad los que no cambian bajan
   del 62 % al 22 % (exactitud 90.4 → 86.9 %, trazo 0.93 → 0.77). En xAPI y
@@ -689,7 +700,10 @@ cambio máximo por acción (`delta_max`, 30 % del rango).
 | Datos y división | 70/30; validación cruzada de 10 pliegues | 70/30; validación cruzada de 5 pliegues | 70/30 agrupada; validación cruzada agrupada de 5 pliegues |
 | Rendimiento | 2 clases (nota < 70 o ≥ 70), balanceadas con SMOTE | Diagnóstico binario | 3 niveles (L/M/H), o 2 con `--binarizar-objetivo`; SMOTE opcional, solo en el entrenamiento |
 | AG | Población 200, 50 generaciones, cruce 0.2, mutación 0.3 | Población 80-120, cruce 0.3-0.5, mutación 0.2-0.3; para si F mejora ≤ 0.001 | Población 50, hasta 100 generaciones, cruce 0.9, mutación 0.25; para tras 25 generaciones sin mejora |
-| Aptitud | Diferencia entre el estado deseado y el inferido | Σ_j \|f(v̂_j + Σ_i W_ij·v̂_i) − v_j\| | Error absoluto ponderado respecto al estado deseado + β·esfuerzo; tope por ausentismo |
+| Escalado | Min-Max a [0, 1] (ec. 14) | Min-Max | Min-Max robusto: una cola de atípicos (≤ 1 % de los registros, más allá de 3 IQR) se recorta a la cerca |
+| Aptitud | \|f(Σ W·v^s) − f(Σ W·v̂^s)\| (ec. 12, Tabla 4) | Σ_j \|f(v̂_j + Σ_i W_ij·v̂_i) − v_j\| | Lo que falta para la meta, max(D − A*, 0), ponderado + β·esfuerzo; acciones actuales en la población inicial |
+| Estado deseado | v^s(0) fijado por el decisor (ec. 7) | Estado sano | Nivel siguiente al observado (meta escalonada) o el elegido; éxito = llegar a él o a uno mejor |
+| Límites de las acciones | [0, 1] o [−1, 1] (ec. 13) | Rango de cada acción | Solo incrementos (opcional), cambio máximo por acción, tope por ausentismo; acciones ordinales discretas |
 | Métricas | Exactitud; MAE, MSE, RMSE y PSR entre acciones reales y prescritas | Exactitud, precisión, recall, F1; R², MSE, RMSE | Exactitud, precisión, recall, F1; MAE, MSE, RMSE y tasa de éxito respecto al estado deseado; validación externa |
 
 Los artículos validan comparando las acciones prescritas con las observadas
@@ -701,7 +715,7 @@ estado deseado y se contrasta con un modelo independiente.
 
 * `recomendaciones.csv`: por estudiante (`id_estudiante` = fila del CSV, 0 = primera
   fila de datos), acciones actuales, recomendadas y cambio en unidades originales,
-  activación de C16 antes y después, nivel L/M/H y éxito.
+  activación de C16 antes y después, nivel L/M/H, nivel meta (`nivel_meta`) y éxito.
 * `metricas.json`: configuración (método de pesos, regla, sesgo,
   equilibrio de niveles, aristas excluidas, tope por ausentismo, SMOTE,
   binarización), tabla de validación cruzada, métricas de
@@ -713,7 +727,8 @@ estado deseado y se contrasta con un modelo independiente.
   última fila es el sesgo.
 * `red_fcm.png`: el mapa como grafo dirigido (NetworkX y matplotlib), con el
   grosor de cada arista proporcional a |w|.
-* `convergencia_ag.png`, `rendimiento_antes_despues.png`, `acciones_recomendadas.png`.
+* `convergencia_ag.png` (mediana del mejor costo y costo medio de la población
+  desde la generación 0), `rendimiento_antes_despues.png`, `acciones_recomendadas.png`.
 
 ## Limitaciones
 

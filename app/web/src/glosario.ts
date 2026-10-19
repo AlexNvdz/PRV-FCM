@@ -87,8 +87,8 @@ export const GLOSARIO = {
     termino: 'β (beta)',
     expansion: 'Penalización del esfuerzo o costo de intervención',
     definicion:
-      'Peso que la función de costo del algoritmo genético da al tamaño del cambio en las acciones. Con β pequeño (0,05) el AG busca el máximo efecto y suele llevar las acciones al tope; con β mayor prefiere cambios pequeños aunque el avance sea algo menor. Con 0,4, el valor por defecto, los planes son moderados y distintos para cada estudiante. No se confunde con β_j de la fórmula w_ji = tanh(β_j), que es un coeficiente de la regresión.',
-    formula: 'costo(a) = |A*_T(a) − D_T| + β · media_k |a_k − a_k,actual|',
+      'Peso que la función de costo del algoritmo genético da al tamaño del cambio en las acciones. Con β pequeño (0,05) el AG busca el máximo efecto y suele llevar las acciones al tope; con β mayor prefiere cambios pequeños aunque el avance sea algo menor. Con 0,4, el valor por defecto, los planes son moderados y distintos para cada estudiante.',
+    formula: 'costo(a) = máx(D_T − A*_T(a), 0) + β · media_k |a_k − a_k,actual|',
     donde:
       'Paso 3 («Penalización del esfuerzo (β)», de 0 a 5; 0,4 por defecto) y paso 4 («Costo de intervención (β)» o «Penalización del esfuerzo», de 0 a 1, o hasta el β del modelo si es mayor; parten del β con que se entrenó el modelo, 0,4 si no lo guarda).',
     ver: ['funcion-costo', 'plan', 'cambio-maximo'],
@@ -161,7 +161,7 @@ export const GLOSARIO = {
     termino: 'Acción',
     expansion: 'Concepto prescriptivo (C_P)',
     definicion:
-      'Variable que la institución o el estudiante pueden cambiar directamente: horas de estudio, participación, recursos consultados, tutorías, becas. Es lo único que el algoritmo genético modifica. Debe ser numérica u ordinal, porque el AG necesita poder aumentarla o reducirla; una columna nominal o one-hot no sirve. Se necesita al menos una.',
+      'Variable que la institución o el estudiante pueden cambiar directamente: horas de estudio, participación, recursos consultados, tutorías, becas. Es lo único que el algoritmo genético modifica. Debe ser numérica u ordinal, porque el AG necesita poder aumentarla o reducirla; una columna nominal o one-hot no sirve. Una acción ordinal solo toma los valores de sus categorías: el AG lleva cada gen a la categoría admitida más cercana. Se necesita al menos una.',
     donde: 'Paso 2 (rol «Acción (C_P)»), paso 4 (tabla por estudiante, simulador y perfil de riesgo) e Informe.',
     ver: ['c-p', 'cromosoma', 'permitir-reducciones', 'accion-binaria'],
     claves: 'acciones prescriptivo intervencion',
@@ -251,7 +251,7 @@ export const GLOSARIO = {
     termino: 'BPTT',
     expansion: 'Backpropagation Through Time (retropropagación a través del tiempo)',
     definicion:
-      'Método por defecto para aprender la matriz W. Repite 30 iteraciones de la regla del FCM como si fueran capas de una red y calcula de forma exacta cómo cambia el error, entre la activación final del objetivo y su valor observado, al mover cada peso (el gradiente). Con ese gradiente, el optimizador L-BFGS-B ajusta los pesos dentro de [−1, 1], con una penalización L2. En la fórmula, v_r es el peso de cada registro: 1 para todos, salvo si equilibra los niveles. Es el método recomendado (79 % de exactitud en el dataset del proyecto) y mucho más rápido que PSO.',
+      'Método por defecto para aprender la matriz W. Repite 30 iteraciones de la regla del FCM como si fueran capas de una red y calcula de forma exacta cómo cambia el error, entre la activación final del objetivo y su valor observado, al mover cada peso (el gradiente). Con ese gradiente, el optimizador L-BFGS-B ajusta los pesos dentro de [−1, 1], con una penalización L2. En la fórmula, v_r es el peso de cada registro: 1 para todos, salvo si equilibra los niveles. Es el método recomendado (73,5 % de exactitud en xAPI con tres niveles) y mucho más rápido que PSO.',
     formula: 'L(W) = media_r [ v_r · (A_T,r − y_r)² ] + α · Σ w²',
     donde: 'Paso 3, «Método de extracción de la matriz de pesos W».',
     ver: ['gradiente', 'lbfgsb'],
@@ -644,8 +644,8 @@ export const GLOSARIO = {
     termino: 'Función de costo',
     expansion: 'Aptitud',
     definicion:
-      'Lo que el algoritmo genético minimiza: la distancia entre la activación final del objetivo y la meta, más β por el cambio medio de las acciones (en la escala [0, 1]). Una prescripción de menor costo llega más cerca de la meta, con menos esfuerzo, o ambas cosas.',
-    formula: 'costo(a) = |A*_T(a) − D_T| + β · media_k |a_k − a_k,actual|',
+      'Lo que el algoritmo genético minimiza: lo que le falta a la activación final del objetivo para llegar a la meta, más β por el cambio medio de las acciones (en la escala [0, 1]). Pasarse de la meta no cuenta como error, así que si el FCM ya ubica al registro en su meta o más arriba el plan no cambia nada (antes, con la distancia en ambos sentidos, el AG podía bajar el objetivo). Los mutables con valor deseado sí cuentan la distancia en ambos sentidos. Una prescripción de menor costo llega más cerca de la meta, con menos esfuerzo, o ambas cosas.',
+    formula: 'costo(a) = máx(D_T − A*_T(a), 0) + β · media_k |a_k − a_k,actual|',
     donde: 'Paso 4, «Cómo decide el algoritmo genético».',
     ver: ['beta', 'a-t', 'd-t', 'convergencia-ag'],
     claves: 'costo fitness',
@@ -653,11 +653,11 @@ export const GLOSARIO = {
   fuzzificacion: {
     termino: 'Fuzzificación Min-Max',
     definicion:
-      'Conversión de cada valor codificado a una activación en [0, 1]: 0 es el mínimo observado y 1 el máximo. Al explorar se ajusta con todos los registros; al entrenar, solo con los de entrenamiento, para no filtrar información de la prueba.',
-    formula: 'x′ = (x − mín) / (máx − mín)',
+      'Conversión de cada valor codificado a una activación en [0, 1]: 0 es el mínimo observado y 1 el máximo. En las columnas numéricas y de fecha es robusta: si una cola de atípicos pasa de 3 rangos intercuartílicos y reúne como mucho el 1 % de los registros, el mínimo o el máximo se recortan a esa cerca y esos registros quedan en 0 o en 1. Así un solo valor extremo (un ingreso de 666 666) no aplasta a los demás contra un extremo de la escala. Al explorar se ajusta con todos los registros; al entrenar, solo con los de entrenamiento, para no filtrar información de la prueba.',
+    formula: 'x′ = (x − mín) / (máx − mín), recortado a [0, 1];   cerca = Q3 + 3·IQR o Q1 − 3·IQR',
     donde: 'Paso 1, «Codificación y fuzzificación a [0, 1]».',
     ver: ['normalizado', 'codificacion'],
-    claves: 'min max minmax normalizacion difuso',
+    claves: 'min max minmax normalizacion difuso robusto atipicos outliers iqr recorte',
   },
   generacion: {
     termino: 'Generación',
@@ -785,7 +785,7 @@ export const GLOSARIO = {
   mascara: {
     termino: 'Máscara de dirección causal',
     definicion:
-      'Opción del paso 3 para quitar las aristas que considere lógicamente imposibles. Una arista excluida queda con peso 0 y los demás pesos se reajustan sin ella. El sesgo no es una arista: no se puede excluir. Con sesgo, quitar las aristas de los inmutables hacia el objetivo casi no cambia la exactitud (en el dataset del proyecto, BPTT sin C1-C8: 78,8 % frente a 78,9 %); en un modelo sin sesgo la bajaba mucho (57,1 %), porque esos pesos hacían el papel del sesgo.',
+      'Opción del paso 3 para quitar las aristas que considere lógicamente imposibles. Una arista excluida queda con peso 0 y los demás pesos se reajustan sin ella. El sesgo no es una arista: no se puede excluir. Con sesgo, quitar las aristas de los inmutables hacia el objetivo casi no cambia la exactitud; en un modelo sin sesgo la bajaba mucho, porque esos pesos hacían el papel del sesgo.',
     donde: 'Paso 3, «Máscara de dirección causal (opcional)».',
     ver: ['arista', 'estructura', 'sesgo'],
     claves: 'causal excluir aristas',
@@ -837,7 +837,7 @@ export const GLOSARIO = {
     termino: 'Meta',
     expansion: 'Estado deseado del objetivo',
     definicion:
-      'Nivel del objetivo al que se quiere llevar a un estudiante o perfil. Por defecto es el mejor nivel, o el siguiente al suyo con la meta escalonada; en el panel del estudiante y en el perfil de riesgo puede elegir uno intermedio como meta más realista. Se alcanza si la activación final queda a menos de la tolerancia del valor de ese nivel.',
+      'Nivel del objetivo al que se quiere llevar a un estudiante o perfil. Por defecto es el mejor nivel, o el siguiente al suyo con la meta escalonada; en el panel del estudiante y en el perfil de riesgo puede elegir uno intermedio como meta más realista. Se alcanza si la activación final llega al valor de ese nivel menos la tolerancia, o lo supera: pasarse de la meta también cuenta como éxito.',
     donde: 'Paso 4 («Meta (estado deseado del objetivo)» y «Meta en el objetivo»).',
     ver: ['d-t', 'tolerancia', 'mejor-nivel', 'meta-escalonada'],
     claves: 'estado deseado',
@@ -1130,7 +1130,7 @@ export const GLOSARIO = {
     expansion: 'PSR en las métricas del motor',
     definicion:
       'Porcentaje de estudiantes prescritos cuya activación final del objetivo queda dentro de la tolerancia de la meta: los que el FCM ubica en el mejor nivel o, con la meta escalonada, en su meta o en un nivel mejor. Se calcula con las acciones actuales y con las prescritas; la diferencia es la mejora que el FCM atribuye a la prescripción. La cifra equivalente del bosque aleatorio es la estimación prudente.',
-    formula: 'tasa de éxito = % de estudiantes con |A*_T − D_T| ≤ tolerancia',
+    formula: 'éxito ⇔ nivel(A*_T) ≥ meta   (sin meta escalonada: |A*_T − 1| ≤ tolerancia)',
     donde: 'Resumen, paso 4 («Tasa de éxito prescriptivo (FCM)»), Informe y asistente.',
     ver: ['tolerancia', 'bosque', 'mae'],
     claves: 'exito prescriptivo tasa llega al mejor nivel llega a su meta',

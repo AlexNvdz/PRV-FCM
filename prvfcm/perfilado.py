@@ -460,8 +460,8 @@ METODOS_CORRELACION = ("pearson", "spearman", "parcial")
 def correlaciones(df: pd.DataFrame, esquema: Esquema, metodo: str = "spearman") -> dict:
     """Matriz de correlación entre todos los conceptos (objetivo incluido) sobre los datos normalizados.
 
-    ``parcial`` es la correlación de cada par dados los demás conceptos, la
-    misma que usa el método de pesos ``correlacion_parcial``.
+    ``parcial`` es la correlación de cada par dados los demás conceptos
+    (precisión con contracción de Ledoit-Wolf).
     """
     if metodo not in METODOS_CORRELACION:
         raise ValueError(f"El método de correlación debe ser uno de {', '.join(METODOS_CORRELACION)}.")

@@ -1,5 +1,9 @@
 # Ablación: perfil «articulo» frente a «mejorado»
 
+> Histórico. Los perfiles «articulo» y «mejorado», la aptitud de la Tabla 4 y la
+> reconstrucción se retiraron en octubre de 2026 (README, «Historia»); el código
+> que generó este archivo está en el commit `df57bfe`.
+
 Semilla 42. Objetivos de dos niveles. «éxito»: tasa de éxito prescriptivo del FCM (% que llega al mejor nivel);
 «bosque»: % que un bosque aleatorio independiente clasifica en el mejor nivel; «rec.»: reconstrucción de las acciones
 de los registros de prueba que ya están en el mejor nivel (escala [0, 1]; PSR de la ec. 19 = suma prescrita / suma real).

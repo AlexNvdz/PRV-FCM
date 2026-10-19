@@ -1,8 +1,9 @@
 # Pizarra: aplicación web PRV-FCM
 
-Aplicación local (SPA + Node.js) para analizar el rendimiento académico y la
-deserción escolar con el modelo PRV-FCM del proyecto y un asistente que usa
-`qwen2.5:7b` en Ollama. Todo corre en este equipo.
+Aplicación local (SPA + Node.js) para construir modelos prescriptivos PRV-FCM
+sobre datasets de cualquier tema (rendimiento académico, deserción, salud,
+mercadeo) y consultarlos con un asistente que usa `qwen2.5:7b` en Ollama. Todo
+corre en este equipo.
 
 ## Requisitos
 
@@ -32,14 +33,17 @@ cada vista muestra cuáles están hechos; cada paso espera la confirmación del
 anterior (guardar la clasificación, entrenar el modelo).
 
 1. **Ingesta y exploración** (Datos). Sube un CSV (coma o punto y coma) o un
-   Excel (.xlsx, .xls: se usa la primera hoja con datos). Las columnas
+   Excel (.xlsx, .xls: se usa la primera hoja con datos). Si hay columnas sin
+   ningún valor, al validar el esquema (paso 2) se pide marcarlas como
+   excluir. Las columnas
    True/False se tratan como categorías, y una columna que por sí sola
    determina el objetivo (por ejemplo, la nota final si "desertó" es nota < 10)
    se excluye de la sugerencia con un aviso. El reporte inicial
    muestra dimensiones, tipo de cada columna, vacíos, estadísticas descriptivas
    (media, desviación, cuartiles) y categorías. Explica la codificación
    (ordinal o label encoding, media del objetivo, one-hot) y la fuzzificación
-   Min-Max a [0, 1], con la tabla de datos ya normalizados.
+   Min-Max a [0, 1] (robusta: una cola de atípicos con como mucho el 1 % de los
+   registros se recorta), con la tabla de datos ya normalizados.
 2. **Clasificación de nodos** (Datos). Cada columna es objetivo C_T, acción o
    concepto prescriptivo C_P, o concepto del sistema C_S (inmutable o mutable).
    El rol se cambia arrastrando la tarjeta de la columna entre los carriles del
@@ -62,11 +66,17 @@ anterior (guardar la clasificación, entrenar el modelo).
    objetivo" (activada por defecto si un nivel es menos del 25 % de los
    registros, como en la deserción) hace que cada nivel pese lo mismo. La
    máscara de dirección causal opcional elimina aristas lógicamente
-   imposibles. Muestra exactitud (también la equilibrada), matriz de
-   confusión, selección de λ, el mapa interactivo y la matriz W.
-4. **Motor prescriptivo** (Prescripciones). Métricas antes y después, la
-   función de costo del AG, la tabla por estudiante (con simulador y
-   prescripción individual) y el **perfil de riesgo**. El simulador mueve las
+   imposibles. El AG se configura aquí: población, generaciones, β, cambio
+   máximo por acción, permitir reducciones y meta escalonada (cada registro
+   apunta al nivel siguiente al suyo). Muestra exactitud (también la
+   equilibrada), matriz de confusión, selección de λ, el mapa interactivo y la
+   matriz W.
+4. **Motor prescriptivo** (Prescripciones). Métricas antes y después (tasa
+   de éxito del FCM y del bosque aleatorio, cuántos llegan a su meta), la
+   función de costo del AG, la convergencia (aptitud normalizada o costo, desde
+   la generación 0), la activación del objetivo antes y después con la meta de
+   cada registro, la tabla por estudiante (con simulador y prescripción
+   individual) y el **perfil de riesgo**. El simulador mueve las
    acciones y la gráfica "Inferencia paso a paso" traza la activación del
    objetivo en cada iteración de la regla de Kosko, con las acciones actuales y
    las simuladas, y la cuenta de cada iteración (memoria, influencia de las
@@ -143,9 +153,12 @@ Además del dataset del proyecto, se probó con
 de UCI (4424 estudiantes, separador punto y coma, objetivo Dropout < Enrolled <
 Graduate). Allí conviene marcar como acciones, por ejemplo, la beca y la
 matrícula al día. También se probó fuera de la educación con
-`data/heart.csv` (pacientes) y `data/marketing_campaign.csv` (clientes); sus
-esquemas se definen en el paso 2 y cada modelo guarda el suyo en
-`almacen/modelos/<id>/esquema.json`.
+`data/heart.csv` (pacientes), `data/marketing_campaign.csv` (clientes),
+`data/ObesityDataSet_raw_and_data_sinthetic.csv` (personas) y
+`data/winequality-white.csv` (vinos); sus esquemas se definen en el paso 2 y
+cada modelo guarda el suyo en `almacen/modelos/<id>/esquema.json`. Los modelos
+de referencia de cada uno están en el README principal («Modelos de la
+aplicación»).
 
 ## Pruebas
 
